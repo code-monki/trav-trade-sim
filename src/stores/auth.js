@@ -34,11 +34,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearError() { error.value = null }
 
+  function requireSupabase() {
+    if (!supabase) throw new Error('Database not configured — check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
+  }
+
   // ── Create a new campaign (referee creates + joins in one step) ─────────────
   async function createCampaign({ label, code, milieu, tradeRules, characterName, pin }) {
     loading.value = true
     error.value   = null
     try {
+      requireSupabase()
       const { data, error: rpcError } = await supabase.rpc('create_campaign', {
         p_label:       label,
         p_code:        code,
@@ -67,6 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
+      requireSupabase()
       const { data, error: rpcError } = await supabase.rpc('join_campaign', {
         p_code:      code,
         p_char_name: characterName,
@@ -90,6 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
+      requireSupabase()
       const { data, error: rpcError } = await supabase.rpc('verify_pin', {
         p_code:      code,
         p_char_name: characterName,

@@ -30,7 +30,7 @@ export const useTickStore = defineStore('tick', () => {
 
   async function loadCalendar() {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return
+    if (!campaignId || !supabase) return
 
     const { data, error: err } = await supabase
       .from('campaign_calendar')
@@ -55,6 +55,10 @@ export const useTickStore = defineStore('tick', () => {
       return { ok: false }
     }
 
+    if (!supabase) {
+      error.value = 'Database not configured.'
+      return { ok: false }
+    }
     loading.value = true
     error.value   = null
     try {
@@ -89,7 +93,7 @@ export const useTickStore = defineStore('tick', () => {
 
   async function loadActiveEvents() {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return
+    if (!campaignId || !supabase) return
 
     const { data } = await supabase
       .from('market_events')
@@ -102,7 +106,7 @@ export const useTickStore = defineStore('tick', () => {
 
   async function maybeInsertEvent(world, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return
+    if (!campaignId || !supabase) return
 
     const ev = maybeGenerateEvent({
       world,
@@ -136,7 +140,7 @@ export const useTickStore = defineStore('tick', () => {
    */
   async function ensureWorldSnapshot(world, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return []
+    if (!campaignId || !supabase) return []
 
     const cacheKey = `${campaignId}:${world.Hex}:${sectorName}:${currentTick.value}`
     if (snapshotWorldKey.value === cacheKey && Object.keys(worldSnapshots.value).length > 0) {
@@ -222,7 +226,7 @@ export const useTickStore = defineStore('tick', () => {
    */
   async function loadWeeklyHistory(worldHex, sectorName, goodDie, limit = 52) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return []
+    if (!campaignId || !supabase) return []
 
     const { data, error: err } = await supabase
       .from('market_snapshots')
@@ -244,7 +248,7 @@ export const useTickStore = defineStore('tick', () => {
    */
   async function loadMonthlyHistory(worldHex, sectorName, goodDie, limit = 24) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return []
+    if (!campaignId || !supabase) return []
 
     const { data, error: err } = await supabase
       .from('market_monthly')
@@ -266,7 +270,7 @@ export const useTickStore = defineStore('tick', () => {
    */
   async function loadAnnualHistory(worldHex, sectorName, goodDie) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return []
+    if (!campaignId || !supabase) return []
 
     const { data, error: err } = await supabase
       .from('market_annual')

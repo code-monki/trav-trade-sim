@@ -30,4 +30,8 @@ router.beforeEach((to) => {
   }
 })
 
+router.onError((err) => {
+  console.error('[router]', err)
+})
+
 export default router
