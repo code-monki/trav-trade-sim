@@ -1,9 +1,10 @@
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="overlay" @mousedown.self="close">
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="Help">
+      <div class="dialog" role="dialog" aria-modal="true"
+           aria-labelledby="help-dialog-title" ref="dialogEl">
 
-        <div class="dialog-header">
+        <div class="dialog-header" id="help-dialog-title">
           <div class="help-tabs">
             <button v-for="t in TABS" :key="t.key"
                     :class="['htab', { active: activeTab === t.key }]"
@@ -164,12 +165,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useFocusTrap } from '../composables/useFocusTrap.js'
 
 const props = defineProps({ modelValue: { type: Boolean, required: true } })
 const emit  = defineEmits(['update:modelValue'])
 
 const activeTab = ref('manual')
+const dialogEl  = ref(null)
+
+const { activate, deactivate } = useFocusTrap(dialogEl)
+watch(() => props.modelValue, v => v ? nextTick(activate) : deactivate())
 
 const TABS = [
   { key: 'manual',    label: 'User Manual'         },

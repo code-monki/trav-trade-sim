@@ -7,11 +7,12 @@
       <span class="bar" />
     </button>
 
-    <div v-if="isOpen" class="hm-dropdown">
-      <button class="hm-item" @click="select('about')">About</button>
-      <button class="hm-item" @click="select('help')">Help &amp; User Manual</button>
-      <div class="hm-divider" />
-      <button class="hm-item danger" @click="select('signout')">Sign Out</button>
+    <div v-if="isOpen" class="hm-dropdown" role="menu">
+      <button class="hm-item" role="menuitem" @click="select('themes')">Themes</button>
+      <button class="hm-item" role="menuitem" @click="select('about')">About</button>
+      <button class="hm-item" role="menuitem" @click="select('help')">Help &amp; User Manual</button>
+      <div class="hm-divider" role="separator" />
+      <button class="hm-item danger" role="menuitem" @click="select('signout')">Sign Out</button>
     </div>
   </div>
 </template>
@@ -19,7 +20,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const emit   = defineEmits(['about', 'help', 'signout'])
+const emit   = defineEmits(['themes', 'about', 'help', 'signout'])
 const isOpen = ref(false)
 const wrapEl = ref(null)
 

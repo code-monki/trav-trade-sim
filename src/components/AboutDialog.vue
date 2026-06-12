@@ -1,9 +1,10 @@
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="overlay" @mousedown.self="close">
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="About">
+      <div class="dialog" role="dialog" aria-modal="true"
+           aria-labelledby="about-dialog-title" ref="dialogEl">
         <div class="dialog-header">
-          <div class="app-identity">
+          <div class="app-identity" id="about-dialog-title">
             <span class="app-name">Traveller Trade Simulator</span>
             <span class="app-version">v{{ version }}</span>
           </div>
@@ -56,13 +57,18 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import pkg from '../../package.json'
+import { useFocusTrap } from '../composables/useFocusTrap.js'
 
 const props = defineProps({ modelValue: { type: Boolean, required: true } })
 const emit  = defineEmits(['update:modelValue'])
 
-const version = pkg.version
+const version  = pkg.version
+const dialogEl = ref(null)
+
+const { activate, deactivate } = useFocusTrap(dialogEl)
+watch(() => props.modelValue, v => v ? nextTick(activate) : deactivate())
 
 function close() { emit('update:modelValue', false) }
 

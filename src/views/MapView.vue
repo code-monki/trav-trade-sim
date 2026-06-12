@@ -34,6 +34,7 @@
         <span class="session-campaign">{{ auth.campaign?.code }}</span>
         <span v-if="auth.isReferee" class="role-badge">REF</span>
         <HamburgerMenu
+          @themes="showThemes = true"
           @about="showAbout = true"
           @help="showHelp = true"
           @signout="doLogout"
@@ -74,14 +75,19 @@
         <div v-if="map.loading && map.selectedSectorName && !map.worlds.length" class="loading">Loading worlds…</div>
         <div v-else-if="!map.selectedSectorName" class="placeholder">Select a sector above</div>
         <div v-else-if="map.worlds.length === 0" class="placeholder">No worlds found</div>
-        <ul v-else class="world-list">
+        <ul v-else class="world-list" role="listbox" aria-label="Worlds">
           <li v-for="world in map.filteredWorlds" :key="world.Hex"
+              role="option"
+              tabindex="0"
+              :aria-selected="!!(map.selectedWorld && map.selectedWorld.Hex === world.Hex)"
               :class="{
                 selected: map.selectedWorld && map.selectedWorld.Hex === world.Hex,
                 'zone-red': world.Zone === 'R',
                 'zone-amber': world.Zone === 'A',
               }"
-              @click="onWorldSelect(world)">
+              @click="onWorldSelect(world)"
+              @keydown.enter.prevent="onWorldSelect(world)"
+              @keydown.space.prevent="onWorldSelect(world)">
             <span class="world-name">{{ world.Name || '(unnamed)' }}</span>
             <span class="world-hex">{{ world.Hex }}</span>
           </li>
@@ -90,7 +96,7 @@
     </aside>
 
     <!-- Main panel -->
-    <main class="detail">
+    <main id="main-content" class="detail">
       <div v-if="!map.selectedWorld" class="placeholder large">
         <p>Select a world from the list to view its data</p>
       </div>
@@ -229,7 +235,14 @@
               @select-good="onGoodSelect"
             />
             <template v-if="selectedGood">
-              <div class="resize-handle" @mousedown.prevent="startResize" title="Drag to resize" />
+              <div class="resize-handle"
+                   role="separator" tabindex="0"
+                   aria-label="Resize chart panel — use arrow keys"
+                   :aria-valuenow="chartHeight"
+                   :aria-valuemin="MIN_CHART"
+                   :aria-valuemax="600"
+                   @mousedown.prevent="startResize"
+                   @keydown="resizeWithKeys" />
               <PriceChart
                 :world-hex="map.selectedWorld.Hex"
                 :sector-name="map.selectedSectorName"
@@ -255,6 +268,7 @@
   </div>
 
   <!-- Dialogs -->
+  <ThemeDialog v-model="showThemes" />
   <AboutDialog v-model="showAbout" />
   <HelpDialog  v-model="showHelp"  />
 
@@ -277,6 +291,7 @@ import EventsHistory  from '../components/EventsHistory.vue'
 import HamburgerMenu  from '../components/HamburgerMenu.vue'
 import AboutDialog    from '../components/AboutDialog.vue'
 import HelpDialog     from '../components/HelpDialog.vue'
+import ThemeDialog    from '../components/ThemeDialog.vue'
 
 const map    = useMapStore()
 const auth   = useAuthStore()
@@ -287,6 +302,7 @@ const detailTab    = ref('overview')
 const selectedGood = ref(null)
 const showAbout    = ref(false)
 const showHelp     = ref(false)
+const showThemes   = ref(false)
 
 const DETAIL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -320,6 +336,18 @@ function doResize(e) {
 function stopResize() {
   document.removeEventListener('mousemove', doResize)
   document.removeEventListener('mouseup',  stopResize)
+}
+
+// WCAG 2.5.7: keyboard alternative for drag resize (arrow keys, 10px steps)
+function resizeWithKeys(e) {
+  const available = marketLayoutEl.value?.clientHeight ?? 600
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    chartHeight.value = Math.min(chartHeight.value + 10, available - MIN_TABLE - 10)
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    chartHeight.value = Math.max(chartHeight.value - 10, MIN_CHART)
+  }
 }
 
 onUnmounted(() => {
