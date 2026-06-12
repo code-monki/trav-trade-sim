@@ -119,7 +119,7 @@
     </div>
 
     <p class="login-footer">
-      Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing
+      Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing Ltd. · Copyright 1977–Present
     </p>
   </div>
 </template>

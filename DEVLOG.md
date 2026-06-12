@@ -1,4 +1,4 @@
-# Developer Log — Traveller Map Explorer
+# Developer Log — Traveller Trade Simulator
 
 ---
 
@@ -58,3 +58,27 @@ Metadata fetch failure is silently swallowed — sectors without metadata still 
 - `/api/credits` (source attribution per world) not yet wired up
 - No jump-route or jump-world visualisation
 - Milieu is hardcoded; could be a UI selector
+
+---
+
+## Licensing & Attribution
+
+### Trademark holder
+Traveller is a registered trademark of Mongoose Publishing Ltd.  
+Copyright 1977 – Present Mongoose Publishing Ltd.
+
+### Required disclaimer (Mongoose fan-site policy)
+The full text below must appear in the app's About dialog (or equivalent) before public release.
+Mongoose Publishing must also be notified of the site's existence; permission is subject to 90 days' withdrawal notice.
+
+> **Mongoose Publishing**
+>
+> The Traveller game in all forms is owned by Mongoose Publishing Ltd.. Copyright 1977 - Present Mongoose Publishing Ltd. Traveller is a registered trademark of Mongoose Publishing, Ltd. Mongoose Publishing permits web sites and fanzines for this game, provided it contains this notice, that Mongoose Publishing is notified, and subject to a withdrawal of permission on 90 days notice. The contents of this site are for personal, non-commercial use only.
+>
+> Any use of Mongoose Publishing's copyrighted material or trademarks anywhere on this web site and its files should not be viewed as a challenge to those copyrights or trademarks. In addition, any program/articles/file on this site cannot be republished or distributed without the consent of the author who contributed it.
+
+### TODO — About dialog
+- [ ] Build an About dialog / modal (accessible from the app header or footer)
+- [ ] Display the full Mongoose disclaimer text above verbatim
+- [ ] Include app version (from `package.json`) and a link to the GitHub repo
+- [ ] Notify Mongoose Publishing once the app is publicly accessible
