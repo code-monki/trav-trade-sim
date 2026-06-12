@@ -46,46 +46,32 @@ const TABS = [
   { key: 'annual',  label: 'Annual'  },
 ]
 
-// ── Time conversion helpers ───────────────────────────────────────────────────
-// Proxy: Imperial tick 0 → 1985-01-07; each tick = 7 days.
-const BASE_MS  = new Date('1985-01-07').getTime()
-const BASE_SEC = BASE_MS / 1000
+// ── Time helpers ──────────────────────────────────────────────────────────────
+// Feed chart UTCTimestamp (seconds) directly — avoids the BusinessDay object
+// that string dates produce, so tickMarkFormatter always receives a plain number.
+const BASE_SEC     = new Date('1985-01-07').getTime() / 1000
+const SECS_PER_TICK = 7 * 86400
 
-function tickToDateStr(t) {
-  return new Date(BASE_MS + t * 7 * 86400000).toISOString().slice(0, 10)
-}
+function tickToTime(t)           { return BASE_SEC + t * SECS_PER_TICK }
+function monthToTime(year, month){ return BASE_SEC + ((year-1105)*48 + (month-1)*4) * SECS_PER_TICK }
+function yearToTime(year)        { return BASE_SEC + (year-1105)*48 * SECS_PER_TICK }
 
-function monthToDateStr(year, month) {
-  const y = 1985 + (year - 1105)
-  return `${y}-${String(month).padStart(2, '0')}-01`
-}
+function tsToTick(ts) { return Math.max(0, Math.round((ts - BASE_SEC) / SECS_PER_TICK)) }
 
-// Convert proxy date back to an Imperial date label.
-// lightweight-charts passes a BusinessDay {year,month,day} for YYYY-MM-DD data,
-// or a UTCTimestamp (seconds) for time-series data.
+// tickMarkType: 0=Year 1=Month 2=DayOfMonth
 function imperialTickMark(ts, type) {
-  const ms = (typeof ts === 'object' && ts !== null)
-    ? Date.UTC(ts.year, ts.month - 1, ts.day)
-    : ts * 1000
-  const t = Math.max(0, Math.round((ms - BASE_MS) / (7 * 86400000)))
-  const { year, day, month } = tickToCalendar(t)
+  const { year, day, month } = tickToCalendar(tsToTick(ts))
   if (type === 0) return `${year}`
-  if (type === 1) return `M${String(month).padStart(2, '0')}-${year}`
-  return `${String(day).padStart(3, '0')}-${year}`
+  if (type === 1) return `M${String(month).padStart(2,'0')}-${year}`
+  return `${String(day).padStart(3,'0')}-${year}`
 }
+
+function imperialDateStr(ts) { return formatImperialDate(tsToTick(ts)) }
 
 // ── Chart instance ────────────────────────────────────────────────────────────
 let chart  = null
 let series = null
 let ro     = null
-
-function imperialDateStr(ts) {
-  const ms = (typeof ts === 'object' && ts !== null)
-    ? Date.UTC(ts.year, ts.month - 1, ts.day)
-    : ts * 1000
-  const t = Math.max(0, Math.round((ms - BASE_MS) / (7 * 86400000)))
-  return formatImperialDate(t)
-}
 
 const CHART_OPTS = {
   layout: {
@@ -160,7 +146,7 @@ async function loadData() {
     hasData.value = raw.length > 0
     if (!raw.length) return
     series = chart.addLineSeries(LINE_OPTS)
-    series.setData(raw.map(r => ({ time: tickToDateStr(r.tick), value: r.purchase_price })))
+    series.setData(raw.map(r => ({ time: tickToTime(r.tick), value: r.purchase_price })))
 
   } else if (activeTab.value === 'monthly') {
     const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, props.goodDie)
@@ -168,7 +154,7 @@ async function loadData() {
     if (!raw.length) return
     series = chart.addCandlestickSeries(CANDLE_OPTS)
     series.setData(raw.map(r => ({
-      time:  monthToDateStr(r.year, r.month),
+      time:  monthToTime(r.year, r.month),
       open:  r.open_price,
       high:  r.high_price,
       low:   r.low_price,
@@ -181,7 +167,7 @@ async function loadData() {
     if (!raw.length) return
     series = chart.addCandlestickSeries(CANDLE_OPTS)
     series.setData(raw.map(r => ({
-      time:  `${1985 + (r.year - 1105)}-01-01`,
+      time:  yearToTime(r.year),
       open:  r.open_price,
       high:  r.high_price,
       low:   r.low_price,
