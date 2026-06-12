@@ -218,19 +218,22 @@
 
         <!-- ── Market tab ────────────────────────────────────────────────── -->
         <template v-if="detailTab === 'market'">
-          <div class="market-layout">
+          <div class="market-layout" ref="marketLayoutEl">
             <MarketTable
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
               @select-good="onGoodSelect"
             />
-            <PriceChart
-              v-if="selectedGood"
-              :world-hex="map.selectedWorld.Hex"
-              :sector-name="map.selectedSectorName"
-              :good-die="selectedGood.trade_good_die"
-              :good-name="selectedGood.trade_good_name"
-            />
+            <template v-if="selectedGood">
+              <div class="resize-handle" @mousedown.prevent="startResize" title="Drag to resize" />
+              <PriceChart
+                :world-hex="map.selectedWorld.Hex"
+                :sector-name="map.selectedSectorName"
+                :good-die="selectedGood.trade_good_die"
+                :good-name="selectedGood.trade_good_name"
+                :style="{ height: chartHeight + 'px' }"
+              />
+            </template>
           </div>
         </template>
       </div>
@@ -245,7 +248,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMapStore }  from '../stores/map.js'
 import { useAuthStore } from '../stores/auth.js'
@@ -258,13 +261,46 @@ const auth   = useAuthStore()
 const tick   = useTickStore()
 const router = useRouter()
 
-const detailTab   = ref('overview')
+const detailTab    = ref('overview')
 const selectedGood = ref(null)
 
 const DETAIL_TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'market',   label: 'Market'   },
 ]
+
+// ── Chart resize ──────────────────────────────────────────────────────────────
+const marketLayoutEl = ref(null)
+const chartHeight    = ref(260)
+const MIN_CHART      = 80
+const MIN_TABLE      = 120
+
+let _resizeStartY = 0
+let _resizeStartH = 0
+
+function startResize(e) {
+  _resizeStartY = e.clientY
+  _resizeStartH = chartHeight.value
+  document.addEventListener('mousemove', doResize)
+  document.addEventListener('mouseup',  stopResize)
+}
+
+function doResize(e) {
+  const delta     = _resizeStartY - e.clientY   // drag up → chart grows
+  const available = marketLayoutEl.value?.clientHeight ?? 600
+  chartHeight.value = Math.max(MIN_CHART,
+    Math.min(_resizeStartH + delta, available - MIN_TABLE - 10))
+}
+
+function stopResize() {
+  document.removeEventListener('mousemove', doResize)
+  document.removeEventListener('mouseup',  stopResize)
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', doResize)
+  document.removeEventListener('mouseup',  stopResize)
+})
 
 onMounted(async () => {
   map.loadSectors()
@@ -447,9 +483,21 @@ header {
 .market-layout {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0;
   height: calc(100vh - 248px);
   min-height: 420px;
   overflow: hidden;
 }
+
+.resize-handle {
+  flex-shrink: 0;
+  height: 8px;
+  cursor: row-resize;
+  background: var(--border);
+  border-radius: 4px;
+  margin: 3px 0;
+  transition: background 0.15s;
+}
+
+.resize-handle:hover { background: var(--accent-dim); }
 </style>

@@ -23,9 +23,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { createChart, ColorType } from 'lightweight-charts'
 import { useTickStore } from '../stores/tick.js'
+import { formatImperialDate, tickToCalendar } from '../lib/market-tick.js'
 
 const props = defineProps({
   worldHex:   { type: String, required: true },
@@ -34,8 +35,8 @@ const props = defineProps({
   goodName:   { type: String, default: '' },
 })
 
-const tick     = useTickStore()
-const chartEl  = ref(null)
+const tick    = useTickStore()
+const chartEl = ref(null)
 const activeTab = ref('weekly')
 const hasData   = ref(false)
 
@@ -46,9 +47,9 @@ const TABS = [
 ]
 
 // ── Time conversion helpers ───────────────────────────────────────────────────
-// Proxy mapping: Imperial tick 0 = 1985-01-07, each tick = 7 days.
-
-const BASE_MS = new Date('1985-01-07').getTime()
+// Proxy: Imperial tick 0 → 1985-01-07; each tick = 7 days.
+const BASE_MS  = new Date('1985-01-07').getTime()
+const BASE_SEC = BASE_MS / 1000
 
 function tickToDateStr(t) {
   return new Date(BASE_MS + t * 7 * 86400000).toISOString().slice(0, 10)
@@ -57,6 +58,16 @@ function tickToDateStr(t) {
 function monthToDateStr(year, month) {
   const y = 1985 + (year - 1105)
   return `${y}-${String(month).padStart(2, '0')}-01`
+}
+
+// Convert proxy UTC timestamp (seconds) back to an Imperial date label.
+// tickMarkType: 0=Year, 1=Month, 2=DayOfMonth
+function imperialTickMark(ts, type) {
+  const t = Math.max(0, Math.round((ts - BASE_SEC) / (7 * 86400)))
+  const { year, day, month } = tickToCalendar(t)
+  if (type === 0) return `${year}`
+  if (type === 1) return `M${String(month).padStart(2, '0')}-${year}`
+  return `${String(day).padStart(3, '0')}-${year}`
 }
 
 // ── Chart instance ────────────────────────────────────────────────────────────
@@ -75,16 +86,19 @@ const CHART_OPTS = {
   },
   crosshair: { vertLine: { color: '#2a3050' }, horzLine: { color: '#2a3050' } },
   rightPriceScale: { borderColor: '#2a3050' },
-  timeScale: { borderColor: '#2a3050', timeVisible: true },
-  height: 280,
+  timeScale: {
+    borderColor: '#2a3050',
+    timeVisible: false,
+    tickMarkFormatter: imperialTickMark,
+  },
 }
 
 const CANDLE_OPTS = {
-  upColor:      '#4caf72',
-  downColor:    '#d93a3a',
+  upColor:       '#4caf72',
+  downColor:     '#d93a3a',
   borderVisible: false,
-  wickUpColor:  '#4caf72',
-  wickDownColor:'#d93a3a',
+  wickUpColor:   '#4caf72',
+  wickDownColor: '#d93a3a',
 }
 
 const LINE_OPTS = {
@@ -97,11 +111,18 @@ const LINE_OPTS = {
 function initChart() {
   if (!chartEl.value) return
   chart?.remove()
-  chart  = createChart(chartEl.value, { ...CHART_OPTS, width: chartEl.value.clientWidth })
+  const w = chartEl.value.clientWidth  || 400
+  const h = chartEl.value.clientHeight || 200
+  chart  = createChart(chartEl.value, { ...CHART_OPTS, width: w, height: h })
   series = null
 
   ro = new ResizeObserver(() => {
-    if (chartEl.value) chart?.applyOptions({ width: chartEl.value.clientWidth })
+    if (chartEl.value) {
+      chart?.applyOptions({
+        width:  chartEl.value.clientWidth  || 400,
+        height: chartEl.value.clientHeight || 200,
+      })
+    }
   })
   ro.observe(chartEl.value)
 }
@@ -123,7 +144,6 @@ async function loadData() {
     const raw = await tick.loadWeeklyHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-
     series = chart.addLineSeries(LINE_OPTS)
     series.setData(raw.map(r => ({ time: tickToDateStr(r.tick), value: r.purchase_price })))
 
@@ -131,7 +151,6 @@ async function loadData() {
     const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-
     series = chart.addCandlestickSeries(CANDLE_OPTS)
     series.setData(raw.map(r => ({
       time:  monthToDateStr(r.year, r.month),
@@ -145,7 +164,6 @@ async function loadData() {
     const raw = await tick.loadAnnualHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-
     series = chart.addCandlestickSeries(CANDLE_OPTS)
     series.setData(raw.map(r => ({
       time:  `${1985 + (r.year - 1105)}-01-01`,
@@ -162,7 +180,6 @@ async function loadData() {
 async function setTab(key) {
   activeTab.value = key
   await nextTick()
-  // Re-init chart for the new series type (line vs candlestick)
   initChart()
   await loadData()
 }
@@ -190,12 +207,13 @@ watch(
 .chart-wrap {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.5rem;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.85rem;
+  padding: 0.75rem;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .chart-header {
@@ -204,6 +222,7 @@ watch(
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .chart-title {
@@ -213,14 +232,14 @@ watch(
 }
 
 .good-name {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .mono {
   font-family: monospace;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
   background: var(--bg-item);
   padding: 1px 6px;
@@ -243,14 +262,20 @@ watch(
 .ctab:hover { border-color: var(--accent-dim); color: var(--text); }
 .ctab.active { background: var(--bg-selected); border-color: var(--accent-dim); color: var(--accent); }
 
-.chart-el { width: 100%; }
+/* chart-el fills whatever height the parent leaves after the header */
+.chart-el {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
 
 .chart-placeholder {
-  height: 280px;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-dim);
   font-size: 0.85rem;
+  min-height: 120px;
 }
 </style>
