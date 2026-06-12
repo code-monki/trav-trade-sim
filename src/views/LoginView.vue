@@ -119,7 +119,7 @@
     </div>
 
     <p class="login-footer">
-      Non-commercial use only · Classic Traveller rules used with permission from Marc Miller
+      Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing
     </p>
   </div>
 </template>
