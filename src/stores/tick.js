@@ -23,6 +23,9 @@ export const useTickStore = defineStore('tick', () => {
   // Active events for current campaign (loaded once per session / tick advance)
   const activeEvents = ref([])
 
+  // Full event history for the currently viewed world (active + expired)
+  const worldEventHistory = ref([])
+
   // ── Computed ───────────────────────────────────────────────────────────────
   const imperialDate = computed(() => formatImperialDate(currentTick.value))
 
@@ -291,10 +294,30 @@ export const useTickStore = defineStore('tick', () => {
     return activeEventsForWorld(activeEvents.value, worldHex, currentTick.value)
   }
 
+  // ── World event history (active + expired) ─────────────────────────────────
+
+  async function loadWorldEventHistory(worldHex, sectorName) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || !supabase) return []
+
+    const { data, error: err } = await supabase
+      .from('market_events')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .eq('sector', sectorName)
+      .or(`world_hex.eq.${worldHex},scope.eq.subsector`)
+      .order('tick', { ascending: false })
+      .limit(200)
+
+    if (err) { error.value = err.message; return [] }
+    worldEventHistory.value = data ?? []
+    return data ?? []
+  }
+
   return {
     // state
     currentTick, currentYear, currentDay, currentMonth,
-    loading, error, activeEvents, worldSnapshots,
+    loading, error, activeEvents, worldSnapshots, worldEventHistory,
     // computed
     imperialDate,
     // actions
@@ -306,5 +329,6 @@ export const useTickStore = defineStore('tick', () => {
     loadMonthlyHistory,
     loadAnnualHistory,
     eventsForWorld,
+    loadWorldEventHistory,
   }
 })

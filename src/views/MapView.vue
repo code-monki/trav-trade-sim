@@ -236,6 +236,16 @@
             </template>
           </div>
         </template>
+
+        <!-- ── Events tab ────────────────────────────────────────────────── -->
+        <template v-if="detailTab === 'events'">
+          <div class="events-tab-wrap">
+            <EventsHistory
+              :world-hex="map.selectedWorld.Hex"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
       </div>
     </main>
   </div>
@@ -253,8 +263,9 @@ import { useRouter } from 'vue-router'
 import { useMapStore }  from '../stores/map.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
-import MarketTable from '../components/MarketTable.vue'
-import PriceChart  from '../components/PriceChart.vue'
+import MarketTable    from '../components/MarketTable.vue'
+import PriceChart     from '../components/PriceChart.vue'
+import EventsHistory  from '../components/EventsHistory.vue'
 
 const map    = useMapStore()
 const auth   = useAuthStore()
@@ -267,6 +278,7 @@ const selectedGood = ref(null)
 const DETAIL_TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'market',   label: 'Market'   },
+  { key: 'events',   label: 'Events'   },
 ]
 
 // ── Chart resize ──────────────────────────────────────────────────────────────
@@ -308,9 +320,10 @@ onMounted(async () => {
   await tick.loadActiveEvents()
 })
 
-// Reset chart selection when world changes
-watch(() => map.selectedWorld, () => {
+// Reset chart selection and pre-load event history when world changes
+watch(() => map.selectedWorld, (world) => {
   selectedGood.value = null
+  if (world) tick.loadWorldEventHistory(world.Hex, map.selectedSectorName)
 })
 
 function onWorldSelect(world) {
@@ -500,4 +513,13 @@ header {
 }
 
 .resize-handle:hover { background: var(--accent-dim); }
+
+/* ── Events tab ────────────────────────────────────────────────────────────── */
+.events-tab-wrap {
+  height: calc(100vh - 248px);
+  min-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 </style>

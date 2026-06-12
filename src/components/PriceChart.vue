@@ -176,6 +176,28 @@ async function loadData() {
   }
 
   chart.timeScale().fitContent()
+  applyEventMarkers()
+}
+
+// ── Event markers ─────────────────────────────────────────────────────────────
+const SEV_COLOR = { minor: '#5a78c8', major: '#e8a020', crisis: '#d93a3a' }
+const SEV_SHAPE = { minor: 'circle',  major: 'square',  crisis: 'arrowDown' }
+
+function applyEventMarkers() {
+  if (!series || !tick.worldEventHistory.length) return
+
+  const markers = tick.worldEventHistory
+    .map(ev => ({
+      time:     tickToTime(ev.tick),
+      position: ev.effect_pct > 0 ? 'aboveBar' : 'belowBar',
+      color:    SEV_COLOR[ev.severity] ?? '#888',
+      shape:    SEV_SHAPE[ev.severity] ?? 'circle',
+      text:     ev.effect_pct > 0 ? `+${ev.effect_pct}%` : `${ev.effect_pct}%`,
+      size:     ev.severity === 'crisis' ? 2 : 1,
+    }))
+    .sort((a, b) => a.time - b.time)
+
+  series.setMarkers(markers)
 }
 
 async function setTab(key) {
@@ -202,6 +224,9 @@ watch(
     await loadData()
   },
 )
+
+// Re-apply markers when event history loads after the chart is already rendered
+watch(() => tick.worldEventHistory.length, applyEventMarkers)
 </script>
 
 <style scoped>
