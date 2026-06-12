@@ -97,8 +97,21 @@
           </select>
         </div>
         <div class="field-row">
-          <label>Starting Year <span class="hint">(Imperial calendar — campaign opens at the start of this year)</span></label>
-          <input v-model.number="form.startYear" type="number" min="1100" max="1201" step="1" />
+          <label>Starting Date <span class="hint">(Imperial calendar — week is derived from day)</span></label>
+          <div class="date-pair">
+            <div class="date-field">
+              <span class="date-label">Year</span>
+              <input v-model.number="form.startYear" type="number" min="1100" max="1201" step="1" />
+            </div>
+            <div class="date-field">
+              <span class="date-label">Day (1–365)</span>
+              <input v-model.number="form.startDay" type="number" min="1" max="365" step="1" />
+            </div>
+            <div class="date-field date-field--derived">
+              <span class="date-label">Week</span>
+              <span class="derived-value">{{ derivedStartWeek }}</span>
+            </div>
+          </div>
         </div>
         <div class="field-row">
           <label>Your Character Name (Referee)</label>
@@ -128,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { MILIEUS } from '../lib/traveller-data.js'
@@ -147,7 +160,13 @@ const form = reactive({
   milieu:        'M1105',
   tradeRules:    'CT7',
   startYear:     1105,
+  startDay:      1,
 })
+
+// Day 1–365 → week 1–48 (ceil so day 1–7 = week 1, day 8–14 = week 2, etc.)
+const derivedStartWeek = computed(() =>
+  Math.min(48, Math.max(1, Math.ceil((form.startDay || 1) / 7)))
+)
 
 function setMode(m) {
   mode.value = m
@@ -191,6 +210,7 @@ async function doCreate() {
     milieu:        form.milieu,
     tradeRules:    form.tradeRules,
     startYear:     form.startYear,
+    startWeek:     derivedStartWeek.value,
     characterName: form.characterName,
     pin:           form.pin,
   })
@@ -290,6 +310,33 @@ async function doCreate() {
 }
 
 .field-row { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.date-pair {
+  display: flex;
+  gap: 0.75rem;
+}
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+.date-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.date-field--derived { flex: 0 0 4rem; }
+.derived-value {
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  text-align: center;
+}
 
 .field-row label {
   font-size: 0.72rem;
