@@ -78,7 +78,26 @@ Mongoose Publishing must also be notified of the site's existence; permission is
 > Any use of Mongoose Publishing's copyrighted material or trademarks anywhere on this web site and its files should not be viewed as a challenge to those copyrights or trademarks. In addition, any program/articles/file on this site cannot be republished or distributed without the consent of the author who contributed it.
 
 ### TODO — About dialog
-- [ ] Build an About dialog / modal (accessible from the app header or footer)
-- [ ] Display the full Mongoose disclaimer text above verbatim
-- [ ] Include app version (from `package.json`) and a link to the GitHub repo
+- [x] Build an About dialog / modal (accessible from hamburger menu)
+- [x] Display the full Mongoose disclaimer text above verbatim
+- [x] Include app version (from `package.json`) and a link to the GitHub repo
 - [ ] Notify Mongoose Publishing once the app is publicly accessible
+
+---
+
+## Documentation TODO
+
+A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.
+
+Suggested documents:
+
+| Document | Purpose |
+|---|---|
+| **Product Requirements Document (PRD)** | Goals, scope, non-goals, success criteria, non-commercial constraint |
+| **Architecture Overview** | Component map, data flow, Supabase schema diagram, state management |
+| **Data Dictionary** | All Supabase tables/views, columns, RLS policies, function signatures |
+| **Trade Rules Reference** | CT Book 2 and CT Book 7 mechanics implemented; deviation notes |
+| **Market Events Catalogue** | Full event table with severity tiers, effect ranges, trigger conditions |
+| **Theme Specification** | CSS token set, WCAG contrast ratios per theme, user theme format (JSON schema) |
+| **Accessibility Checklist** | WCAG 2.2 AA criteria mapped to implementation; known gaps |
+| **Deployment Runbook** | GitHub Pages deploy process, Supabase migration order, env var requirements |
