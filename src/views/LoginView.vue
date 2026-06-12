@@ -93,8 +93,7 @@
         <div class="field-row">
           <label>Trade Rules</label>
           <select v-model="form.tradeRules">
-            <option value="CT7">Classic Traveller Book 7 (recommended)</option>
-            <option value="CT2" disabled>Classic Traveller Book 2 (not yet implemented)</option>
+            <option value="CT7">Classic Traveller Book 7</option>
           </select>
         </div>
         <div class="field-row">
