@@ -65,6 +65,7 @@ export const useTickStore = defineStore('tick', () => {
       const { data, error: rpcError } = await supabase.rpc('advance_tick', {
         p_campaign_id: auth.campaign.id,
       })
+      console.log('[advance_tick] data:', data, '| error:', rpcError)
       if (rpcError) throw new Error(rpcError.message)
       if (data?.error) throw new Error(data.error)
 
