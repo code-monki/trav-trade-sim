@@ -10,6 +10,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   const currentId  = ref(localStorage.getItem(LS_KEY) ?? 'dark-imperium')
   const userThemes = ref([])
+  const revision   = ref(0)   // incremented on every applyTheme(); watch this to react to init()
 
   const allThemes = computed(() => [...BUILTIN_THEMES, ...userThemes.value])
 
@@ -25,6 +26,7 @@ export const useThemeStore = defineStore('theme', () => {
       const val = theme.tokens[key]
       if (val) root.style.setProperty(key, val)
     }
+    revision.value++
   }
 
   function setTheme(id) {
@@ -79,7 +81,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    currentId, userThemes, allThemes, currentTheme,
+    currentId, userThemes, allThemes, currentTheme, revision,
     init, setTheme, saveUserTheme, deleteUserTheme, exportTheme, importTheme,
   }
 })

@@ -26,6 +26,7 @@
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { createChart, ColorType } from 'lightweight-charts'
 import { useTickStore } from '../stores/tick.js'
+import { useThemeStore } from '../stores/theme.js'
 import { formatImperialDate, tickToCalendar } from '../lib/market-tick.js'
 
 const props = defineProps({
@@ -35,8 +36,9 @@ const props = defineProps({
   goodName:   { type: String, default: '' },
 })
 
-const tick    = useTickStore()
-const chartEl = ref(null)
+const tick       = useTickStore()
+const themeStore = useThemeStore()
+const chartEl    = ref(null)
 const activeTab = ref('weekly')
 const hasData   = ref(false)
 
@@ -68,53 +70,65 @@ function imperialTickMark(ts, type) {
 
 function imperialDateStr(ts) { return formatImperialDate(tsToTick(ts)) }
 
+// ── Theme-aware color helpers ─────────────────────────────────────────────────
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function chartOpts() {
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: cssVar('--bg-panel') },
+      textColor:  cssVar('--text-dim'),
+    },
+    grid: {
+      vertLines: { color: cssVar('--bg-item') },
+      horzLines: { color: cssVar('--bg-item') },
+    },
+    crosshair: {
+      vertLine: { color: cssVar('--border') },
+      horzLine: { color: cssVar('--border') },
+    },
+    rightPriceScale: { borderColor: cssVar('--border') },
+    timeScale: {
+      borderColor:       cssVar('--border'),
+      timeVisible:       false,
+      tickMarkFormatter: imperialTickMark,
+    },
+    localization: { timeFormatter: imperialDateStr },
+  }
+}
+
+function candleOpts() {
+  return {
+    upColor:       cssVar('--green'),
+    downColor:     cssVar('--red'),
+    borderVisible: false,
+    wickUpColor:   cssVar('--green'),
+    wickDownColor: cssVar('--red'),
+  }
+}
+
+function lineOpts() {
+  return {
+    color:                  cssVar('--code'),
+    lineWidth:              2,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius:  4,
+  }
+}
+
 // ── Chart instance ────────────────────────────────────────────────────────────
 let chart  = null
 let series = null
 let ro     = null
-
-const CHART_OPTS = {
-  layout: {
-    background: { type: ColorType.Solid, color: '#13162a' },
-    textColor: '#6b789a',
-  },
-  grid: {
-    vertLines: { color: '#1a1e36' },
-    horzLines: { color: '#1a1e36' },
-  },
-  crosshair: { vertLine: { color: '#2a3050' }, horzLine: { color: '#2a3050' } },
-  rightPriceScale: { borderColor: '#2a3050' },
-  timeScale: {
-    borderColor: '#2a3050',
-    timeVisible: false,
-    tickMarkFormatter: imperialTickMark,
-  },
-  localization: {
-    timeFormatter: imperialDateStr,
-  },
-}
-
-const CANDLE_OPTS = {
-  upColor:       '#4caf72',
-  downColor:     '#d93a3a',
-  borderVisible: false,
-  wickUpColor:   '#4caf72',
-  wickDownColor: '#d93a3a',
-}
-
-const LINE_OPTS = {
-  color: '#7ec8e3',
-  lineWidth: 2,
-  crosshairMarkerVisible: true,
-  crosshairMarkerRadius: 4,
-}
 
 function initChart() {
   if (!chartEl.value) return
   chart?.remove()
   const w = chartEl.value.clientWidth  || 400
   const h = chartEl.value.clientHeight || 200
-  chart  = createChart(chartEl.value, { ...CHART_OPTS, width: w, height: h })
+  chart  = createChart(chartEl.value, { ...chartOpts(), width: w, height: h })
   series = null
 
   ro = new ResizeObserver(() => {
@@ -145,14 +159,14 @@ async function loadData() {
     const raw = await tick.loadWeeklyHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-    series = chart.addLineSeries(LINE_OPTS)
+    series = chart.addLineSeries(lineOpts())
     series.setData(raw.map(r => ({ time: tickToTime(r.tick), value: r.purchase_price })))
 
   } else if (activeTab.value === 'monthly') {
     const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-    series = chart.addCandlestickSeries(CANDLE_OPTS)
+    series = chart.addCandlestickSeries(candleOpts())
     series.setData(raw.map(r => ({
       time:  monthToTime(r.year, r.month),
       open:  r.open_price,
@@ -165,7 +179,7 @@ async function loadData() {
     const raw = await tick.loadAnnualHistory(props.worldHex, props.sectorName, props.goodDie)
     hasData.value = raw.length > 0
     if (!raw.length) return
-    series = chart.addCandlestickSeries(CANDLE_OPTS)
+    series = chart.addCandlestickSeries(candleOpts())
     series.setData(raw.map(r => ({
       time:  yearToTime(r.year),
       open:  r.open_price,
@@ -180,17 +194,22 @@ async function loadData() {
 }
 
 // ── Event markers ─────────────────────────────────────────────────────────────
-const SEV_COLOR = { minor: '#5a78c8', major: '#e8a020', crisis: '#d93a3a' }
-const SEV_SHAPE = { minor: 'circle',  major: 'square',  crisis: 'arrowDown' }
+const SEV_SHAPE = { minor: 'circle', major: 'square', crisis: 'arrowDown' }
 
 function applyEventMarkers() {
   if (!series || !tick.worldEventHistory.length) return
+
+  const sevColor = {
+    minor:  cssVar('--accent-dim'),
+    major:  cssVar('--amber'),
+    crisis: cssVar('--red'),
+  }
 
   const markers = tick.worldEventHistory
     .map(ev => ({
       time:     tickToTime(ev.tick),
       position: ev.effect_pct > 0 ? 'aboveBar' : 'belowBar',
-      color:    SEV_COLOR[ev.severity] ?? '#888',
+      color:    sevColor[ev.severity] ?? cssVar('--text-dim'),
       shape:    SEV_SHAPE[ev.severity] ?? 'circle',
       text:     ev.effect_pct > 0 ? `+${ev.effect_pct}%` : `${ev.effect_pct}%`,
       size:     ev.severity === 'crisis' ? 2 : 1,
@@ -198,6 +217,16 @@ function applyEventMarkers() {
     .sort((a, b) => a.time - b.time)
 
   series.setMarkers(markers)
+}
+
+// Re-theme chart canvas without destroying state or reloading data
+function applyThemeToChart() {
+  if (!chart) return
+  chart.applyOptions(chartOpts())
+  if (series) {
+    series.applyOptions(activeTab.value === 'weekly' ? lineOpts() : candleOpts())
+    applyEventMarkers()
+  }
 }
 
 async function setTab(key) {
@@ -227,6 +256,9 @@ watch(
 
 // Re-apply markers when event history loads after the chart is already rendered
 watch(() => tick.worldEventHistory.length, applyEventMarkers)
+
+// Re-theme chart canvas whenever applyTheme() is called (covers init() and setTheme())
+watch(() => themeStore.revision, applyThemeToChart)
 </script>
 
 <style scoped>
