@@ -60,10 +60,14 @@ function monthToDateStr(year, month) {
   return `${y}-${String(month).padStart(2, '0')}-01`
 }
 
-// Convert proxy UTC timestamp (seconds) back to an Imperial date label.
-// tickMarkType: 0=Year, 1=Month, 2=DayOfMonth
+// Convert proxy date back to an Imperial date label.
+// lightweight-charts passes a BusinessDay {year,month,day} for YYYY-MM-DD data,
+// or a UTCTimestamp (seconds) for time-series data.
 function imperialTickMark(ts, type) {
-  const t = Math.max(0, Math.round((ts - BASE_SEC) / (7 * 86400)))
+  const ms = (typeof ts === 'object' && ts !== null)
+    ? Date.UTC(ts.year, ts.month - 1, ts.day)
+    : ts * 1000
+  const t = Math.max(0, Math.round((ms - BASE_MS) / (7 * 86400000)))
   const { year, day, month } = tickToCalendar(t)
   if (type === 0) return `${year}`
   if (type === 1) return `M${String(month).padStart(2, '0')}-${year}`
@@ -74,6 +78,14 @@ function imperialTickMark(ts, type) {
 let chart  = null
 let series = null
 let ro     = null
+
+function imperialDateStr(ts) {
+  const ms = (typeof ts === 'object' && ts !== null)
+    ? Date.UTC(ts.year, ts.month - 1, ts.day)
+    : ts * 1000
+  const t = Math.max(0, Math.round((ms - BASE_MS) / (7 * 86400000)))
+  return formatImperialDate(t)
+}
 
 const CHART_OPTS = {
   layout: {
@@ -90,6 +102,9 @@ const CHART_OPTS = {
     borderColor: '#2a3050',
     timeVisible: false,
     tickMarkFormatter: imperialTickMark,
+  },
+  localization: {
+    timeFormatter: imperialDateStr,
   },
 }
 
