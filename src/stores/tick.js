@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from './auth.js'
-import { generateWorldSnapshot, tickToCalendar, formatImperialDate } from '../lib/market-tick.js'
+import { generateWorldSnapshot, tickToCalendar, formatImperialDate, TICKS_PER_YEAR } from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
 
 export const useTickStore = defineStore('tick', () => {
@@ -165,6 +165,28 @@ export const useTickStore = defineStore('tick', () => {
       if (!count || count === 0) {
         // Maybe fire a market event first (affects prices below)
         await maybeInsertEvent(world, sectorName)
+
+        // On first visit to this world, backfill the current year's history so
+        // price charts have context from the start of the year rather than a
+        // single data point.
+        const { count: priorCount } = await supabase
+          .from('market_snapshots')
+          .select('id', { count: 'exact', head: true })
+          .eq('campaign_id', campaignId)
+          .eq('world_hex', world.Hex)
+          .eq('sector', sectorName)
+
+        const yearStartTick = Math.floor(currentTick.value / TICKS_PER_YEAR) * TICKS_PER_YEAR
+
+        if ((!priorCount || priorCount === 0) && currentTick.value > yearStartTick) {
+          const backfillRows = []
+          for (let t = yearStartTick; t < currentTick.value; t++) {
+            backfillRows.push(...generateWorldSnapshot({
+              world, sectorName, campaignId, tick: t, activeEvents: [],
+            }))
+          }
+          await supabase.from('market_snapshots').insert(backfillRows)
+        }
 
         // Get active events for this world
         const eventsForWorld = activeEventsForWorld(

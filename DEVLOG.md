@@ -85,6 +85,39 @@ Mongoose Publishing must also be notified of the site's existence; permission is
 
 ---
 
+## 2026-06-12 — Campaign starting year, market backfill, column docs
+
+### Campaign starting year (Feature)
+Referees can now choose an Imperial starting year when creating a campaign
+(default 1105, range 1100–1201). The client computes
+`startTick = (startYear - 1105) * 48` and passes it to the `create_campaign`
+RPC as `p_start_tick` (migration 007). The RPC derives `year` and `day` from the
+tick and inserts them into `campaign_calendar`.
+
+### Lazy price history backfill (Feature)
+On the first visit to any world, `ensureWorldSnapshot()` now detects that no prior
+snapshots exist and generates price history for every tick from the start of the
+current Imperial year up to the tick before the current one. This gives price charts
+immediate context (up to 47 weeks of history) without any upfront bulk computation.
+Backfill rows carry no market-event modifiers since those events did not fire.
+Maximum backfill: 47 ticks × 36 goods = 1,692 rows — fits in a single Supabase insert.
+
+### Market table column definitions (Help system)
+Added a column-definition table to the Market Tab section of the User Manual
+explaining Good, Die, Buy, Sell, Spread, Qty (t), and Event columns.
+Qty (t) entry explicitly documents the per-tick expiry rule (no rollover).
+
+### CT2 ruleset removed
+Dropped the disabled CT2 option from the Trade Rules dropdown — CT7 is a superset
+and there is no value in a separate CT2 implementation.
+
+### AGENTS.md rewritten
+The file was stale from the prior travmap-export project. Replaced with a complete
+architecture reference for trav-trade-sim covering stack, file tree, key design
+decisions, security constraints, and restart instructions.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

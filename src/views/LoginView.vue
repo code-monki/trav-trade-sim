@@ -97,6 +97,10 @@
           </select>
         </div>
         <div class="field-row">
+          <label>Starting Year <span class="hint">(Imperial calendar — campaign opens at the start of this year)</span></label>
+          <input v-model.number="form.startYear" type="number" min="1100" max="1201" step="1" />
+        </div>
+        <div class="field-row">
           <label>Your Character Name (Referee)</label>
           <input v-model="form.characterName" type="text" placeholder="Referee character name"
                  autocomplete="off" required />
@@ -142,6 +146,7 @@ const form = reactive({
   pinConfirm:    '',
   milieu:        'M1105',
   tradeRules:    'CT7',
+  startYear:     1105,
 })
 
 function setMode(m) {
@@ -185,6 +190,7 @@ async function doCreate() {
     code:          form.code,
     milieu:        form.milieu,
     tradeRules:    form.tradeRules,
+    startYear:     form.startYear,
     characterName: form.characterName,
     pin:           form.pin,
   })

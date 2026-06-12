@@ -74,9 +74,45 @@
             </p>
             <p>
               Market data is generated lazily: prices are only recorded for a world
-              when its Market tab is open during a tick advance. Visit worlds
-              regularly to build price history.
+              when its Market tab is open during a tick advance. On the first visit
+              to a world, prices are backfilled for the entire current year so charts
+              have immediate context.
             </p>
+            <table class="col-table">
+              <thead>
+                <tr><th>Column</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Good</strong></td>
+                  <td>Trade good name from the CT Book 2 trade table.</td>
+                </tr>
+                <tr>
+                  <td><strong>Die</strong></td>
+                  <td>The d66 roll that generates this good's row (e.g. 11–66). Used as a unique key for the good across all data.</td>
+                </tr>
+                <tr>
+                  <td><strong>Buy (Cr/t)</strong></td>
+                  <td>Purchase price in Credits per ton at this world this tick. Derived from world trade codes, starport class, and tech level per CT7 rules.</td>
+                </tr>
+                <tr>
+                  <td><strong>Sell (Cr/t)</strong></td>
+                  <td>Sale price in Credits per ton — what you would receive selling these goods here this tick.</td>
+                </tr>
+                <tr>
+                  <td><strong>Spread</strong></td>
+                  <td>Sell minus Buy per ton. Positive spread indicates a profitable round-trip on a single world; negative means buy-high-sell-low conditions.</td>
+                </tr>
+                <tr>
+                  <td><strong>Qty (t)</strong></td>
+                  <td>Available quantity in tons this tick, rolled per CT Book 2. This amount <em>expires</em> at the end of the tick — unpurchased stock does not carry over. A fresh quantity is rolled next tick.</td>
+                </tr>
+                <tr>
+                  <td><strong>Event</strong></td>
+                  <td>▲ if an active market event is pushing prices up; ▼ for down. See the Events tab for details.</td>
+                </tr>
+              </tbody>
+            </table>
           </section>
 
           <section class="help-section">
@@ -127,8 +163,8 @@
               Time is displayed in Imperial format: <code>DDD-YYYY</code>
               (day of year – year). 1 tick = 1 jump-week (7 days).
               There are 4 ticks per Imperial month and 48 ticks per Imperial year.
-              The campaign begins at the start of year 1105 (the default Third
-              Imperium milieu).
+              The Referee selects the campaign's starting year when creating the
+              campaign; the default is 1105 (the classic Third Imperium milieu).
             </p>
           </section>
 
@@ -316,6 +352,36 @@ code {
   font-size: 0.85em;
   color: var(--code);
 }
+
+/* Column definitions table (Market Tab) */
+.col-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 0.75rem;
+}
+.col-table th {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.col-table td {
+  padding: 0.45rem 0.6rem;
+  color: var(--text);
+  border-bottom: 1px solid rgba(42,48,80,0.3);
+  vertical-align: top;
+}
+.col-table td:first-child {
+  white-space: nowrap;
+  color: var(--accent);
+  width: 9rem;
+}
+.col-table tr:last-child td { border-bottom: none; }
 
 /* Shortcuts tab */
 .shortcuts-body { gap: 1rem; }

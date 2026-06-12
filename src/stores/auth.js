@@ -39,11 +39,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ── Create a new campaign (referee creates + joins in one step) ─────────────
-  async function createCampaign({ label, code, milieu, tradeRules, characterName, pin }) {
+  async function createCampaign({ label, code, milieu, tradeRules, startYear = 1105, characterName, pin }) {
     loading.value = true
     error.value   = null
     try {
       requireSupabase()
+      const startTick = Math.max(0, (startYear - 1105) * 48)
       const { data, error: rpcError } = await supabase.rpc('create_campaign', {
         p_label:       label,
         p_code:        code,
@@ -51,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
         p_trade_rules: tradeRules,
         p_char_name:   characterName,
         p_pin:         pin,
+        p_start_tick:  startTick,
       })
       if (rpcError) throw new Error(rpcError.message)
       if (data?.error) throw new Error(data.error)
