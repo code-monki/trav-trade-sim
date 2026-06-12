@@ -16,9 +16,9 @@
 
     <div v-if="tick.loading" class="chart-placeholder">Loading price history…</div>
     <div v-else-if="!hasData" class="chart-placeholder">
-      No history yet — prices appear after the first tick.
+      No history yet — visit this world each tick to record prices.
     </div>
-    <div v-else ref="chartEl" class="chart-el"></div>
+    <div ref="chartEl" class="chart-el" v-show="hasData && !tick.loading"></div>
   </div>
 </template>
 

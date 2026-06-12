@@ -61,9 +61,9 @@
           Worlds
           <span v-if="map.worlds.length" class="count">({{ map.filteredWorlds.length }} / {{ map.worlds.length }})</span>
         </h2>
-        <div v-if="map.selectedWorld" class="sel-world-callout">
-          <span class="sel-world-name">{{ map.selectedWorld.Name || '(unnamed)' }}</span>
-          <span class="sel-world-hex">{{ map.selectedWorld.Hex }}</span>
+        <div v-if="map.worlds.length" class="world-list-header">
+          <span>World</span>
+          <span>Hex</span>
         </div>
         <input v-if="map.worlds.length" v-model="map.searchQuery"
                placeholder="Filter worlds…" class="search-input" type="search" />
@@ -429,33 +429,18 @@ header {
   color: var(--accent);
 }
 
-/* ── Selected world callout ────────────────────────────────────────────────── */
-.sel-world-callout {
+/* ── World list column header ──────────────────────────────────────────────── */
+.world-list-header {
   display: flex;
-  align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem;
-  background: var(--bg-selected);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  padding: 0.35rem 0.6rem;
-  margin-bottom: 0.5rem;
-}
-
-.sel-world-name {
-  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  color: var(--accent);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sel-world-hex {
-  font-family: monospace;
-  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   color: var(--text-dim);
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.35rem;
 }
 
 /* ── Market tab layout ─────────────────────────────────────────────────────── */
