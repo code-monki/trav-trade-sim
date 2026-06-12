@@ -6,4 +6,13 @@ export default defineConfig({
   // Base path matches the GitHub Pages repo subdirectory.
   // Change to '/' if serving from a custom domain root.
   base: '/trav-trade-sim/',
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.js'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/**/*.js'],
+      reporter: ['text', 'html'],
+    },
+  },
 })

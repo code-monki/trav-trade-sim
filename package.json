@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
@@ -17,6 +20,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
-    "vite": "^5.4.11"
+    "@vitest/coverage-v8": "^2.1.9",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }
