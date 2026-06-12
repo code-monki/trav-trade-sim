@@ -430,7 +430,8 @@ header {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  height: calc(100vh - 220px);
-  min-height: 400px;
+  height: calc(100vh - 248px);
+  min-height: 420px;
+  overflow: hidden;
 }
 </style>

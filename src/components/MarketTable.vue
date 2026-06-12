@@ -189,7 +189,8 @@ function priceClass(price, base) {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Events banner */

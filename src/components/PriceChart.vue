@@ -195,6 +195,7 @@ watch(
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.85rem;
+  flex-shrink: 0;
 }
 
 .chart-header {
