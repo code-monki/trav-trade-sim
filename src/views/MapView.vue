@@ -33,7 +33,11 @@
         <span class="session-char">{{ auth.player?.character_name }}</span>
         <span class="session-campaign">{{ auth.campaign?.code }}</span>
         <span v-if="auth.isReferee" class="role-badge">REF</span>
-        <button class="logout-btn" @click="doLogout">Sign Out</button>
+        <HamburgerMenu
+          @about="showAbout = true"
+          @help="showHelp = true"
+          @signout="doLogout"
+        />
       </div>
     </div>
   </header>
@@ -250,6 +254,10 @@
     </main>
   </div>
 
+  <!-- Dialogs -->
+  <AboutDialog v-model="showAbout" />
+  <HelpDialog  v-model="showHelp"  />
+
   <!-- Error banner -->
   <div v-if="map.error || tick.error" class="error-banner">
     {{ map.error || tick.error }}
@@ -266,6 +274,9 @@ import { useTickStore } from '../stores/tick.js'
 import MarketTable    from '../components/MarketTable.vue'
 import PriceChart     from '../components/PriceChart.vue'
 import EventsHistory  from '../components/EventsHistory.vue'
+import HamburgerMenu  from '../components/HamburgerMenu.vue'
+import AboutDialog    from '../components/AboutDialog.vue'
+import HelpDialog     from '../components/HelpDialog.vue'
 
 const map    = useMapStore()
 const auth   = useAuthStore()
@@ -274,6 +285,8 @@ const router = useRouter()
 
 const detailTab    = ref('overview')
 const selectedGood = ref(null)
+const showAbout    = ref(false)
+const showHelp     = ref(false)
 
 const DETAIL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -312,12 +325,31 @@ function stopResize() {
 onUnmounted(() => {
   document.removeEventListener('mousemove', doResize)
   document.removeEventListener('mouseup',  stopResize)
+  document.removeEventListener('keydown',  handleGlobalKey)
 })
+
+// ── Global keyboard shortcuts ─────────────────────────────────────────────────
+function handleGlobalKey(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
+      || e.target.isContentEditable) return
+  if (showAbout.value || showHelp.value) return   // dialogs handle Esc themselves
+
+  switch (e.key) {
+    case '?': showHelp.value = true; break
+    case 'o': case 'O': if (map.selectedWorld) detailTab.value = 'overview'; break
+    case 'm': case 'M': if (map.selectedWorld) detailTab.value = 'market';   break
+    case 'e': case 'E': if (map.selectedWorld) detailTab.value = 'events';   break
+    case 't': case 'T':
+      if (auth.isReferee && !tick.loading) doAdvanceTick()
+      break
+  }
+}
 
 onMounted(async () => {
   map.loadSectors()
   await tick.loadCalendar()
   await tick.loadActiveEvents()
+  document.addEventListener('keydown', handleGlobalKey)
 })
 
 // Reset chart selection and pre-load event history when world changes
@@ -439,17 +471,6 @@ header {
   letter-spacing: 0.06em;
 }
 
-.logout-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  padding: 3px 10px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.logout-btn:hover { border-color: var(--red); color: var(--red); }
 
 /* ── Detail tabs ───────────────────────────────────────────────────────────── */
 .detail-tabs {
