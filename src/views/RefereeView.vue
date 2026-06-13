@@ -395,10 +395,26 @@
             Open Traveller Map ↗
           </a>
         </div>
+
+        <div class="campaign-security">
+          <h3>Security</h3>
+          <p>The recovery code lets you reset any character's PIN from the sign-in screen without database access.</p>
+          <p class="security-warn">Generating a new code immediately invalidates the previous one.</p>
+          <button class="btn-secondary" :disabled="regenLoading" @click="doRegenerate">
+            {{ regenLoading ? 'Generating…' : 'Generate New Recovery Code' }}
+          </button>
+          <div v-if="auth.error" class="regen-error">{{ auth.error }}</div>
+        </div>
       </div>
     </section>
 
   </main>
+
+  <RecoveryCodeDialog
+    v-if="newRecoveryCode"
+    :code="newRecoveryCode"
+    @close="newRecoveryCode = null"
+  />
 </template>
 
 <script setup>
@@ -407,6 +423,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
 import { useRefereeStore } from '../stores/referee.js'
+import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -427,6 +444,18 @@ const activeTab = ref('ships')
 function switchTab(key) {
   activeTab.value = key
   if (key === 'players') loadPlayers()
+}
+
+// ── Campaign tab state ───────────────────────────────────────────────────────
+
+const newRecoveryCode = ref(null)
+const regenLoading    = ref(false)
+
+async function doRegenerate() {
+  regenLoading.value = true
+  const result = await auth.regenerateRecoveryCode()
+  regenLoading.value = false
+  if (result.ok) newRecoveryCode.value = result.recoveryCode
 }
 
 // ── Ships tab state ──────────────────────────────────────────────────────────
@@ -1001,6 +1030,39 @@ onMounted(async () => {
 .campaign-traveller-map p  { font-size: 0.83rem; color: var(--text-dim); margin: 0 0 0.75rem; }
 
 .external-link { text-decoration: none; display: inline-block; }
+
+.campaign-security {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.campaign-security h3 { margin: 0 0 0.4rem; font-size: 0.88rem; }
+.campaign-security p  { font-size: 0.83rem; color: var(--text-dim); margin: 0 0 0.5rem; }
+
+.security-warn {
+  font-size: 0.78rem;
+  color: var(--amber);
+  margin-bottom: 0.75rem !important;
+}
+
+.regen-error {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--red);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-secondary:hover:not(:disabled) { border-color: var(--accent-dim); color: var(--accent); }
+.btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Shared buttons ──────────────────────────────────────────────────────── */
 

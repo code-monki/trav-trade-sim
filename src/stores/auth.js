@@ -133,6 +133,27 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // ── Regenerate recovery code ──────────────────────────────────────────────────
+  async function regenerateRecoveryCode() {
+    if (!campaign.value?.id) return { ok: false, error: 'No active campaign' }
+    loading.value = true
+    error.value   = null
+    try {
+      requireSupabase()
+      const { data, error: rpcError } = await supabase.rpc('regenerate_recovery_code', {
+        p_campaign_id: campaign.value.id,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      if (data?.error) throw new Error(data.error)
+      return { ok: true, recoveryCode: data.recovery_code }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ── Reset PIN with recovery code ─────────────────────────────────────────────
   async function resetPin({ code, characterName, recoveryCode, newPin }) {
     loading.value = true
@@ -167,6 +188,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     campaign, player, loading, error,
     isAuthenticated, isReferee,
-    clearError, createCampaign, joinCampaign, login, resetPin, logout,
+    clearError, createCampaign, joinCampaign, login, resetPin, regenerateRecoveryCode, logout,
   }
 })
