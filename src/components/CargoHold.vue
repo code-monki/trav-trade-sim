@@ -25,7 +25,15 @@
             <label>Free</label>
             <span class="mono">{{ ship.cargoAvailable }} t</span>
           </div>
+          <div v-if="props.world" class="stat">
+            <label>At</label>
+            <span class="mono">{{ ship.ship.current_world || '—' }}</span>
+          </div>
         </div>
+        <button v-if="props.world && !isCurrentLocation" class="locate-btn"
+                @click="setLocation">
+          Set Here
+        </button>
       </div>
 
       <!-- Error -->
@@ -143,6 +151,15 @@ const auth = useAuthStore()
 const pendingSellId = ref(null)
 const lastResult    = ref(null)
 
+const isCurrentLocation = computed(() =>
+  ship.ship?.current_world  === props.world?.Hex &&
+  ship.ship?.current_sector === props.sectorName
+)
+
+async function setLocation() {
+  await ship.updateLocation(props.world.Hex, props.sectorName)
+}
+
 // Ensure market snapshots are loaded for the selected world (to display sell prices)
 async function loadSnapshots() {
   if (!props.world?.Hex || !props.sectorName) return
@@ -236,7 +253,22 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text);
+  flex: 1;
 }
+
+.locate-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.1s;
+  flex-shrink: 0;
+}
+.locate-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
 
 .ship-stats {
   display: flex;
