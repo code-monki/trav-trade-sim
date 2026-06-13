@@ -99,6 +99,7 @@ Same structure as `market_monthly` but without `month` column.
 | `purchase_price` | int | NOT NULL | Cr/ton paid |
 | `purchased_tick` | bigint | NOT NULL | |
 | `purchase_world` | text | NOT NULL | Hex of source world |
+| `purchase_world_name` | text | NOT NULL, default '' | Name of source world (migration 019) |
 | `purchase_sector` | text | NOT NULL | |
 | `created_at` | timestamptz | NOT NULL | |
 

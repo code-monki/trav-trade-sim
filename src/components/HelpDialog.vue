@@ -92,10 +92,11 @@
               displays ship name, available credits, and hold usage in tons.
             </p>
             <p>
-              Each cargo row shows what you paid at the source world and what the
-              good <em>currently sells for at the selected world</em>. Select a
-              destination in the world list to see projected sell prices and profit
-              before committing to a sale.
+              Each cargo row shows the good name, tonnage, purchase price per ton,
+              the <strong>Source</strong> world (hex and name, e.g.
+              <code>1910-Regina</code>), current sell price at the selected world,
+              and projected profit or loss. Select a destination in the world list
+              to see sell prices before committing to a sale.
             </p>
           </section>
 
@@ -147,15 +148,20 @@
             <h3>Jump Tab</h3>
             <p>
               The <strong>Jump</strong> tab (keyboard <kbd>J</kbd>) shows all
-              worlds reachable from the current world within your ship's jump range,
-              sorted by projected profit. Each row shows the destination world, its
-              UWP, the best trade good to carry, projected profit, and hex distance.
+              worlds reachable from the current world within your ship's jump range.
+              Each row shows the destination world name, hex, jump distance,
+              starport class, and — when you have cargo in the hold — the total
+              projected profit from selling your current hold at that destination.
+              When cargo is loaded the list is sorted by profit; otherwise by
+              distance then name.
             </p>
             <p>
-              Click <strong>Select</strong> on any row to commit that world as your
-              ship's next location and switch to the Market tab for that destination.
-              This represents completing the jump — use it when you arrive at a new
-              world.
+              Use the <strong>−</strong> / <strong>+</strong> stepper to
+              temporarily override your ship's jump rating and explore longer or
+              shorter routes without committing. Click <strong>Select</strong> on
+              any row to commit that world as your ship's location and switch to
+              the Market tab for that destination. This represents completing the
+              jump — use it when you arrive at a new world.
             </p>
           </section>
 

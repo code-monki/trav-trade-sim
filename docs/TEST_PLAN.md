@@ -162,7 +162,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 | ST-201 | `loadShip()` with no crew row | `ship = null`, `hasShip = false` |
 | ST-202 | `buyCargo()` with insufficient credits | Returns `{ ok: false, error }` |
 | ST-203 | `buyCargo()` with insufficient hold | Returns `{ ok: false, error }` |
-| ST-204 | `buyCargo()` success | cargo row added; credits debited; transaction inserted |
+| ST-204 | `buyCargo()` success | cargo row added with `purchase_world_name` set; credits debited; transaction inserted |
 | ST-205 | `sellCargo()` success | cargo row removed; credits credited; trade_record inserted |
 
 ---
