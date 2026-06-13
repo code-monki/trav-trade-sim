@@ -237,6 +237,20 @@
               @select-good="onGoodSelect"
             />
             <template v-if="selectedGood">
+              <!-- Buy action bar (players with a ship only) -->
+              <div v-if="ship.hasShip" class="buy-bar">
+                <span class="buy-good-name">{{ selectedGood.trade_good_name }}</span>
+                <span class="buy-price-label">Cr {{ fmt(selectedGood.purchase_price) }}/t</span>
+                <span class="buy-hold-info">{{ ship.cargoAvailable }}t free · Cr {{ fmt(ship.ship?.credits) }}</span>
+                <button
+                  class="buy-btn"
+                  :disabled="!canBuy || buyLoading"
+                  @click="showBuyDialog = true"
+                >
+                  Buy Cargo
+                </button>
+              </div>
+
               <div class="resize-handle"
                    role="separator" tabindex="0"
                    aria-label="Resize chart panel — use arrow keys"
@@ -253,6 +267,26 @@
                 :style="{ height: chartHeight + 'px' }"
               />
             </template>
+          </div>
+
+          <BuyDialog
+            v-if="selectedGood"
+            v-model="showBuyDialog"
+            :good="selectedGood"
+            :cargo-available="ship.cargoAvailable"
+            :credits="ship.ship?.credits ?? 0"
+            :loading="buyLoading"
+            @confirm="onBuyConfirm"
+          />
+        </template>
+
+        <!-- ── Cargo tab ─────────────────────────────────────────────────── -->
+        <template v-if="detailTab === 'cargo'">
+          <div class="cargo-tab-wrap">
+            <CargoHold
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
           </div>
         </template>
 
@@ -275,14 +309,14 @@
   <HelpDialog  v-model="showHelp"  />
 
   <!-- Error banner -->
-  <div v-if="map.error || tick.error" class="error-banner">
-    {{ map.error || tick.error }}
-    <button @click="map.error = null; tick.error = null">✕</button>
+  <div v-if="map.error || tick.error || ship.error" class="error-banner">
+    {{ map.error || tick.error || ship.error }}
+    <button @click="map.error = null; tick.error = null; ship.clearError()">✕</button>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMapStore }  from '../stores/map.js'
 import { useAuthStore } from '../stores/auth.js'
@@ -290,27 +324,45 @@ import { useTickStore } from '../stores/tick.js'
 import MarketTable    from '../components/MarketTable.vue'
 import PriceChart     from '../components/PriceChart.vue'
 import EventsHistory  from '../components/EventsHistory.vue'
+import CargoHold      from '../components/CargoHold.vue'
+import BuyDialog      from '../components/BuyDialog.vue'
 import HamburgerMenu  from '../components/HamburgerMenu.vue'
 import AboutDialog    from '../components/AboutDialog.vue'
 import HelpDialog     from '../components/HelpDialog.vue'
 import ThemeDialog    from '../components/ThemeDialog.vue'
+import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
 const auth   = useAuthStore()
 const tick   = useTickStore()
+const ship   = useShipStore()
 const router = useRouter()
 
-const detailTab    = ref('overview')
-const selectedGood = ref(null)
-const showAbout    = ref(false)
-const showHelp     = ref(false)
-const showThemes   = ref(false)
+const detailTab      = ref('overview')
+const selectedGood   = ref(null)
+const showAbout      = ref(false)
+const showHelp       = ref(false)
+const showThemes     = ref(false)
+const showBuyDialog  = ref(false)
+const buyLoading     = ref(false)
 
 const DETAIL_TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'market',   label: 'Market'   },
+  { key: 'cargo',    label: 'Cargo'    },
   { key: 'events',   label: 'Events'   },
 ]
+
+const canBuy = computed(() =>
+  ship.hasShip &&
+  ship.canTrade &&
+  !!selectedGood.value &&
+  selectedGood.value.qty_available > 0 &&
+  ship.cargoAvailable > 0 &&
+  (ship.ship?.credits ?? 0) >= selectedGood.value.purchase_price
+)
+
+function fmt(n) { return (n ?? 0).toLocaleString() }
 
 // ── Chart resize ──────────────────────────────────────────────────────────────
 const marketLayoutEl = ref(null)
@@ -369,6 +421,7 @@ function handleGlobalKey(e) {
     case 'o': case 'O': if (map.selectedWorld) detailTab.value = 'overview'; break
     case 'm': case 'M': if (map.selectedWorld) detailTab.value = 'market';   break
     case 'e': case 'E': if (map.selectedWorld) detailTab.value = 'events';   break
+    case 'c': case 'C': if (map.selectedWorld) detailTab.value = 'cargo';    break
     case 't': case 'T':
       if (auth.isReferee && !tick.loading) doAdvanceTick()
       break
@@ -394,6 +447,20 @@ function onWorldSelect(world) {
 
 function onGoodSelect(row) {
   selectedGood.value = row
+}
+
+async function onBuyConfirm({ tons }) {
+  buyLoading.value = true
+  await ship.buyCargo({
+    campaignId: auth.campaign.id,
+    playerId:   auth.player.id,
+    good:       selectedGood.value,
+    tons,
+    worldHex:   map.selectedWorld.Hex,
+    sector:     map.selectedSectorName,
+    tick:       tick.currentTick,
+  })
+  buyLoading.value = false
 }
 
 async function doAdvanceTick() {
@@ -573,4 +640,58 @@ header {
   display: flex;
   flex-direction: column;
 }
+
+/* ── Cargo tab ─────────────────────────────────────────────────────────────── */
+.cargo-tab-wrap {
+  height: calc(100vh - 248px);
+  min-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Buy action bar (Market tab, appears when a good is selected) ──────────── */
+.buy-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.buy-good-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+  flex: 1;
+}
+
+.buy-price-label {
+  font-family: monospace;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.buy-hold-info {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.buy-btn {
+  background: var(--accent-dim);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 0.3rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.buy-btn:hover:not(:disabled) { background: var(--accent); }
+.buy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>

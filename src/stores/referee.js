@@ -25,7 +25,7 @@ export const useRefereeStore = defineStore('referee', () => {
 
       const { data: crewRows, error: crewErr } = await supabase
         .from('crew')
-        .select('id, ship_id, role, joined_tick, players(id, character_name, role)')
+        .select('id, ship_id, role, can_trade, joined_tick, players(id, character_name, role)')
         .eq('campaign_id', campaignId)
         .is('left_tick', null)
       if (crewErr) throw new Error(crewErr.message)
@@ -84,9 +84,10 @@ export const useRefereeStore = defineStore('referee', () => {
         ship_id:     shipId,
         player_id:   playerId,
         role,
+        can_trade:   role === 'captain',
         joined_tick: currentTick ?? 0,
       })
-      .select('id, ship_id, role, joined_tick, players(id, character_name, role)')
+      .select('id, ship_id, role, can_trade, joined_tick, players(id, character_name, role)')
       .single()
     if (err) throw new Error(err.message)
     ships.value = ships.value.map(s =>
@@ -96,6 +97,15 @@ export const useRefereeStore = defineStore('referee', () => {
     players.value = players.value.map(p =>
       p.id === playerId ? { ...p, current_ship: ships.value.find(s => s.id === shipId)?.name ?? '' } : p
     )
+  }
+
+  async function setCrewCanTrade(crewRow, canTrade) {
+    const { error: err } = await supabase
+      .from('crew')
+      .update({ can_trade: canTrade })
+      .eq('id', crewRow.id)
+    if (err) throw new Error(err.message)
+    crewRow.can_trade = canTrade
   }
 
   async function removeCrew(crewId, currentTick) {
@@ -235,7 +245,7 @@ export const useRefereeStore = defineStore('referee', () => {
     ships, players, loading, error,
     clearError, clear,
     loadShips, createShip, updateShip,
-    assignCrew, removeCrew,
+    assignCrew, removeCrew, setCrewCanTrade,
     loadPlayers, upsertSkill, removeSkill,
     createEvent, expireEvent,
   }

@@ -165,7 +165,13 @@
               <div v-if="!selectedShip.crew.length" class="placeholder sm">No crew assigned</div>
               <table v-else class="crew-table">
                 <thead>
-                  <tr><th>Character</th><th>Role</th><th>Since Tick</th><th></th></tr>
+                  <tr>
+                    <th>Character</th>
+                    <th>Role</th>
+                    <th class="center">Can Trade</th>
+                    <th>Since Tick</th>
+                    <th></th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr v-for="c in selectedShip.crew" :key="c.id">
@@ -175,6 +181,12 @@
                               @change="changeCrewRole(c, $event.target.value)">
                         <option v-for="r in CREW_ROLES" :key="r" :value="r">{{ r }}</option>
                       </select>
+                    </td>
+                    <td class="center">
+                      <input type="checkbox"
+                             :checked="c.can_trade"
+                             class="trade-check"
+                             @change="referee.setCrewCanTrade(c, $event.target.checked)" />
                     </td>
                     <td>{{ c.joined_tick }}</td>
                     <td>
@@ -481,11 +493,12 @@ async function submitAddCrew() {
 }
 
 async function changeCrewRole(crewRow, newRole) {
-  // Update role in place via direct supabase call — the store doesn't need a
-  // separate method for this since it's just a field update on the crew row
+  const updates = { role: newRole }
+  if (newRole === 'captain') updates.can_trade = true
   const { supabase } = await import('../lib/supabase.js')
-  await supabase.from('crew').update({ role: newRole }).eq('id', crewRow.id)
+  await supabase.from('crew').update(updates).eq('id', crewRow.id)
   crewRow.role = newRole
+  if (updates.can_trade !== undefined) crewRow.can_trade = updates.can_trade
 }
 
 async function confirmRemoveCrew(c) {
@@ -803,6 +816,15 @@ onMounted(async () => {
   color: var(--text);
   font-size: 0.8rem;
   padding: 0.2rem 0.4rem;
+}
+
+.crew-table .center { text-align: center; }
+
+.trade-check {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: var(--accent);
 }
 
 /* ── Players tab ─────────────────────────────────────────────────────────── */

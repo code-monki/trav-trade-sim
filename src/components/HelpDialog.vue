@@ -6,7 +6,7 @@
 
         <div class="dialog-header" id="help-dialog-title">
           <div class="help-tabs">
-            <button v-for="t in TABS" :key="t.key"
+            <button v-for="t in tabs" :key="t.key"
                     :class="['htab', { active: activeTab === t.key }]"
                     @click="activeTab = t.key">
               {{ t.label }}
@@ -15,8 +15,8 @@
           <button class="close-btn" @click="close" aria-label="Close">✕</button>
         </div>
 
-        <!-- ── User Manual ───────────────────────────────────────────────── -->
-        <div v-if="activeTab === 'manual'" class="dialog-body">
+        <!-- ── Getting Started ───────────────────────────────────────────── -->
+        <div v-if="activeTab === 'start'" class="dialog-body">
 
           <section class="help-section">
             <h3>Overview</h3>
@@ -25,8 +25,7 @@
               Traveller campaigns. The Referee advances the in-game clock one
               jump-week at a time; commodity prices shift with each tick based on
               world trade codes, market events, and seeded randomness. Players
-              identify profitable trade routes and track price history across the
-              Third Imperium.
+              identify profitable trade routes, fill their holds, and sell high.
             </p>
           </section>
 
@@ -39,6 +38,10 @@
               safe. The character who creates the campaign is automatically assigned
               the Referee role.
             </p>
+            <p>
+              Trade rules (CT7 or T5) are selected at campaign creation and cannot
+              be changed later.
+            </p>
           </section>
 
           <section class="help-section">
@@ -49,67 +52,137 @@
               world name or hex coordinate. Worlds with a red or amber travel zone
               are highlighted accordingly.
             </p>
+            <p>
+              The world detail panel has four tabs: <strong>Overview</strong>,
+              <strong>Market</strong>, <strong>Cargo</strong>, and
+              <strong>Events</strong>.
+            </p>
           </section>
 
           <section class="help-section">
-            <h3>Overview Tab</h3>
+            <h3>Imperial Calendar</h3>
             <p>
-              Displays the world's Universal World Profile (UWP), system data,
-              trade codes, jump routes, and T5 extensions where available.
+              Time is displayed as <code>DDD-YYYY</code> (day of year – year).
+              1 tick = 1 jump-week (7 days). There are 4 ticks per Imperial month
+              and 48 ticks per Imperial year. The campaign's starting year is set
+              by the Referee at creation; the default is 1105.
             </p>
           </section>
+
+        </div>
+
+        <!-- ── Trading ───────────────────────────────────────────────────── -->
+        <div v-if="activeTab === 'trading'" class="dialog-body">
+
+          <section class="help-section">
+            <h3>The Cargo Tab</h3>
+            <p>
+              The <strong>Cargo</strong> tab (keyboard <kbd>C</kbd>) shows your
+              ship's status and everything currently in the hold. The status bar
+              displays ship name, available credits, and hold usage in tons.
+            </p>
+            <p>
+              Each cargo row shows what you paid at the source world and what the
+              good <em>currently sells for at the selected world</em>. Select a
+              destination in the world list to see projected sell prices and profit
+              before committing to a sale.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Buying Cargo</h3>
+            <p>
+              Go to the <strong>Market</strong> tab and click any trade good row.
+              If you have a ship with available hold space and sufficient credits,
+              a <strong>Buy Cargo</strong> button appears below the table. Click it
+              to open the buy dialog.
+            </p>
+            <p>
+              The dialog shows the purchase price, available quantity, your free
+              hold space, and your current credits. Enter the number of tons (or
+              click <strong>Max</strong>) and confirm. Credits are debited from
+              the ship's account immediately.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Selling Cargo</h3>
+            <p>
+              Select the destination world in the world list, then open the
+              <strong>Cargo</strong> tab. Each item in the hold shows the sell
+              price at the current world and the projected profit or loss. Click
+              <strong>Sell</strong> on any row, review the confirmation, then click
+              <strong>Confirm</strong>. Credits are credited to the ship's account
+              and a trade record is logged automatically.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Trading Authorization</h3>
+            <p>
+              Only crew members with the <strong>Can Trade</strong> flag set by
+              the Referee may buy or sell cargo. Captains receive this flag
+              automatically when assigned or promoted. Other crew members must be
+              granted it explicitly in the Referee panel (Ships tab → crew row →
+              Can Trade checkbox).
+            </p>
+            <p>
+              If you cannot see the Buy Cargo button or the Sell button is
+              disabled, ask your Referee to check your trading authorization.
+            </p>
+          </section>
+
+        </div>
+
+        <!-- ── Market & Events ───────────────────────────────────────────── -->
+        <div v-if="activeTab === 'market'" class="dialog-body">
 
           <section class="help-section">
             <h3>Market Tab</h3>
             <p>
               Shows current buy and sell prices for all 36 Classic Traveller trade
-              goods. Price colours indicate deviation from the CT7 base price — green
-              means below base (buyer's market), red means above (seller's market).
+              goods. Price colours indicate deviation from the CT7 base price —
+              green means below base (buyer's market), red means above
+              (seller's market).
             </p>
             <p>
-              Click any row to open a price chart for that good. Drag the resize
-              handle between the table and chart to adjust the panel split. Goods
-              affected by an active market event are flagged with a ▲ or ▼ symbol
-              in the Event column.
-            </p>
-            <p>
-              Market data is generated lazily: prices are only recorded for a world
-              when its Market tab is open during a tick advance. On the first visit
-              to a world, prices are backfilled for the entire current year so charts
-              have immediate context.
+              Click any row to select a good and open its price chart. Goods
+              affected by an active market event are flagged with ▲ or ▼ in the
+              Event column. Market data is generated lazily: prices are only
+              recorded for a world when its Market tab is first opened. On the
+              first visit, prices are backfilled for the entire current year so
+              charts have immediate context.
             </p>
             <table class="col-table">
-              <thead>
-                <tr><th>Column</th><th>Description</th></tr>
-              </thead>
+              <thead><tr><th>Column</th><th>Description</th></tr></thead>
               <tbody>
                 <tr>
                   <td><strong>Good</strong></td>
-                  <td>Trade good name from the CT Book 2 trade table.</td>
+                  <td>Trade good name from the CT Book 2 table.</td>
                 </tr>
                 <tr>
                   <td><strong>Die</strong></td>
-                  <td>The d66 roll that generates this good's row (e.g. 11–66). Used as a unique key for the good across all data.</td>
+                  <td>The d66 roll that identifies this good (e.g. 11–66).</td>
                 </tr>
                 <tr>
                   <td><strong>Buy (Cr/t)</strong></td>
-                  <td>Purchase price in Credits per ton at this world this tick. Derived from world trade codes, starport class, and tech level per CT7 rules.</td>
+                  <td>Purchase price per ton at this world this tick, derived from trade codes, starport class, and tech level per CT7/T5 rules.</td>
                 </tr>
                 <tr>
                   <td><strong>Sell (Cr/t)</strong></td>
-                  <td>Sale price in Credits per ton — what you would receive selling these goods here this tick.</td>
+                  <td>Sale price per ton — what you would receive selling here this tick.</td>
                 </tr>
                 <tr>
                   <td><strong>Spread</strong></td>
-                  <td>Sell minus Buy per ton. Positive spread indicates a profitable round-trip on a single world; negative means buy-high-sell-low conditions.</td>
+                  <td>Sell minus Buy per ton. Positive = profitable local round-trip.</td>
                 </tr>
                 <tr>
                   <td><strong>Qty (t)</strong></td>
-                  <td>Available quantity in tons this tick, rolled per CT Book 2. This amount <em>expires</em> at the end of the tick — unpurchased stock does not carry over. A fresh quantity is rolled next tick.</td>
+                  <td>Available tons this tick, rolled per CT Book 2. Stock does not carry over — a fresh quantity is rolled next tick.</td>
                 </tr>
                 <tr>
                   <td><strong>Event</strong></td>
-                  <td>▲ if an active market event is pushing prices up; ▼ for down. See the Events tab for details.</td>
+                  <td>▲ price pushed up by an active event; ▼ pushed down.</td>
                 </tr>
               </tbody>
             </table>
@@ -119,14 +192,13 @@
             <h3>Price Charts</h3>
             <p>Three time frames are available via the tabs above the chart:</p>
             <ul>
-              <li><strong>Weekly</strong> — one data point per tick (jump-week); line chart of purchase price.</li>
+              <li><strong>Weekly</strong> — one point per tick; line chart of purchase price.</li>
               <li><strong>Monthly</strong> — one candlestick per Imperial month (4 ticks).</li>
               <li><strong>Annual</strong> — one candlestick per Imperial year (48 ticks).</li>
             </ul>
             <p>
-              Event markers appear on the chart at the tick when each event fired.
-              Blue circles are Minor events, amber squares are Major, red arrows
-              are Crisis. The label shows the price effect percentage.
+              Event markers appear at the tick the event fired.
+              Blue circles = Minor, amber squares = Major, red arrows = Crisis.
             </p>
           </section>
 
@@ -140,44 +212,87 @@
               still active or has expired.
             </p>
             <p>
-              Use the filter buttons to narrow the list by severity. Event history
-              is retained for the current year plus one prior year; older records
-              are compacted automatically during the annual rollup.
-            </p>
-          </section>
-
-          <section class="help-section">
-            <h3>Advancing the Tick (Referee only)</h3>
-            <p>
-              Click <strong>Advance Tick</strong> in the header, or press
-              <kbd>T</kbd>, to move time forward one jump-week. Prices update,
-              market events may fire automatically, and monthly or annual OHLC
-              rollups trigger at the appropriate tick counts. Only the Referee
-              can advance the tick.
-            </p>
-          </section>
-
-          <section class="help-section">
-            <h3>Imperial Calendar</h3>
-            <p>
-              Time is displayed in Imperial format: <code>DDD-YYYY</code>
-              (day of year – year). 1 tick = 1 jump-week (7 days).
-              There are 4 ticks per Imperial month and 48 ticks per Imperial year.
-              The Referee selects the campaign's starting year when creating the
-              campaign; the default is 1105 (the classic Third Imperium milieu).
+              Event history is retained for the current year plus one prior year;
+              older records are compacted automatically during the annual rollup.
             </p>
           </section>
 
         </div>
 
-        <!-- ── Keyboard Shortcuts ────────────────────────────────────────── -->
+        <!-- ── Referee ───────────────────────────────────────────────────── -->
+        <div v-if="activeTab === 'referee'" class="dialog-body">
+
+          <section class="help-section">
+            <h3>Referee Panel</h3>
+            <p>
+              Access the Referee panel from the hamburger menu → Manage Campaign,
+              or navigate directly to <code>/referee</code>. It is only accessible
+              to the campaign's Referee character.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Ships &amp; Crew</h3>
+            <p>
+              Create ships in the <strong>Ships</strong> tab. Each ship has a
+              name, hull type, hull tonnage, cargo capacity, and a credit balance.
+              Players are assigned to a ship as crew; a player may only be on one
+              ship at a time.
+            </p>
+            <p>
+              Each crew member has a role (captain, pilot, engineer, etc.) and a
+              <strong>Can Trade</strong> flag. Captains receive <em>Can Trade</em>
+              automatically; it can be toggled for any crew member via the
+              checkbox in the crew table. Promoting a crew member to captain
+              auto-grants the flag; demoting does not remove it — adjust manually
+              if needed.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Market Events</h3>
+            <p>
+              Create events in the <strong>Events</strong> tab. Events apply a
+              percentage price modifier to one trade good (or all goods) at a
+              local world or across an entire subsector. Set a duration in ticks;
+              the event expires automatically at that tick. Expire an event early
+              with the <strong>Expire</strong> button.
+            </p>
+            <p>
+              Events fire automatically at random (M.U.L.E.-style) on a world's
+              first market visit each tick, in addition to any you create manually.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Advancing the Tick</h3>
+            <p>
+              Click <strong>Advance Tick</strong> in the map header, or press
+              <kbd>T</kbd>. Each tick is one jump-week (7 Imperial days). Prices
+              update, random events may fire, and monthly or annual OHLC rollups
+              trigger at the appropriate intervals. Only the Referee can advance
+              the tick.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Players Tab</h3>
+            <p>
+              The <strong>Players</strong> tab shows every character in the
+              campaign with their current ship assignment and skill list. You can
+              add, edit, or remove skills here. Skills are free-form text — any
+              name is valid. Trade-relevant skills include Broker, Trader, Liaison,
+              Admin, Steward, and Streetwise.
+            </p>
+          </section>
+
+        </div>
+
+        <!-- ── Shortcuts ─────────────────────────────────────────────────── -->
         <div v-if="activeTab === 'shortcuts'" class="dialog-body shortcuts-body">
           <table class="shortcuts-table">
             <thead>
-              <tr>
-                <th>Key</th>
-                <th>Action</th>
-              </tr>
+              <tr><th>Key</th><th>Action</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in SHORTCUTS" :key="s.key">
@@ -201,27 +316,37 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useAuthStore } from '../stores/auth.js'
 import { useFocusTrap } from '../composables/useFocusTrap.js'
 
 const props = defineProps({ modelValue: { type: Boolean, required: true } })
 const emit  = defineEmits(['update:modelValue'])
 
-const activeTab = ref('manual')
+const auth      = useAuthStore()
+const activeTab = ref('start')
 const dialogEl  = ref(null)
 
 const { activate, deactivate } = useFocusTrap(dialogEl)
 watch(() => props.modelValue, v => v ? nextTick(activate) : deactivate())
 
-const TABS = [
-  { key: 'manual',    label: 'User Manual'         },
-  { key: 'shortcuts', label: 'Keyboard Shortcuts'  },
+const ALL_TABS = [
+  { key: 'start',     label: 'Getting Started' },
+  { key: 'trading',   label: 'Trading'         },
+  { key: 'market',    label: 'Market & Events' },
+  { key: 'referee',   label: 'Referee',  refOnly: true },
+  { key: 'shortcuts', label: 'Shortcuts'        },
 ]
+
+const tabs = computed(() =>
+  ALL_TABS.filter(t => !t.refOnly || auth.isReferee)
+)
 
 const SHORTCUTS = [
   { key: '?',   action: 'Open Help' },
   { key: 'O',   action: 'Switch to Overview tab' },
   { key: 'M',   action: 'Switch to Market tab' },
+  { key: 'C',   action: 'Switch to Cargo tab' },
   { key: 'E',   action: 'Switch to Events tab' },
   { key: 'T',   action: 'Advance Tick (Referee only)' },
   { key: 'Esc', action: 'Close dialog' },
@@ -249,7 +374,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 2);
-  width: min(640px, 92vw);
+  width: min(680px, 92vw);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -263,22 +388,25 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 0.5rem;
 }
 
 .help-tabs {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.2rem;
+  flex-wrap: wrap;
 }
 
 .htab {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  padding: 0.28rem 0.85rem;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.75rem;
   border-radius: var(--radius);
   cursor: pointer;
   transition: all 0.1s;
+  white-space: nowrap;
 }
 .htab:hover { color: var(--text); border-color: var(--border); }
 .htab.active {
@@ -296,6 +424,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   padding: 2px 6px;
   border-radius: var(--radius);
   transition: color 0.15s;
+  flex-shrink: 0;
 }
 .close-btn:hover { color: var(--text); }
 
@@ -353,7 +482,7 @@ code {
   color: var(--code);
 }
 
-/* Column definitions table (Market Tab) */
+/* Column definitions table */
 .col-table {
   width: 100%;
   border-collapse: collapse;
@@ -391,7 +520,6 @@ code {
   border-collapse: collapse;
   font-size: 0.83rem;
 }
-
 .shortcuts-table th {
   text-align: left;
   padding: 0.4rem 0.75rem;
@@ -402,7 +530,6 @@ code {
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
 }
-
 .shortcuts-table td {
   padding: 0.55rem 0.75rem;
   color: var(--text);
