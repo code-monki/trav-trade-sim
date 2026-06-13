@@ -248,13 +248,6 @@
               @toggle-chart="onToggleChart"
             />
 
-            <!-- Sell panel: shown when the player has cargo in the hold -->
-            <SellPanel
-              v-if="ship.hasShip && ship.cargo.length"
-              :world="map.selectedWorld"
-              :sector-name="map.selectedSectorName"
-            />
-
             <!-- Buy action bar: shown when a good row is selected and player has a ship -->
             <div v-if="selectedGood && ship.hasShip" class="buy-bar">
               <span class="buy-good-name">{{ selectedGood.trade_good_name }}</span>
@@ -363,7 +356,6 @@ import HelpDialog      from '../components/HelpDialog.vue'
 import ThemeDialog     from '../components/ThemeDialog.vue'
 import CharacterDialog from '../components/CharacterDialog.vue'
 import RouteAnalysis   from '../components/RouteAnalysis.vue'
-import SellPanel       from '../components/SellPanel.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
