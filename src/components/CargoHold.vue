@@ -275,6 +275,7 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
   white-space: nowrap;
   transition: all 0.1s;
   flex-shrink: 0;
+  margin-left: 3px;
 }
 .locate-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
 
