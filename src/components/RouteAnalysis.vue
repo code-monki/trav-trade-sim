@@ -58,7 +58,7 @@
                 {{ w.totalProfit >= 0 ? '+' : '' }}Cr {{ fmt(w.totalProfit) }}
               </td>
               <td class="select-col">
-                <button class="select-btn" @click.stop="selectWorld(w)">→</button>
+                <button class="select-btn" @click.stop="selectWorld(w)">Select</button>
               </td>
             </tr>
           </tbody>
