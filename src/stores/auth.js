@@ -177,6 +177,29 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // ── Delete campaign (referee only, requires PIN) ─────────────────────────────
+  async function deleteCampaign({ pin }) {
+    if (!campaign.value?.id) return { ok: false, error: 'No active campaign' }
+    loading.value = true
+    error.value   = null
+    try {
+      requireSupabase()
+      const { data, error: rpcError } = await supabase.rpc('delete_campaign', {
+        p_campaign_id: campaign.value.id,
+        p_pin:         pin,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      if (data?.error) throw new Error(data.error)
+      logout()
+      return { ok: true }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ── Log out ─────────────────────────────────────────────────────────────────
   function logout() {
     campaign.value = null
@@ -188,6 +211,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     campaign, player, loading, error,
     isAuthenticated, isReferee,
-    clearError, createCampaign, joinCampaign, login, resetPin, regenerateRecoveryCode, logout,
+    clearError, createCampaign, joinCampaign, login, resetPin, regenerateRecoveryCode, deleteCampaign, logout,
   }
 })

@@ -403,7 +403,34 @@
           <button class="btn-secondary" :disabled="regenLoading" @click="doRegenerate">
             {{ regenLoading ? 'Generating…' : 'Generate New Recovery Code' }}
           </button>
-          <div v-if="auth.error" class="regen-error">{{ auth.error }}</div>
+          <div v-if="regenError" class="regen-error">{{ regenError }}</div>
+        </div>
+
+        <div class="campaign-danger">
+          <h3>Danger Zone</h3>
+          <p>Permanently delete this campaign and all its data — ships, cargo, market history, players, and events. This action cannot be undone.</p>
+          <template v-if="!showDeleteConfirm">
+            <button class="btn-danger btn-delete" @click="openDeleteConfirm">Delete Campaign…</button>
+          </template>
+          <template v-else>
+            <p class="delete-warn">Enter your Referee PIN to confirm deletion.</p>
+            <div class="delete-form">
+              <input v-model="deletePin"
+                     type="password"
+                     placeholder="Referee PIN"
+                     autocomplete="current-password"
+                     class="delete-pin-input"
+                     @keydown.enter.prevent="doDeleteCampaign"
+                     @keydown.escape.prevent="cancelDelete" />
+              <button class="btn-danger"
+                      :disabled="!deletePin.trim() || deleteLoading"
+                      @click="doDeleteCampaign">
+                {{ deleteLoading ? 'Deleting…' : 'Confirm Delete' }}
+              </button>
+              <button class="btn-ghost" @click="cancelDelete">Cancel</button>
+            </div>
+            <p v-if="deleteError" class="form-error">{{ deleteError }}</p>
+          </template>
         </div>
       </div>
     </section>
@@ -448,14 +475,47 @@ function switchTab(key) {
 
 // ── Campaign tab state ───────────────────────────────────────────────────────
 
-const newRecoveryCode = ref(null)
-const regenLoading    = ref(false)
+const newRecoveryCode  = ref(null)
+const regenLoading     = ref(false)
+const regenError       = ref('')
+const showDeleteConfirm = ref(false)
+const deletePin        = ref('')
+const deleteLoading    = ref(false)
+const deleteError      = ref('')
 
 async function doRegenerate() {
   regenLoading.value = true
+  regenError.value   = ''
   const result = await auth.regenerateRecoveryCode()
   regenLoading.value = false
   if (result.ok) newRecoveryCode.value = result.recoveryCode
+  else regenError.value = result.error ?? 'Failed to regenerate'
+}
+
+function openDeleteConfirm() {
+  showDeleteConfirm.value = true
+  deletePin.value         = ''
+  deleteError.value       = ''
+}
+
+function cancelDelete() {
+  showDeleteConfirm.value = false
+  deletePin.value         = ''
+  deleteError.value       = ''
+}
+
+async function doDeleteCampaign() {
+  if (!deletePin.value.trim()) return
+  deleteLoading.value = true
+  deleteError.value   = ''
+  const result = await auth.deleteCampaign({ pin: deletePin.value })
+  deleteLoading.value = false
+  if (result.ok) {
+    router.push({ name: 'login' })
+  } else {
+    deleteError.value = result.error ?? 'Deletion failed'
+    deletePin.value   = ''
+  }
 }
 
 // ── Ships tab state ──────────────────────────────────────────────────────────
@@ -1050,6 +1110,54 @@ onMounted(async () => {
   font-size: 0.8rem;
   color: var(--red);
 }
+
+.campaign-danger {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  background: rgba(217, 58, 58, 0.04);
+}
+.campaign-danger h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+  color: var(--red);
+}
+.campaign-danger p {
+  font-size: 0.83rem;
+  color: var(--text-dim);
+  margin: 0 0 0.75rem;
+}
+
+.btn-delete {
+  font-size: 0.83rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.delete-warn {
+  color: var(--red) !important;
+  font-size: 0.82rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.delete-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.delete-pin-input {
+  background: var(--bg-item);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  width: 160px;
+  outline: none;
+}
+.delete-pin-input:focus { border-color: var(--red); box-shadow: 0 0 0 2px rgba(217,58,58,0.2); }
 
 .btn-secondary {
   background: transparent;

@@ -197,6 +197,13 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 | E2E-302 | Enter 5t and confirm | Cargo tab shows 5t row; ship credits reduced |
 | E2E-303 | Select different world; open Cargo tab; sell item | Profit flash shown; cargo row removed; credits increased |
 
+### 6.5 Campaign Deletion
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| E2E-107 | Wrong PIN in delete form | Error message; campaign still exists |
+| E2E-108 | Correct PIN in delete form | Session cleared; redirected to login; campaign code no longer valid |
+
 ### 6.4 Referee Panel
 
 | TC-ID | Scenario | Expected |
@@ -244,6 +251,16 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 2. Open Jump tab on origin world
 3. Verify only worlds within 2 hexes are listed
 4. Click Select on a destination — verify ship location updates and Market tab opens for that world
+
+### MTS-6: Campaign Deletion
+1. Create campaign (code: `TEST-DELETE-01`)
+2. Navigate to Manage Campaign → Campaign tab
+3. Click "Delete Campaign…"
+4. Enter an incorrect PIN — verify error message, no deletion
+5. Enter correct Referee PIN — verify:
+   - Redirect to login screen
+   - Sign-in attempt with `TEST-DELETE-01` returns "Campaign not found"
+   - Supabase dashboard shows no rows for this campaign_id in any table
 
 ### MTS-5: Multi-Milieu Dates
 1. Create campaign with Far Future milieu, starting year 1900

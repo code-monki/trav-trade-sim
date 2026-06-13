@@ -34,6 +34,7 @@
 | FR-106 | Any character's PIN in a campaign shall be resettable using the campaign recovery code |
 | FR-107 | The referee shall be able to regenerate the campaign recovery code; the old code shall be immediately invalidated |
 | FR-108 | Session state (campaign, player) shall be persisted to localStorage and restored on page reload |
+| FR-109 | The referee shall be able to permanently delete their campaign; deletion shall require PIN confirmation and shall cascade-delete all associated data (players, ships, market history, cargo, events, trade records) |
 
 ### 2.2 Imperial Calendar
 
@@ -176,6 +177,11 @@
 ### AC-6: Route analysis
 - Jump tab shows worlds within jump range sorted by projected profit
 - Clicking Select on a row updates the ship location and switches to Market tab with the destination world selected
+
+### AC-8: Campaign deletion
+- Entering an incorrect PIN in the Delete Campaign form shows an error and does not delete
+- Entering the correct PIN deletes the campaign, clears the session, and redirects to the login screen
+- After deletion the campaign code cannot be used to sign in
 
 ### AC-7: Date display
 - A campaign starting in year 1900 shows `001-1900` at tick 0

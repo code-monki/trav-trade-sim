@@ -33,6 +33,7 @@ This matrix links each functional requirement to its design artefacts, implement
 | FR-106 | Reset PIN with recovery code | HLD §6, DD §1.2 | migration 014 `reset_pin_with_recovery_code`, `auth.js:resetPin`, `LoginView.vue` | — | — | E2E-105 | MTS-2 |
 | FR-107 | Regenerate recovery code | HLD §6 | migration 015 `regenerate_recovery_code`, `auth.js:regenerateRecoveryCode`, `RefereeView.vue` | — | — | — | MTS-2 |
 | FR-108 | Session persistence | HLD §4.1 | `auth.js` (localStorage `tts_session`) | — | — | E2E-106 | — |
+| FR-109 | Referee deletes campaign with PIN | HLD §6, DD §1.2 | migration 018 `delete_campaign`, `auth.js:deleteCampaign`, `RefereeView.vue` Campaign tab Danger Zone | — | — | E2E-107 | MTS-6 |
 
 ## 2.2 Imperial Calendar
 

@@ -331,6 +331,22 @@
             </p>
           </section>
 
+          <section class="help-section">
+            <h3>Deleting a Campaign</h3>
+            <p>
+              The <strong>Danger Zone</strong> section at the bottom of the Campaign
+              tab lets the Referee permanently delete the campaign. This removes all
+              associated data — ships, cargo, market history, players, events, and
+              trade records — and cannot be undone.
+            </p>
+            <p>
+              Click <strong>Delete Campaign…</strong> to reveal the confirmation
+              form, then enter your Referee PIN and click
+              <strong>Confirm Delete</strong>. You will be signed out and returned
+              to the login screen. The campaign code is freed for reuse.
+            </p>
+          </section>
+
         </div>
 
         <!-- ── Shortcuts ─────────────────────────────────────────────────── -->

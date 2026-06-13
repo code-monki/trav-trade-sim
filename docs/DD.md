@@ -219,6 +219,7 @@ Index: `idx_txn_player (campaign_id, player_id, tick DESC)`
 | `rollup_year` | `(p_campaign_id, p_year)` | void | Aggregates monthly into market_annual; purges old events |
 | `reset_pin_with_recovery_code` | `(p_code, p_char_name, p_recovery, p_new_pin)` | json | Resets PIN + clears lockout |
 | `regenerate_recovery_code` | `(p_campaign_id uuid)` | json | Generates new code, stores hash, returns plaintext |
+| `delete_campaign` | `(p_campaign_id uuid, p_pin text)` | json | Verifies referee PIN then deletes campaign + all cascade data |
 
 ---
 
@@ -317,6 +318,7 @@ All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`).
 | `login(opts)` | `{ ok }` | |
 | `resetPin(opts)` | `{ ok }` | |
 | `regenerateRecoveryCode()` | `{ ok, recoveryCode }` | |
+| `deleteCampaign({ pin })` | `{ ok }` | Calls delete_campaign RPC; on success calls logout() |
 | `logout()` | void | Clears localStorage |
 | `clearError()` | void | |
 
