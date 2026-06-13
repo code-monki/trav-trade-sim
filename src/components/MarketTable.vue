@@ -47,7 +47,6 @@
               <th @click="setSort('qty_available')" class="sortable num">
                 Qty (t) {{ sortIcon('qty_available') }}
               </th>
-              <th class="ctr" title="Active">⚑</th>
             </tr>
           </thead>
           <tbody>
@@ -72,13 +71,6 @@
                 {{ row.spread >= 0 ? '+' : '' }}{{ fmt(row.spread) }}
               </td>
               <td class="num">{{ row.qty_available.toLocaleString() }}</td>
-              <td class="ctr">
-                <span v-if="row.hasEvent" class="event-dot"
-                      :title="row.eventDesc"
-                      :class="row.eventPct > 0 ? 'dot-up' : 'dot-down'">
-                  {{ row.eventPct > 0 ? '▲' : '▼' }}
-                </span>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -144,14 +136,11 @@ const rows = computed(() => {
   if (!snaps.length) return []
 
   return snaps.map(s => {
-    const evSpec  = eventIndex.value[s.trade_good_die] ?? eventIndex.value['__all__']
-    const hasEvent = !!evSpec
+    const hasEvent = !!(eventIndex.value[s.trade_good_die] ?? eventIndex.value['__all__'])
     return {
       ...s,
-      spread:    s.sale_price - s.purchase_price,
+      spread: s.sale_price - s.purchase_price,
       hasEvent,
-      eventPct:  evSpec?.pct  ?? 0,
-      eventDesc: evSpec?.desc ?? '',
     }
   })
 })
@@ -345,10 +334,6 @@ function priceClass(price, base) {
 .pos { color: var(--green); }
 .neg { color: var(--red); }
 
-/* Event dot */
-.event-dot { font-size: 0.7rem; }
-.dot-up    { color: var(--red); }
-.dot-down  { color: var(--green); }
 
 .market-placeholder {
   color: var(--text-dim);
