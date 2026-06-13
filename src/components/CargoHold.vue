@@ -74,7 +74,7 @@
                 <td class="good-name">{{ item.trade_good_name }}</td>
                 <td class="num">{{ item.tons }}</td>
                 <td class="num mono">Cr {{ fmt(item.purchase_price) }}/t</td>
-                <td class="source-world">{{ worldLabel(item) }}</td>
+                <td class="source-world" :data-sector="item.purchase_sector">{{ worldLabel(item) }}</td>
                 <td class="num mono">
                   <span v-if="sellPriceFor(item) !== null">Cr {{ fmt(sellPriceFor(item)) }}/t</span>
                   <span v-else class="dim">—</span>
@@ -399,7 +399,37 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 .cargo-table td.num { text-align: right; }
 
 .good-name    { font-weight: 500; }
-.source-world { font-family: monospace; font-size: 0.75rem; color: var(--text-dim); text-align: left; white-space: nowrap; }
+.source-world {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: left;
+  white-space: nowrap;
+  position: relative;
+  cursor: default;
+}
+
+.source-world[data-sector]::after {
+  content: attr(data-sector);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.source-world[data-sector]:hover::after {
+  opacity: 1;
+}
 
 .pos { color: var(--green); }
 .neg { color: var(--red); }
