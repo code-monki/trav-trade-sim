@@ -139,7 +139,7 @@ export const useShipStore = defineStore('ship', () => {
   // Purchase cargo at a world.  Inserts a cargo row, debits the ship's credit
   // account, and writes an immutable transaction ledger entry.
 
-  async function buyCargo({ campaignId, playerId, good, tons, worldHex, sector, tick }) {
+  async function buyCargo({ campaignId, playerId, good, tons, worldHex, worldName, sector, tick }) {
     if (!ship.value) return { ok: false, error: 'No active ship' }
     if (!canTrade.value) return { ok: false, error: 'Not authorized to trade — check with your referee' }
 
@@ -163,8 +163,9 @@ export const useShipStore = defineStore('ship', () => {
           tons,
           purchase_price:  good.purchase_price,
           purchased_tick:  tick,
-          purchase_world:  worldHex,
-          purchase_sector: sector,
+          purchase_world:      worldHex,
+          purchase_world_name: worldName ?? '',
+          purchase_sector:     sector,
         })
         .select()
         .single()

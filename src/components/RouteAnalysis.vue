@@ -41,8 +41,8 @@
             <tr>
               <th>World</th>
               <th>Hex</th>
-              <th class="num">Jump</th>
-              <th>Port</th>
+              <th class="ctr">Jump</th>
+              <th class="ctr">Port</th>
               <th v-if="ship.cargo.length" class="num">Projected Profit</th>
               <th></th>
             </tr>
@@ -52,8 +52,8 @@
                 :class="{ 'top-row': ship.cargo.length && w.totalProfit === maxProfit && maxProfit > 0 }">
               <td class="w-name">{{ w.name }}</td>
               <td class="w-hex">{{ w.hex }}</td>
-              <td class="num">{{ w.dist }}</td>
-              <td class="w-port">{{ w.starport }}</td>
+              <td class="ctr">{{ w.dist }}</td>
+              <td class="ctr w-port">{{ w.starport }}</td>
               <td v-if="ship.cargo.length" class="num profit-cell" :class="w.totalProfit >= 0 ? 'pos' : 'neg'">
                 {{ w.totalProfit >= 0 ? '+' : '' }}Cr {{ fmt(w.totalProfit) }}
               </td>
@@ -294,6 +294,8 @@ async function selectWorld(w) {
   white-space: nowrap;
 }
 .ra-table th.num { text-align: right; }
+.ra-table th.ctr,
+.ra-table td.ctr { text-align: center; }
 
 .ra-row {
   border-bottom: 1px solid rgba(42, 48, 80, 0.5);

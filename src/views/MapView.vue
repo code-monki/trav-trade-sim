@@ -502,6 +502,7 @@ async function onBuyConfirm({ tons }) {
     good:       selectedGood.value,
     tons,
     worldHex:   map.selectedWorld.Hex,
+    worldName:  map.selectedWorld.Name ?? map.selectedWorld.Hex,
     sector:     map.selectedSectorName,
     tick:       tick.currentTick,
   })

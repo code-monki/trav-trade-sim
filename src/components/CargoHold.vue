@@ -61,7 +61,7 @@
               <th>Good</th>
               <th class="num">Tons</th>
               <th class="num">Bought</th>
-              <th class="num">Source</th>
+              <th>Source</th>
               <th class="num">Sells for</th>
               <th class="num">Profit</th>
               <th></th>
@@ -74,7 +74,7 @@
                 <td class="good-name">{{ item.trade_good_name }}</td>
                 <td class="num">{{ item.tons }}</td>
                 <td class="num mono">Cr {{ fmt(item.purchase_price) }}/t</td>
-                <td class="num source-world">{{ item.purchase_world }}</td>
+                <td class="source-world">{{ worldLabel(item) }}</td>
                 <td class="num mono">
                   <span v-if="sellPriceFor(item) !== null">Cr {{ fmt(sellPriceFor(item)) }}/t</span>
                   <span v-else class="dim">—</span>
@@ -138,6 +138,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useShipStore } from '../stores/ship.js'
 import { useTickStore } from '../stores/tick.js'
 import { useAuthStore } from '../stores/auth.js'
+import { useMapStore  } from '../stores/map.js'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -147,6 +148,13 @@ const props = defineProps({
 const ship = useShipStore()
 const tick = useTickStore()
 const auth = useAuthStore()
+const map  = useMapStore()
+
+function worldLabel(item) {
+  const hex  = item.purchase_world
+  const name = item.purchase_world_name || map.worlds.find(w => w.Hex === hex)?.Name
+  return name ? `${hex}-${name}` : (hex || '—')
+}
 
 const pendingSellId = ref(null)
 const lastResult    = ref(null)
@@ -391,7 +399,7 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 .cargo-table td.num { text-align: right; }
 
 .good-name    { font-weight: 500; }
-.source-world { font-family: monospace; font-size: 0.75rem; color: var(--text-dim); }
+.source-world { font-family: monospace; font-size: 0.75rem; color: var(--text-dim); text-align: left; white-space: nowrap; }
 
 .pos { color: var(--green); }
 .neg { color: var(--red); }
