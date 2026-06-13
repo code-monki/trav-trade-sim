@@ -103,7 +103,7 @@
           <div class="date-pair">
             <div class="date-field">
               <span class="date-label">Year</span>
-              <input v-model.number="form.startYear" type="number" min="1100" max="1201" step="1" />
+              <input v-model.number="form.startYear" type="number" min="0" max="2500" step="1" />
             </div>
             <div class="date-field">
               <span class="date-label">Day (1–365)</span>
@@ -293,7 +293,6 @@ async function doReset() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 2rem 1rem;
   background: var(--bg);
 }
@@ -305,6 +304,8 @@ async function doReset() {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 2rem;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .login-header {
