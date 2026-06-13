@@ -243,23 +243,27 @@
             <MarketTable
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
+              :charted-dies="[...chartedGoods]"
               @select-good="onGoodSelect"
+              @toggle-chart="onToggleChart"
             />
-            <template v-if="selectedGood">
-              <!-- Buy action bar (players with a ship only) -->
-              <div v-if="ship.hasShip" class="buy-bar">
-                <span class="buy-good-name">{{ selectedGood.trade_good_name }}</span>
-                <span class="buy-price-label">Cr {{ fmt(selectedGood.purchase_price) }}/t</span>
-                <span class="buy-hold-info">{{ ship.cargoAvailable }}t free · Cr {{ fmt(ship.ship?.credits) }}</span>
-                <button
-                  class="buy-btn"
-                  :disabled="!canBuy || buyLoading"
-                  @click="showBuyDialog = true"
-                >
-                  Buy Cargo
-                </button>
-              </div>
 
+            <!-- Buy action bar: shown when a good row is selected and player has a ship -->
+            <div v-if="selectedGood && ship.hasShip" class="buy-bar">
+              <span class="buy-good-name">{{ selectedGood.trade_good_name }}</span>
+              <span class="buy-price-label">Cr {{ fmt(selectedGood.purchase_price) }}/t</span>
+              <span class="buy-hold-info">{{ ship.cargoAvailable }}t free · Cr {{ fmt(ship.ship?.credits) }}</span>
+              <button
+                class="buy-btn"
+                :disabled="!canBuy || buyLoading"
+                @click="showBuyDialog = true"
+              >
+                Buy Cargo
+              </button>
+            </div>
+
+            <!-- Chart: shown when any goods are checked -->
+            <template v-if="chartedGoods.size > 0">
               <div class="resize-handle"
                    role="separator" tabindex="0"
                    aria-label="Resize chart panel — use arrow keys"
@@ -271,8 +275,7 @@
               <PriceChart
                 :world-hex="map.selectedWorld.Hex"
                 :sector-name="map.selectedSectorName"
-                :good-die="selectedGood.trade_good_die"
-                :good-name="selectedGood.trade_good_name"
+                :goods="chartedGoodsArray"
                 :style="{ height: chartHeight + 'px' }"
               />
             </template>
@@ -362,6 +365,7 @@ const router = useRouter()
 
 const detailTab      = ref('overview')
 const selectedGood   = ref(null)
+const chartedGoods   = ref(new Set())
 const showAbout      = ref(false)
 const showHelp       = ref(false)
 const showThemes     = ref(false)
@@ -387,6 +391,20 @@ const canBuy = computed(() =>
 )
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
+
+const chartedGoodsArray = computed(() =>
+  [...chartedGoods.value].map(die => ({
+    die,
+    name: tick.worldSnapshots[die]?.trade_good_name ?? die,
+  }))
+)
+
+function onToggleChart(die) {
+  const next = new Set(chartedGoods.value)
+  if (next.has(die)) next.delete(die)
+  else next.add(die)
+  chartedGoods.value = next
+}
 
 const travellerMapUrl = computed(() => {
   const milieu  = auth.campaign?.milieu ?? 'M1105'
@@ -468,9 +486,10 @@ onMounted(async () => {
   document.addEventListener('keydown', handleGlobalKey)
 })
 
-// Reset chart selection and pre-load event history when world changes
+// Reset selections and pre-load event history when world changes
 watch(() => map.selectedWorld, (world) => {
-  selectedGood.value = null
+  selectedGood.value  = null
+  chartedGoods.value  = new Set()
   if (world) tick.loadWorldEventHistory(world.Hex, map.selectedSectorName)
 })
 

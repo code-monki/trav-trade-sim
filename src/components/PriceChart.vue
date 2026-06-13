@@ -1,9 +1,14 @@
 <template>
   <div class="chart-wrap">
     <div class="chart-header">
-      <div class="chart-title">
-        <span class="good-name">{{ goodName }}</span>
-        <span class="good-die mono">{{ goodDie }}</span>
+      <div class="chart-legend">
+        <span v-if="!props.goods.length" class="legend-empty">
+          Check goods in the table to plot price history
+        </span>
+        <span v-for="(g, i) in props.goods" :key="g.die" class="legend-item">
+          <span class="legend-dot" :style="{ background: palette[i % palette.length] }"></span>
+          {{ g.name }}
+        </span>
       </div>
       <div class="chart-tabs">
         <button v-for="t in TABS" :key="t.key"
@@ -15,10 +20,11 @@
     </div>
 
     <div v-if="tick.loading" class="chart-placeholder">Loading price history…</div>
+    <div v-else-if="!props.goods.length" class="chart-placeholder">No goods selected</div>
     <div v-else-if="!hasData" class="chart-placeholder">
       No history yet — visit this world each tick to record prices.
     </div>
-    <div ref="chartEl" class="chart-el" v-show="hasData && !tick.loading"></div>
+    <div ref="chartEl" class="chart-el" v-show="props.goods.length && hasData && !tick.loading"></div>
   </div>
 </template>
 
@@ -30,17 +36,16 @@ import { useThemeStore } from '../stores/theme.js'
 import { formatImperialDate, tickToCalendar } from '../lib/market-tick.js'
 
 const props = defineProps({
-  worldHex:   { type: String, required: true },
-  sectorName: { type: String, required: true },
-  goodDie:    { type: String, required: true },
-  goodName:   { type: String, default: '' },
+  worldHex:   { type: String,  required: true },
+  sectorName: { type: String,  required: true },
+  goods:      { type: Array,   default: () => [] },  // [{ die, name }]
 })
 
 const tick       = useTickStore()
 const themeStore = useThemeStore()
 const chartEl    = ref(null)
-const activeTab = ref('weekly')
-const hasData   = ref(false)
+const activeTab  = ref('weekly')
+const hasData    = ref(false)
 
 const TABS = [
   { key: 'weekly',  label: 'Weekly'  },
@@ -48,19 +53,25 @@ const TABS = [
   { key: 'annual',  label: 'Annual'  },
 ]
 
+// Visually distinct colors for overlaid series
+const palette = [
+  '#60a5fa',  // blue
+  '#fbbf24',  // amber
+  '#34d399',  // emerald
+  '#f87171',  // red
+  '#a78bfa',  // violet
+  '#22d3ee',  // cyan
+]
+
 // ── Time helpers ──────────────────────────────────────────────────────────────
-// Feed chart UTCTimestamp (seconds) directly — avoids the BusinessDay object
-// that string dates produce, so tickMarkFormatter always receives a plain number.
-const BASE_SEC     = new Date('1985-01-07').getTime() / 1000
+const BASE_SEC      = new Date('1985-01-07').getTime() / 1000
 const SECS_PER_TICK = 7 * 86400
 
-function tickToTime(t)           { return BASE_SEC + t * SECS_PER_TICK }
-function monthToTime(year, month){ return BASE_SEC + ((year-1105)*48 + (month-1)*4) * SECS_PER_TICK }
-function yearToTime(year)        { return BASE_SEC + (year-1105)*48 * SECS_PER_TICK }
+function tickToTime(t)            { return BASE_SEC + t * SECS_PER_TICK }
+function monthToTime(year, month) { return BASE_SEC + ((year-1105)*48 + (month-1)*4) * SECS_PER_TICK }
+function yearToTime(year)         { return BASE_SEC + (year-1105)*48 * SECS_PER_TICK }
+function tsToTick(ts)             { return Math.max(0, Math.round((ts - BASE_SEC) / SECS_PER_TICK)) }
 
-function tsToTick(ts) { return Math.max(0, Math.round((ts - BASE_SEC) / SECS_PER_TICK)) }
-
-// tickMarkType: 0=Year 1=Month 2=DayOfMonth
 function imperialTickMark(ts, type) {
   const { year, day, month } = tickToCalendar(tsToTick(ts))
   if (type === 0) return `${year}`
@@ -70,7 +81,7 @@ function imperialTickMark(ts, type) {
 
 function imperialDateStr(ts) { return formatImperialDate(tsToTick(ts)) }
 
-// ── Theme-aware color helpers ─────────────────────────────────────────────────
+// ── Theme helpers ─────────────────────────────────────────────────────────────
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
@@ -99,19 +110,19 @@ function chartOpts() {
   }
 }
 
-function candleOpts() {
+function candleOpts(color) {
   return {
-    upColor:       cssVar('--green'),
-    downColor:     cssVar('--red'),
+    upColor:       color ?? cssVar('--green'),
+    downColor:     color ?? cssVar('--red'),
     borderVisible: false,
-    wickUpColor:   cssVar('--green'),
-    wickDownColor: cssVar('--red'),
+    wickUpColor:   color ?? cssVar('--green'),
+    wickDownColor: color ?? cssVar('--red'),
   }
 }
 
-function lineOpts() {
+function lineOpts(color) {
   return {
-    color:                  cssVar('--code'),
+    color,
     lineWidth:              2,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius:  4,
@@ -119,17 +130,16 @@ function lineOpts() {
 }
 
 // ── Chart instance ────────────────────────────────────────────────────────────
-let chart  = null
-let series = null
-let ro     = null
+let chart     = null
+let seriesMap = new Map()   // die → series
+let ro        = null
 
 function initChart() {
   if (!chartEl.value) return
-  chart?.remove()
+  destroyChart()
   const w = chartEl.value.clientWidth  || 400
   const h = chartEl.value.clientHeight || 200
-  chart  = createChart(chartEl.value, { ...chartOpts(), width: w, height: h })
-  series = null
+  chart = createChart(chartEl.value, { ...chartOpts(), width: w, height: h })
 
   ro = new ResizeObserver(() => {
     if (chartEl.value) {
@@ -145,66 +155,95 @@ function initChart() {
 function destroyChart() {
   ro?.disconnect()
   chart?.remove()
-  chart = series = ro = null
+  chart = null
+  seriesMap.clear()
+  ro = null
 }
 
-// ── Data loading ──────────────────────────────────────────────────────────────
-async function loadData() {
-  if (!chart) return
-
-  series?.remove?.()
-  series = null
-
+// ── Series management ─────────────────────────────────────────────────────────
+async function loadSeriesData(series, goodDie) {
   if (activeTab.value === 'weekly') {
-    const raw = await tick.loadWeeklyHistory(props.worldHex, props.sectorName, props.goodDie)
-    hasData.value = raw.length > 0
-    if (!raw.length) return
-    series = chart.addLineSeries(lineOpts())
+    const raw = await tick.loadWeeklyHistory(props.worldHex, props.sectorName, goodDie)
+    if (!raw.length) return false
     series.setData(raw.map(r => ({ time: tickToTime(r.tick), value: r.purchase_price })))
-
   } else if (activeTab.value === 'monthly') {
-    const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, props.goodDie)
-    hasData.value = raw.length > 0
-    if (!raw.length) return
-    series = chart.addCandlestickSeries(candleOpts())
-    series.setData(raw.map(r => ({
-      time:  monthToTime(r.year, r.month),
-      open:  r.open_price,
-      high:  r.high_price,
-      low:   r.low_price,
-      close: r.close_price,
-    })))
-
+    const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, goodDie)
+    if (!raw.length) return false
+    if (props.goods.length === 1) {
+      series.setData(raw.map(r => ({
+        time:  monthToTime(r.year, r.month),
+        open:  r.open_price,
+        high:  r.high_price,
+        low:   r.low_price,
+        close: r.close_price,
+      })))
+    } else {
+      series.setData(raw.map(r => ({ time: monthToTime(r.year, r.month), value: r.close_price })))
+    }
   } else {
-    const raw = await tick.loadAnnualHistory(props.worldHex, props.sectorName, props.goodDie)
-    hasData.value = raw.length > 0
-    if (!raw.length) return
-    series = chart.addCandlestickSeries(candleOpts())
-    series.setData(raw.map(r => ({
-      time:  yearToTime(r.year),
-      open:  r.open_price,
-      high:  r.high_price,
-      low:   r.low_price,
-      close: r.close_price,
-    })))
+    const raw = await tick.loadAnnualHistory(props.worldHex, props.sectorName, goodDie)
+    if (!raw.length) return false
+    if (props.goods.length === 1) {
+      series.setData(raw.map(r => ({
+        time:  yearToTime(r.year),
+        open:  r.open_price,
+        high:  r.high_price,
+        low:   r.low_price,
+        close: r.close_price,
+      })))
+    } else {
+      series.setData(raw.map(r => ({ time: yearToTime(r.year), value: r.close_price })))
+    }
   }
-
-  chart.timeScale().fitContent()
-  applyEventMarkers()
+  return true
 }
 
-// ── Event markers ─────────────────────────────────────────────────────────────
-const SEV_SHAPE = { minor: 'circle', major: 'square', crisis: 'arrowDown' }
+function addSeries(color) {
+  if (!chart) return null
+  const single = props.goods.length === 1
+  const useCandle = single && activeTab.value !== 'weekly'
+  return useCandle
+    ? chart.addCandlestickSeries(candleOpts(color))
+    : chart.addLineSeries(lineOpts(color))
+}
 
-function applyEventMarkers() {
+async function rebuildAllSeries() {
+  if (!chart) return
+  // Remove all existing series
+  seriesMap.forEach(s => chart.removeSeries(s))
+  seriesMap.clear()
+
+  if (!props.goods.length) { hasData.value = false; return }
+
+  const results = await Promise.all(
+    props.goods.map(async (g, i) => {
+      const color  = palette[i % palette.length]
+      const series = addSeries(color)
+      if (!series) return false
+      const ok = await loadSeriesData(series, g.die)
+      if (ok) {
+        seriesMap.set(g.die, series)
+        if (props.goods.length === 1) applyEventMarkers(series)
+      } else {
+        chart.removeSeries(series)
+      }
+      return ok
+    })
+  )
+
+  hasData.value = results.some(Boolean)
+  if (hasData.value) chart.timeScale().fitContent()
+}
+
+// ── Event markers (single-good mode only) ─────────────────────────────────────
+function applyEventMarkers(series) {
   if (!series || !tick.worldEventHistory.length) return
-
   const sevColor = {
     minor:  cssVar('--accent-dim'),
     major:  cssVar('--amber'),
     crisis: cssVar('--red'),
   }
-
+  const SEV_SHAPE = { minor: 'circle', major: 'square', crisis: 'arrowDown' }
   const markers = tick.worldEventHistory
     .map(ev => ({
       time:     tickToTime(ev.tick),
@@ -215,49 +254,58 @@ function applyEventMarkers() {
       size:     ev.severity === 'crisis' ? 2 : 1,
     }))
     .sort((a, b) => a.time - b.time)
-
   series.setMarkers(markers)
 }
 
-// Re-theme chart canvas without destroying state or reloading data
+function reapplyEventMarkers() {
+  if (props.goods.length !== 1) return
+  const series = seriesMap.values().next().value
+  if (series) applyEventMarkers(series)
+}
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
 function applyThemeToChart() {
   if (!chart) return
   chart.applyOptions(chartOpts())
-  if (series) {
-    series.applyOptions(activeTab.value === 'weekly' ? lineOpts() : candleOpts())
-    applyEventMarkers()
-  }
 }
 
 async function setTab(key) {
   activeTab.value = key
   await nextTick()
   initChart()
-  await loadData()
+  await rebuildAllSeries()
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await nextTick()
   initChart()
-  await loadData()
+  await rebuildAllSeries()
 })
 
 onUnmounted(destroyChart)
 
+// World or tick change → full reinit
 watch(
-  () => [props.worldHex, props.goodDie, tick.currentTick],
+  () => [props.worldHex, props.sectorName, tick.currentTick],
   async () => {
     await nextTick()
     if (!chart) initChart()
-    await loadData()
+    await rebuildAllSeries()
   },
 )
 
-// Re-apply markers when event history loads after the chart is already rendered
-watch(() => tick.worldEventHistory.length, applyEventMarkers)
+// Goods list change → rebuild series (chart stays)
+watch(
+  () => props.goods.map(g => g.die).join(','),
+  async () => {
+    await nextTick()
+    if (!chart) initChart()
+    await rebuildAllSeries()
+  },
+)
 
-// Re-theme chart canvas whenever applyTheme() is called (covers init() and setTheme())
+watch(() => tick.worldEventHistory.length, reapplyEventMarkers)
 watch(() => themeStore.revision, applyThemeToChart)
 </script>
 
@@ -276,35 +324,46 @@ watch(() => themeStore.revision, applyThemeToChart)
 
 .chart-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem;
   flex-shrink: 0;
 }
 
-.chart-title {
+/* Legend */
+.chart-legend {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
 }
 
-.good-name {
-  font-size: 0.9rem;
-  font-weight: 600;
+.legend-empty {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
   color: var(--text);
 }
 
-.mono {
-  font-family: monospace;
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  background: var(--bg-item);
-  padding: 1px 6px;
-  border-radius: 3px;
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.chart-tabs { display: flex; gap: 0.25rem; }
+/* Tabs */
+.chart-tabs { display: flex; gap: 0.25rem; flex-shrink: 0; }
 
 .ctab {
   background: transparent;
@@ -320,7 +379,7 @@ watch(() => themeStore.revision, applyThemeToChart)
 .ctab:hover { border-color: var(--accent-dim); color: var(--text); }
 .ctab.active { background: var(--bg-selected); border-color: var(--accent-dim); color: var(--accent); }
 
-/* chart-el fills whatever height the parent leaves after the header */
+/* Chart canvas */
 .chart-el {
   width: 100%;
   flex: 1;

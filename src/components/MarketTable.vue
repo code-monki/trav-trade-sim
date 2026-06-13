@@ -28,10 +28,11 @@
         <table class="market-table">
           <thead>
             <tr>
+              <th class="chart-col" title="Show on chart"></th>
               <th @click="setSort('trade_good_name')" class="sortable">
                 Good {{ sortIcon('trade_good_name') }}
               </th>
-              <th @click="setSort('trade_good_die')" class="sortable num">
+              <th @click="setSort('trade_good_die')" class="sortable ctr">
                 Die {{ sortIcon('trade_good_die') }}
               </th>
               <th @click="setSort('purchase_price')" class="sortable num">
@@ -46,15 +47,21 @@
               <th @click="setSort('qty_available')" class="sortable num">
                 Qty (t) {{ sortIcon('qty_available') }}
               </th>
-              <th class="num">Event</th>
+              <th class="ctr" title="Active">⚑</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in filteredRows" :key="row.trade_good_die"
                 :class="['market-row', { 'row-selected': selectedDie === row.trade_good_die, 'row-event': row.hasEvent }]"
-                @click="$emit('select-good', row)">
+                @click="selectRow(row)">
+              <td class="chart-col" @click.stop>
+                <input type="checkbox"
+                       :checked="chartedDies.includes(row.trade_good_die)"
+                       class="chart-check"
+                       @change="$emit('toggle-chart', row.trade_good_die)" />
+              </td>
               <td class="good-name">{{ row.trade_good_name }}</td>
-              <td class="num mono">{{ row.trade_good_die }}</td>
+              <td class="ctr mono">{{ row.trade_good_die }}</td>
               <td class="num" :class="priceClass(row.purchase_price, 4000)">
                 {{ fmt(row.purchase_price) }}
               </td>
@@ -65,7 +72,7 @@
                 {{ row.spread >= 0 ? '+' : '' }}{{ fmt(row.spread) }}
               </td>
               <td class="num">{{ row.qty_available.toLocaleString() }}</td>
-              <td class="num">
+              <td class="ctr">
                 <span v-if="row.hasEvent" class="event-dot"
                       :title="row.eventDesc"
                       :class="row.eventPct > 0 ? 'dot-up' : 'dot-down'">
@@ -86,11 +93,12 @@ import { useTickStore } from '../stores/tick.js'
 import { CT2_TRADE_GOODS } from '../lib/traveller-data.js'
 
 const props = defineProps({
-  world:      { type: Object,  required: true },
-  sectorName: { type: String,  required: true },
+  world:       { type: Object,  required: true },
+  sectorName:  { type: String,  required: true },
+  chartedDies: { type: Array,   default: () => [] },
 })
 
-const emit = defineEmits(['select-good'])
+const emit = defineEmits(['select-good', 'toggle-chart'])
 
 const tick        = useTickStore()
 const filter      = ref('')
@@ -110,6 +118,9 @@ async function loadSnapshots() {
 
 onMounted(loadSnapshots)
 watch(() => [props.world?.Hex, props.sectorName, tick.currentTick], loadSnapshots)
+
+// Clear row selection when world changes
+watch(() => props.world?.Hex, () => { selectedDie.value = null })
 
 // ── Active events for this world ─────────────────────────────────────────────
 const worldEvents = computed(() =>
@@ -161,6 +172,12 @@ const filteredRows = computed(() => {
     return sortAsc.value ? cmp : -cmp
   })
 })
+
+// ── Row selection (for buying) ────────────────────────────────────────────────
+function selectRow(row) {
+  selectedDie.value = row.trade_good_die
+  emit('select-good', row)
+}
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 function setSort(key) {
@@ -282,6 +299,23 @@ function priceClass(price, base) {
 .market-table th.sortable { cursor: pointer; user-select: none; }
 .market-table th.sortable:hover { color: var(--text); }
 .market-table th.num { text-align: right; }
+.market-table th.ctr { text-align: center; }
+.market-table td.ctr { text-align: center; }
+
+.chart-col {
+  width: 2rem;
+  text-align: center;
+  padding: 0.4rem 0.4rem 0.4rem 0.6rem !important;
+}
+
+.chart-check {
+  width: 0.9rem;
+  height: 0.9rem;
+  cursor: pointer;
+  accent-color: var(--accent);
+  margin: 0;
+  display: block;
+}
 
 .market-row {
   cursor: pointer;
@@ -312,7 +346,7 @@ function priceClass(price, base) {
 .neg { color: var(--red); }
 
 /* Event dot */
-.event-dot { font-size: 0.7rem; cursor: help; }
+.event-dot { font-size: 0.7rem; }
 .dot-up    { color: var(--red); }
 .dot-down  { color: var(--green); }
 
