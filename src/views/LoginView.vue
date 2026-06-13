@@ -95,6 +95,7 @@
           <label>Trade Rules</label>
           <select v-model="form.tradeRules">
             <option value="CT7">Classic Traveller Book 7</option>
+            <option value="T5">Traveller 5th Edition</option>
           </select>
         </div>
         <div class="field-row">
