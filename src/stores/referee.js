@@ -42,16 +42,18 @@ export const useRefereeStore = defineStore('referee', () => {
     }
   }
 
-  async function createShip(campaignId, { name, hullType, hullTons, cargoCapacity, credits }) {
+  async function createShip(campaignId, { name, hullType, hullTons, cargoCapacity, credits, jumpRating, maneuverRating }) {
     const { data, error: err } = await supabase
       .from('ships')
       .insert({
-        campaign_id:    campaignId,
-        name:           name.trim(),
-        hull_type:      hullType      || null,
-        hull_tons:      hullTons      ?? 200,
-        cargo_capacity: cargoCapacity ?? 80,
-        credits:        credits       ?? 0,
+        campaign_id:           campaignId,
+        name:                  name.trim(),
+        hull_type:             hullType      || null,
+        hull_tons:             hullTons      ?? 200,
+        cargo_capacity:        cargoCapacity ?? 80,
+        credits:               credits       ?? 0,
+        jump_rating:           jumpRating    || null,
+        maneuver_drive_rating: maneuverRating || null,
       })
       .select()
       .single()

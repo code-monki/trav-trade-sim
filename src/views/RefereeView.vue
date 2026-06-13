@@ -82,6 +82,16 @@
                   <input v-model.number="newShip.credits" type="number" min="0" />
                 </div>
               </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Jump Rating (J-1–J-6)</label>
+                  <input v-model.number="newShip.jumpRating" type="number" min="1" max="6" placeholder="—" />
+                </div>
+                <div>
+                  <label>Maneuver Drive (1–9)</label>
+                  <input v-model.number="newShip.maneuverRating" type="number" min="1" max="9" placeholder="—" />
+                </div>
+              </div>
               <div class="form-actions">
                 <button type="button" class="btn-ghost" @click="cancelNewShip">Cancel</button>
                 <button type="submit" class="btn-primary" :disabled="!newShip.name.trim()">Create Ship</button>
@@ -119,6 +129,26 @@
                 <label>Credits (Cr)</label>
                 <input v-model.number="editShipFields.credits" type="number" />
               </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Jump Rating (J-1–J-6)</label>
+                  <input v-model.number="editShipFields.jumpRating" type="number" min="1" max="6" placeholder="—" />
+                </div>
+                <div>
+                  <label>Maneuver Drive (1–9)</label>
+                  <input v-model.number="editShipFields.maneuverRating" type="number" min="1" max="9" placeholder="—" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Location Hex</label>
+                  <input v-model="editShipFields.currentWorld" placeholder="e.g. 1910" maxlength="4" />
+                </div>
+                <div>
+                  <label>Sector</label>
+                  <input v-model="editShipFields.currentSector" placeholder="Spinward Marches" />
+                </div>
+              </div>
               <div class="form-actions">
                 <button type="submit" class="btn-primary">Save</button>
               </div>
@@ -130,6 +160,8 @@
               <div class="stat"><label>Hull Tons</label><span>{{ selectedShip.hull_tons }}t</span></div>
               <div class="stat"><label>Cargo Capacity</label><span>{{ selectedShip.cargo_capacity }}t</span></div>
               <div class="stat"><label>Credits</label><span>Cr{{ selectedShip.credits.toLocaleString() }}</span></div>
+              <div class="stat"><label>Jump Rating</label><span>{{ selectedShip.jump_rating ? 'J-' + selectedShip.jump_rating : '—' }}</span></div>
+              <div class="stat"><label>Maneuver</label><span>{{ selectedShip.maneuver_drive_rating ? selectedShip.maneuver_drive_rating + 'G' : '—' }}</span></div>
               <div class="stat"><label>Location</label>
                 <span>{{ selectedShip.current_world || '—' }}
                   <span v-if="selectedShip.current_sector"> · {{ selectedShip.current_sector }}</span>
@@ -409,7 +441,7 @@ const crewError       = ref('')
 const newCrewPlayerId = ref('')
 const newCrewRole     = ref('crew')
 
-const newShip = ref({ name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0 })
+const newShip = ref({ name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null })
 const editShipFields = ref({})
 
 const selectedShip = computed(() => referee.ships.find(s => s.id === selectedShipId.value) ?? null)
@@ -429,10 +461,14 @@ function selectShip(id) {
   if (editShipFields.value && selectedShip.value) {
     const s = selectedShip.value
     editShipFields.value = {
-      hullType:      s.hull_type      ?? '',
-      hullTons:      s.hull_tons      ?? 200,
-      cargoCapacity: s.cargo_capacity ?? 80,
-      credits:       s.credits        ?? 0,
+      hullType:       s.hull_type             ?? '',
+      hullTons:       s.hull_tons             ?? 200,
+      cargoCapacity:  s.cargo_capacity        ?? 80,
+      credits:        s.credits               ?? 0,
+      jumpRating:     s.jump_rating           ?? null,
+      maneuverRating: s.maneuver_drive_rating ?? null,
+      currentWorld:   s.current_world         ?? '',
+      currentSector:  s.current_sector        ?? '',
     }
   }
 }
@@ -441,7 +477,7 @@ function openNewShip() {
   showNewShipForm.value = true
   selectedShipId.value  = null
   shipError.value       = ''
-  newShip.value = { name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0 }
+  newShip.value = { name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null }
 }
 
 function cancelNewShip() {
@@ -463,10 +499,14 @@ async function submitNewShip() {
 async function submitEditShip() {
   try {
     await referee.updateShip(selectedShipId.value, {
-      hull_type:      editShipFields.value.hullType || null,
-      hull_tons:      editShipFields.value.hullTons,
-      cargo_capacity: editShipFields.value.cargoCapacity,
-      credits:        editShipFields.value.credits,
+      hull_type:             editShipFields.value.hullType        || null,
+      hull_tons:             editShipFields.value.hullTons,
+      cargo_capacity:        editShipFields.value.cargoCapacity,
+      credits:               editShipFields.value.credits,
+      jump_rating:           editShipFields.value.jumpRating       || null,
+      maneuver_drive_rating: editShipFields.value.maneuverRating   || null,
+      current_world:         editShipFields.value.currentWorld     || null,
+      current_sector:        editShipFields.value.currentSector    || null,
     })
     editingShip.value = false
   } catch (e) {
