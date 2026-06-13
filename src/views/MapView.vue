@@ -116,9 +116,17 @@
               <span v-if="map.selectedWorld.SS">Subsector {{ map.selectedWorld.SS }}</span>
             </div>
           </div>
-          <div class="uwp-badge">
-            <span class="uwp-code">{{ map.selectedWorld.UWP }}</span>
-            <span class="zone-badge" :class="map.zoneBadgeClass">{{ map.travelZoneLabel }}</span>
+          <div class="detail-header-right">
+            <div class="uwp-badge">
+              <span class="uwp-code">{{ map.selectedWorld.UWP }}</span>
+              <span class="zone-badge" :class="map.zoneBadgeClass">{{ map.travelZoneLabel }}</span>
+            </div>
+            <a :href="travellerMapUrl"
+               target="_blank" rel="noopener noreferrer"
+               class="tmap-link"
+               title="View on Traveller Map">
+              Traveller Map ↗
+            </a>
           </div>
         </div>
 
@@ -364,6 +372,13 @@ const canBuy = computed(() =>
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
 
+const travellerMapUrl = computed(() => {
+  const milieu  = auth.campaign?.milieu ?? 'M1105'
+  const sector  = encodeURIComponent(map.selectedSectorName ?? '')
+  const hex     = encodeURIComponent(map.selectedWorld?.Hex ?? '')
+  return `https://travellermap.com/?milieu=${milieu}&sector=${sector}&hex=${hex}`
+})
+
 // ── Chart resize ──────────────────────────────────────────────────────────────
 const marketLayoutEl = ref(null)
 const chartHeight    = ref(260)
@@ -568,6 +583,23 @@ header {
   letter-spacing: 0.06em;
 }
 
+
+/* ── World detail header ───────────────────────────────────────────────────── */
+.detail-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.tmap-link {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: color 0.15s;
+}
+.tmap-link:hover { color: var(--accent); }
 
 /* ── Detail tabs ───────────────────────────────────────────────────────────── */
 .detail-tabs {
