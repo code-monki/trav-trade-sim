@@ -31,10 +31,10 @@ export const BASE_YEAR       = 1105
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
 export function tickToCalendar(tick) {
-  const totalDays = tick * 7
-  const year      = BASE_YEAR + Math.floor(totalDays / 365)
-  const day       = (totalDays % 365) + 1
-  const month     = Math.floor(tick / TICKS_PER_MONTH) % 12 + 1
+  const weekInYear = tick % TICKS_PER_YEAR
+  const year       = BASE_YEAR + Math.floor(tick / TICKS_PER_YEAR)
+  const day        = weekInYear * 7 + 1
+  const month      = Math.floor(weekInYear / TICKS_PER_MONTH) + 1
   return { year, day, month }
 }
 
