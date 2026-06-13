@@ -1,7 +1,7 @@
 <template>
   <!-- ── Header ──────────────────────────────────────────────────────────── -->
   <header class="ref-header">
-    <button class="back-btn" @click="router.push('/')">← Map</button>
+    <button class="back-btn" @click="router.push({ name: 'map' })">← Map</button>
     <div class="header-title">
       <h1>Campaign Management</h1>
       <span class="header-sub">{{ auth.campaign?.label }} · {{ auth.campaign?.code }}</span>
