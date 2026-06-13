@@ -52,12 +52,16 @@
       <section class="panel">
         <h2>Sector</h2>
         <div v-if="map.loading && !map.sectors.length" class="loading">Loading sectors…</div>
-        <select v-else v-model="map.selectedSectorName" @change="map.onSectorChange" :disabled="map.loading">
-          <option value="">— Select a Sector —</option>
-          <option v-for="sector in map.sectors" :key="sector.name" :value="sector.name">
-            {{ sector.name }}
-          </option>
-        </select>
+        <template v-else>
+          <input v-model="sectorFilter" type="search" placeholder="Filter sectors…"
+                 class="search-input" :disabled="map.loading" />
+          <select v-model="map.selectedSectorName" @change="map.onSectorChange" :disabled="map.loading">
+            <option value="">— Select a Sector —</option>
+            <option v-for="sector in filteredSectors" :key="sector.name" :value="sector.name">
+              {{ sector.name }}
+            </option>
+          </select>
+        </template>
         <div v-if="map.selectedSectorInfo" class="sector-meta">
           <span>Coordinates: ({{ map.selectedSectorInfo.x }}, {{ map.selectedSectorInfo.y }})</span>
           <span v-if="map.selectedSectorInfo.abbreviation">Abbrev: {{ map.selectedSectorInfo.abbreviation }}</span>
@@ -363,6 +367,12 @@ const auth   = useAuthStore()
 const tick   = useTickStore()
 const ship   = useShipStore()
 const router = useRouter()
+
+const sectorFilter   = ref('')
+const filteredSectors = computed(() => {
+  const q = sectorFilter.value.trim().toLowerCase()
+  return q ? map.sectors.filter(s => s.name.toLowerCase().includes(q)) : map.sectors
+})
 
 const detailTab      = ref('overview')
 const selectedGood   = ref(null)
