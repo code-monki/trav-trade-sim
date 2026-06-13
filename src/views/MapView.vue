@@ -39,7 +39,7 @@
           @about="showAbout = true"
           @help="showHelp = true"
           @manage-character="showCharacter = true"
-          @manage-campaign="router.push('/referee')"
+          @manage-campaign="router.push({ name: 'referee' })"
           @signout="doLogout"
         />
       </div>
@@ -501,7 +501,7 @@ async function doAdvanceTick() {
 
 function doLogout() {
   auth.logout()
-  router.push('/login')
+  router.push({ name: 'login' })
 }
 </script>
 

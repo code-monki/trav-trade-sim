@@ -189,7 +189,7 @@ async function doLogin() {
     characterName: form.characterName,
     pin:           form.pin,
   })
-  if (result.ok) router.push('/')
+  if (result.ok) router.push({ name: 'map' })
 }
 
 async function doJoin() {
@@ -199,7 +199,7 @@ async function doJoin() {
     characterName: form.characterName,
     pin:           form.pin,
   })
-  if (result.ok) router.push('/')
+  if (result.ok) router.push({ name: 'map' })
 }
 
 async function doCreate() {
@@ -214,7 +214,7 @@ async function doCreate() {
     characterName: form.characterName,
     pin:           form.pin,
   })
-  if (result.ok) router.push('/')
+  if (result.ok) router.push({ name: 'map' })
 }
 </script>
 

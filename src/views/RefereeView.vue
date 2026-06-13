@@ -651,7 +651,7 @@ const travellerMapUrl = computed(() => {
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
-  if (!auth.isReferee) { router.push('/'); return }
+  if (!auth.isReferee) { router.push({ name: 'map' }); return }
   await referee.loadShips(auth.campaign.id)
   await referee.loadPlayers(auth.campaign.id)
 })
