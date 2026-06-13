@@ -69,12 +69,12 @@
           Worlds
           <span v-if="map.worlds.length" class="count">({{ map.filteredWorlds.length }} / {{ map.worlds.length }})</span>
         </h2>
+        <input v-if="map.worlds.length" v-model="map.searchQuery"
+               placeholder="Filter worlds…" class="search-input" type="search" />
         <div v-if="map.worlds.length" class="world-list-header">
           <span>World</span>
           <span>Hex</span>
         </div>
-        <input v-if="map.worlds.length" v-model="map.searchQuery"
-               placeholder="Filter worlds…" class="search-input" type="search" />
         <div v-if="map.loading && map.selectedSectorName && !map.worlds.length" class="loading">Loading worlds…</div>
         <div v-else-if="!map.selectedSectorName" class="placeholder">Select a sector above</div>
         <div v-else-if="map.worlds.length === 0" class="placeholder">No worlds found</div>
