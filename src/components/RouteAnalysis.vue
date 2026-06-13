@@ -14,11 +14,6 @@
       <p class="dim">Load a sector to see reachable worlds.</p>
     </div>
 
-    <div v-else-if="!ship.cargo.length" class="ra-state">
-      <p>Hold is empty.</p>
-      <p class="dim">Buy cargo on the Market tab to see projected profits.</p>
-    </div>
-
     <template v-else>
 
       <div class="ra-header">
@@ -26,6 +21,10 @@
           Jump-{{ jumpRating }} from <strong>{{ world?.Name || world?.Hex }}</strong>
         </span>
         <span class="ra-count">{{ projections.length }} worlds in range</span>
+      </div>
+
+      <div v-if="!ship.cargo.length" class="ra-notice">
+        Hold is empty — profit projections will appear once you have cargo.
       </div>
 
       <div v-if="!projections.length" class="ra-state">
@@ -40,17 +39,17 @@
               <th>Hex</th>
               <th class="num">Jump</th>
               <th>Port</th>
-              <th class="num">Projected Profit</th>
+              <th v-if="ship.cargo.length" class="num">Projected Profit</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="w in projections" :key="w.hex" class="ra-row"
-                :class="{ 'top-row': w.totalProfit === maxProfit && maxProfit > 0 }">
+                :class="{ 'top-row': ship.cargo.length && w.totalProfit === maxProfit && maxProfit > 0 }">
               <td class="w-name">{{ w.name }}</td>
               <td class="w-hex">{{ w.hex }}</td>
               <td class="num">{{ w.dist }}</td>
               <td class="w-port">{{ w.starport }}</td>
-              <td class="num profit-cell" :class="w.totalProfit >= 0 ? 'pos' : 'neg'">
+              <td v-if="ship.cargo.length" class="num profit-cell" :class="w.totalProfit >= 0 ? 'pos' : 'neg'">
                 {{ w.totalProfit >= 0 ? '+' : '' }}Cr {{ fmt(w.totalProfit) }}
               </td>
             </tr>
@@ -88,29 +87,31 @@ const auth = useAuthStore()
 const jumpRating = computed(() => ship.ship?.jump_rating ?? 0)
 
 const projections = computed(() => {
-  if (!props.world?.Hex || !jumpRating.value || !ship.cargo.length || !map.worlds.length) return []
+  if (!props.world?.Hex || !jumpRating.value || !map.worlds.length) return []
 
+  const hasCargo = ship.cargo.length > 0
   const results = []
 
   for (const w of map.worlds) {
     const dist = hexDistance(props.world.Hex, w.Hex)
     if (dist === 0 || dist > jumpRating.value) continue
 
-    const snapshots = generateWorldSnapshot({
-      world:        w,
-      sectorName:   props.sectorName,
-      campaignId:   auth.campaign?.id ?? 'route-analysis',
-      tick:         tick.currentTick,
-      activeEvents: [],
-    })
-
-    const snapByDie = {}
-    for (const s of snapshots) snapByDie[s.trade_good_die] = s
-
-    const totalProfit = ship.cargo.reduce((sum, item) => {
-      const snap = snapByDie[item.trade_good_die]
-      return snap ? sum + (snap.sale_price - item.purchase_price) * item.tons : sum
-    }, 0)
+    let totalProfit = 0
+    if (hasCargo) {
+      const snapshots = generateWorldSnapshot({
+        world:        w,
+        sectorName:   props.sectorName,
+        campaignId:   auth.campaign?.id ?? 'route-analysis',
+        tick:         tick.currentTick,
+        activeEvents: [],
+      })
+      const snapByDie = {}
+      for (const s of snapshots) snapByDie[s.trade_good_die] = s
+      totalProfit = ship.cargo.reduce((sum, item) => {
+        const snap = snapByDie[item.trade_good_die]
+        return snap ? sum + (snap.sale_price - item.purchase_price) * item.tons : sum
+      }, 0)
+    }
 
     results.push({
       name:        w.Name || w.Hex,
@@ -121,7 +122,9 @@ const projections = computed(() => {
     })
   }
 
-  return results.sort((a, b) => b.totalProfit - a.totalProfit)
+  return hasCargo
+    ? results.sort((a, b) => b.totalProfit - a.totalProfit)
+    : results.sort((a, b) => a.dist - b.dist || a.name.localeCompare(b.name))
 })
 
 const maxProfit = computed(() =>
