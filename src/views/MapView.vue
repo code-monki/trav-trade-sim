@@ -143,6 +143,7 @@
 
         <!-- ── Overview tab ──────────────────────────────────────────────── -->
         <template v-if="detailTab === 'overview'">
+          <div class="overview-content">
           <section class="field-group" v-if="map.selectedWorld.UWP">
             <h3>Universal World Profile</h3>
             <div class="field-grid">
@@ -236,6 +237,7 @@
               </div>
             </div>
           </section>
+          </div><!-- /overview-content -->
         </template>
 
         <!-- ── Market tab ────────────────────────────────────────────────── -->
@@ -615,6 +617,23 @@ header {
 }
 
 
+/* ── World detail flex column ──────────────────────────────────────────────── */
+.world-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-header { flex-shrink: 0; }
+
+.overview-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ── World detail header ───────────────────────────────────────────────────── */
 .detail-header-right {
   display: flex;
@@ -637,6 +656,7 @@ header {
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
+  flex-shrink: 0;
 }
 
 .dtab {
@@ -676,8 +696,8 @@ header {
   display: flex;
   flex-direction: column;
   gap: 0;
-  height: calc(100vh - 248px);
-  min-height: 420px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -693,28 +713,12 @@ header {
 
 .resize-handle:hover { background: var(--accent-dim); }
 
-/* ── Events tab ────────────────────────────────────────────────────────────── */
-.events-tab-wrap {
-  height: calc(100vh - 248px);
-  min-height: 420px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Cargo tab ─────────────────────────────────────────────────────────────── */
-.cargo-tab-wrap {
-  height: calc(100vh - 248px);
-  min-height: 420px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Jump tab ──────────────────────────────────────────────────────────────── */
+/* ── Events / Cargo / Jump tabs ────────────────────────────────────────────── */
+.events-tab-wrap,
+.cargo-tab-wrap,
 .jump-tab-wrap {
-  height: calc(100vh - 248px);
-  min-height: 420px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;

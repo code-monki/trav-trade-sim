@@ -220,12 +220,14 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── Detail panel ───────────────────────────────────────────────────────────── */
 .detail {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 1.25rem;
 }
 
 .placeholder { color: var(--text-dim); font-size: 0.9rem; }
-.placeholder.large { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1rem; }
+.placeholder.large { display: flex; align-items: center; justify-content: center; flex: 1; font-size: 1rem; }
 
 .world-detail { max-width: 860px; }
 
