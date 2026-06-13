@@ -487,6 +487,7 @@ function handleGlobalKey(e) {
 }
 
 onMounted(async () => {
+  if (auth.campaign?.milieu) map.selectedMilieu = auth.campaign.milieu
   map.loadSectors()
   await tick.loadCalendar()
   await tick.loadActiveEvents()
