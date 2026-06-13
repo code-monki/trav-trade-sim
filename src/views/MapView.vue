@@ -318,7 +318,7 @@
             <RouteAnalysis
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
-              @select-world="detailTab = 'overview'"
+              @select-world="detailTab = 'market'"
             />
           </div>
         </template>

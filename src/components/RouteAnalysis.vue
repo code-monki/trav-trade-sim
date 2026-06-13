@@ -150,7 +150,8 @@ const maxProfit = computed(() =>
 
 function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
 
-function selectWorld(w) {
+async function selectWorld(w) {
+  await ship.updateLocation(w.hex, props.sectorName)
   map.selectWorld(w.worldObj)
   emit('select-world')
 }
