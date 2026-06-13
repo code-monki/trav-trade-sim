@@ -34,28 +34,38 @@
             <p>
               Create a campaign from the login screen to receive a shareable
               campaign code. Other players join with that code and a character name.
-              All accounts require a PIN — there is no password recovery, so keep it
-              safe. The character who creates the campaign is automatically assigned
-              the Referee role.
+              All accounts require a PIN. The character who creates the campaign is
+              automatically assigned the Referee role.
             </p>
             <p>
-              Trade rules (CT7 or T5) are selected at campaign creation and cannot
-              be changed later.
+              At creation a one-time <strong>Recovery Code</strong> is displayed —
+              save it somewhere safe. It can be used from the <strong>Reset PIN</strong>
+              login tab to reset any character's PIN in the campaign. The Referee can
+              generate a new recovery code at any time from Manage Campaign → Campaign tab.
+            </p>
+            <p>
+              Trade rules (CT7 or T5) and the starting milieu/year are selected at
+              campaign creation and cannot be changed later.
             </p>
           </section>
 
           <section class="help-section">
             <h3>Navigating the Galaxy</h3>
             <p>
-              Select a sector from the dropdown to load its worlds. Click any world
-              in the list to open its detail panel. Use the filter box to search by
-              world name or hex coordinate. Worlds with a red or amber travel zone
-              are highlighted accordingly.
+              Select a sector from the dropdown to load its worlds. Use the filter
+              box above the sector list to search by sector name. Click any world
+              in the world list to open its detail panel; filter worlds by name or
+              hex coordinate. Worlds with a red or amber travel zone are highlighted
+              accordingly.
             </p>
             <p>
-              The world detail panel has four tabs: <strong>Overview</strong>,
-              <strong>Market</strong>, <strong>Cargo</strong>, and
-              <strong>Events</strong>.
+              The world detail panel has five tabs: <strong>Overview</strong>,
+              <strong>Market</strong>, <strong>Cargo</strong>,
+              <strong>Events</strong>, and <strong>Jump</strong>.
+            </p>
+            <p>
+              The UWP badge in the world header is a link to the Traveller Map for
+              that world.
             </p>
           </section>
 
@@ -92,10 +102,11 @@
           <section class="help-section">
             <h3>Buying Cargo</h3>
             <p>
-              Go to the <strong>Market</strong> tab and click any trade good row.
-              If you have a ship with available hold space and sufficient credits,
-              a <strong>Buy Cargo</strong> button appears below the table. Click it
-              to open the buy dialog.
+              Go to the <strong>Market</strong> tab. Each trade good row has a
+              <strong>Buy</strong> button on the right — click it to open the
+              purchase dialog directly. The button is only shown when you have a
+              ship assigned and trading authorization; it is disabled for goods
+              with no stock available.
             </p>
             <p>
               The dialog shows the purchase price, available quantity, your free
@@ -127,8 +138,24 @@
               Can Trade checkbox).
             </p>
             <p>
-              If you cannot see the Buy Cargo button or the Sell button is
-              disabled, ask your Referee to check your trading authorization.
+              If the Buy button is not visible or the Sell button is disabled,
+              ask your Referee to check your trading authorization.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Jump Tab</h3>
+            <p>
+              The <strong>Jump</strong> tab (keyboard <kbd>J</kbd>) shows all
+              worlds reachable from the current world within your ship's jump range,
+              sorted by projected profit. Each row shows the destination world, its
+              UWP, the best trade good to carry, projected profit, and hex distance.
+            </p>
+            <p>
+              Click <strong>Select</strong> on any row to commit that world as your
+              ship's next location and switch to the Market tab for that destination.
+              This represents completing the jump — use it when you arrive at a new
+              world.
             </p>
           </section>
 
@@ -140,25 +167,27 @@
           <section class="help-section">
             <h3>Market Tab</h3>
             <p>
-              Shows current buy and sell prices for all 36 Classic Traveller trade
-              goods. Price colours indicate deviation from the CT7 base price —
-              green means below base (buyer's market), red means above
-              (seller's market).
+              Shows current buy and sell prices for all trade goods. Price colours
+              indicate deviation from the CT7 base price — green means below base
+              (buyer's market), red means above (seller's market).
             </p>
             <p>
-              Click any row to select a good and open its price chart. Goods
-              affected by an active market event are flagged with ▲ or ▼ in the
-              Event column. Market data is generated lazily: prices are only
-              recorded for a world when its Market tab is first opened. On the
-              first visit, prices are backfilled for the entire current year so
-              charts have immediate context.
+              Goods affected by an active market event are highlighted with a left
+              amber border; the event details appear in the banner above the table.
+              Market data is generated lazily — prices are first recorded when the
+              Market tab is opened, and backfilled for the entire current year on
+              that first visit so charts have immediate context.
             </p>
             <table class="col-table">
               <thead><tr><th>Column</th><th>Description</th></tr></thead>
               <tbody>
                 <tr>
+                  <td><strong>Plot</strong></td>
+                  <td>Checkbox — tick to add this good to the price chart below the table. Multiple goods can be plotted simultaneously.</td>
+                </tr>
+                <tr>
                   <td><strong>Good</strong></td>
-                  <td>Trade good name from the CT Book 2 table.</td>
+                  <td>Trade good name.</td>
                 </tr>
                 <tr>
                   <td><strong>Die</strong></td>
@@ -178,11 +207,7 @@
                 </tr>
                 <tr>
                   <td><strong>Qty (t)</strong></td>
-                  <td>Available tons this tick, rolled per CT Book 2. Stock does not carry over — a fresh quantity is rolled next tick.</td>
-                </tr>
-                <tr>
-                  <td><strong>Event</strong></td>
-                  <td>▲ price pushed up by an active event; ▼ pushed down.</td>
+                  <td>Available tons this tick. Stock does not carry over — a fresh quantity is rolled each tick.</td>
                 </tr>
               </tbody>
             </table>
@@ -190,15 +215,20 @@
 
           <section class="help-section">
             <h3>Price Charts</h3>
-            <p>Three time frames are available via the tabs above the chart:</p>
+            <p>
+              Check any row's <strong>Plot</strong> checkbox to add it to the chart.
+              Multiple goods can be plotted at once as a line chart for comparison.
+              When only one good is selected, three time frames are available:
+            </p>
             <ul>
               <li><strong>Weekly</strong> — one point per tick; line chart of purchase price.</li>
               <li><strong>Monthly</strong> — one candlestick per Imperial month (4 ticks).</li>
               <li><strong>Annual</strong> — one candlestick per Imperial year (48 ticks).</li>
             </ul>
             <p>
-              Event markers appear at the tick the event fired.
+              Event markers appear on the weekly chart at the tick the event fired.
               Blue circles = Minor, amber squares = Major, red arrows = Crisis.
+              Drag the divider between the table and chart to resize both panels.
             </p>
           </section>
 
@@ -283,6 +313,21 @@
               add, edit, or remove skills here. Skills are free-form text — any
               name is valid. Trade-relevant skills include Broker, Trader, Liaison,
               Admin, Steward, and Streetwise.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Campaign Tab &amp; Recovery Code</h3>
+            <p>
+              The <strong>Campaign</strong> tab shows campaign details and lets you
+              generate a new recovery code. Use this if the original code was lost.
+              Generating a new code immediately invalidates the old one.
+            </p>
+            <p>
+              The recovery code can be used from the <strong>Reset PIN</strong> tab
+              on the login screen to reset any character's PIN without knowing the
+              old PIN. It is campaign-scoped, so the Referee can use it to help
+              locked-out players as well.
             </p>
           </section>
 
