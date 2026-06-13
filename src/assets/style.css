@@ -23,7 +23,20 @@
   --gap:           1rem;
 }
 
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+}
 
 /* ── Skip link (WCAG 2.4.1) ─────────────────────────────────────────────────── */
 .skip-link {
@@ -55,7 +68,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -229,7 +242,13 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 .placeholder { color: var(--text-dim); font-size: 0.9rem; }
 .placeholder.large { display: flex; align-items: center; justify-content: center; flex: 1; font-size: 1rem; }
 
-.world-detail { max-width: 860px; }
+.world-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
 .detail-header {
   display: flex;

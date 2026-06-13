@@ -618,14 +618,6 @@ header {
 
 
 /* ── World detail flex column ──────────────────────────────────────────────── */
-.world-detail {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .detail-header { flex-shrink: 0; }
 
 .overview-content {
