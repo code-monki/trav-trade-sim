@@ -122,15 +122,12 @@
             </div>
           </div>
           <div class="detail-header-right">
-            <div class="uwp-badge">
-              <span class="uwp-code">{{ map.selectedWorld.UWP }}</span>
-              <span class="zone-badge" :class="map.zoneBadgeClass">{{ map.travelZoneLabel }}</span>
-            </div>
             <a :href="travellerMapUrl"
                target="_blank" rel="noopener noreferrer"
-               class="tmap-link"
+               class="uwp-badge uwp-link"
                title="View on Traveller Map">
-              Traveller Map ↗
+              <span class="uwp-code">{{ map.selectedWorld.UWP }} ↗</span>
+              <span class="zone-badge" :class="map.zoneBadgeClass">{{ map.travelZoneLabel }}</span>
             </a>
           </div>
         </div>
@@ -640,14 +637,12 @@ header {
   gap: 0.4rem;
 }
 
-.tmap-link {
-  font-size: 0.72rem;
-  color: var(--text-dim);
+.uwp-link {
   text-decoration: none;
-  letter-spacing: 0.03em;
-  transition: color 0.15s;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
-.tmap-link:hover { color: var(--accent); }
+.uwp-link:hover { opacity: 0.8; }
 
 /* ── Detail tabs ───────────────────────────────────────────────────────────── */
 .detail-tabs {
