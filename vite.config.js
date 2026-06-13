@@ -8,6 +8,9 @@ export default defineConfig({
   base: '/trav-trade-sim/',
   test: {
     environment: 'node',
+    environmentMatchGlobs: [
+      ['tests/components/**', 'happy-dom'],
+    ],
     include: ['tests/**/*.test.js'],
     coverage: {
       provider: 'v8',

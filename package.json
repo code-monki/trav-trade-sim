@@ -19,8 +19,12 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@pinia/testing": "^0.1.2",
+    "@playwright/test": "^1.60.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vitest/coverage-v8": "^2.1.9",
+    "@vue/test-utils": "^2.4.11",
+    "happy-dom": "^20.10.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.9"
   }
