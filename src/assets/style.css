@@ -125,6 +125,7 @@ header h1 {
 .layout {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -238,6 +239,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── Detail panel ───────────────────────────────────────────────────────────── */
 .detail {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;

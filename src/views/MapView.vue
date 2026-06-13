@@ -719,11 +719,11 @@ header {
 
 .resize-handle {
   flex-shrink: 0;
-  height: 8px;
+  height: 18px;
   cursor: row-resize;
   background: var(--border);
   border-radius: 4px;
-  margin: 3px 0;
+  margin: 2px 0;
   transition: background 0.15s;
   touch-action: none;
 }
