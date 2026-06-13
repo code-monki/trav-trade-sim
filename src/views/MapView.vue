@@ -245,23 +245,11 @@
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
               :charted-dies="[...chartedGoods]"
+              :show-buy-button="ship.hasShip && ship.canTrade"
               @select-good="onGoodSelect"
               @toggle-chart="onToggleChart"
+              @buy-good="onBuyGoodDirect"
             />
-
-            <!-- Buy action bar: shown when a good row is selected and player has a ship -->
-            <div v-if="selectedGood && ship.hasShip" class="buy-bar">
-              <span class="buy-good-name">{{ selectedGood.trade_good_name }}</span>
-              <span class="buy-price-label">Cr {{ fmt(selectedGood.purchase_price) }}/t</span>
-              <span class="buy-hold-info">{{ ship.cargoAvailable }}t free · Cr {{ fmt(ship.ship?.credits) }}</span>
-              <button
-                class="buy-btn"
-                :disabled="!canBuy || buyLoading"
-                @click="showBuyDialog = true"
-              >
-                Buy Cargo
-              </button>
-            </div>
 
             <!-- Chart: shown when any goods are checked -->
             <template v-if="chartedGoods.size > 0">
@@ -389,15 +377,6 @@ const DETAIL_TABS = [
   { key: 'jump',     label: 'Jump'     },
 ]
 
-const canBuy = computed(() =>
-  ship.hasShip &&
-  ship.canTrade &&
-  !!selectedGood.value &&
-  selectedGood.value.qty_available > 0 &&
-  ship.cargoAvailable > 0 &&
-  (ship.ship?.credits ?? 0) >= selectedGood.value.purchase_price
-)
-
 function fmt(n) { return (n ?? 0).toLocaleString() }
 
 const chartedGoodsArray = computed(() =>
@@ -508,6 +487,11 @@ function onWorldSelect(world) {
 
 function onGoodSelect(row) {
   selectedGood.value = row
+}
+
+function onBuyGoodDirect(row) {
+  selectedGood.value = row
+  showBuyDialog.value = true
 }
 
 async function onBuyConfirm({ tons }) {
@@ -735,48 +719,4 @@ header {
   flex-direction: column;
 }
 
-/* ── Buy action bar (Market tab, appears when a good is selected) ──────────── */
-.buy-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.4rem 0.6rem;
-  background: var(--bg-item);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  flex-shrink: 0;
-}
-
-.buy-good-name {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text);
-  flex: 1;
-}
-
-.buy-price-label {
-  font-family: monospace;
-  font-size: 0.82rem;
-  color: var(--text-dim);
-}
-
-.buy-hold-info {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-
-.buy-btn {
-  background: var(--accent-dim);
-  border: none;
-  color: #fff;
-  border-radius: var(--radius);
-  padding: 0.3rem 0.8rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.buy-btn:hover:not(:disabled) { background: var(--accent); }
-.buy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>

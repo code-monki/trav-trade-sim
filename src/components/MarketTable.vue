@@ -47,6 +47,7 @@
               <th @click="setSort('qty_available')" class="sortable num">
                 Qty (t) {{ sortIcon('qty_available') }}
               </th>
+              <th v-if="showBuyButton"></th>
             </tr>
           </thead>
           <tbody>
@@ -71,6 +72,13 @@
                 {{ row.spread >= 0 ? '+' : '' }}{{ fmt(row.spread) }}
               </td>
               <td class="num">{{ row.qty_available.toLocaleString() }}</td>
+              <td v-if="showBuyButton" class="buy-col" @click.stop>
+                <button class="buy-row-btn"
+                        :disabled="row.qty_available <= 0"
+                        @click="$emit('buy-good', row)">
+                  Buy
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -85,12 +93,13 @@ import { useTickStore } from '../stores/tick.js'
 import { CT2_TRADE_GOODS } from '../lib/traveller-data.js'
 
 const props = defineProps({
-  world:       { type: Object,  required: true },
-  sectorName:  { type: String,  required: true },
-  chartedDies: { type: Array,   default: () => [] },
+  world:         { type: Object,  required: true },
+  sectorName:    { type: String,  required: true },
+  chartedDies:   { type: Array,   default: () => [] },
+  showBuyButton: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select-good', 'toggle-chart'])
+const emit = defineEmits(['select-good', 'toggle-chart', 'buy-good'])
 
 const tick        = useTickStore()
 const filter      = ref('')
@@ -341,4 +350,27 @@ function priceClass(price, base) {
   padding: 1.5rem 0;
   text-align: center;
 }
+
+.buy-col {
+  width: 4rem;
+  text-align: center;
+  padding: 0.25rem 0.5rem !important;
+}
+
+.buy-row-btn {
+  background: var(--accent-dim);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.buy-row-btn:hover:not(:disabled) { background: var(--accent); }
+.buy-row-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 </style>
