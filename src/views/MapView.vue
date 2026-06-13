@@ -464,6 +464,7 @@ onMounted(async () => {
   map.loadSectors()
   await tick.loadCalendar()
   await tick.loadActiveEvents()
+  ship.loadShip(auth.player?.id, auth.campaign?.id)
   document.addEventListener('keydown', handleGlobalKey)
 })
 
