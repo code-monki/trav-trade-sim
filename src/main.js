@@ -4,9 +4,11 @@ import router from './router/index.js'
 import App from './App.vue'
 import './assets/style.css'
 
-// iOS WebKit scrolls the document even inside position:fixed containers.
-// Walk up from the touch target; only allow the event if we find a
-// genuinely scrollable ancestor (has overflow auto/scroll AND actual overflow).
+// iOS WebKit (Safari, Chrome, Firefox) scrolls the document even inside
+// position:fixed containers. We intercept in the CAPTURE phase so this
+// fires before any element listener (including lightweight-charts, which
+// calls stopPropagation on touch events — that would block a bubble-phase
+// listener on document from ever receiving the event).
 document.addEventListener('touchmove', (e) => {
   let node = e.target
   while (node && node !== document.body) {
@@ -18,7 +20,7 @@ document.addEventListener('touchmove', (e) => {
     node = node.parentElement
   }
   e.preventDefault()
-}, { passive: false })
+}, { passive: false, capture: true })
 
 const app = createApp(App)
 
