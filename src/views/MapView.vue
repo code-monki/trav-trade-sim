@@ -37,6 +37,7 @@
           :is-referee="auth.isReferee"
           @themes="showThemes = true"
           @about="showAbout = true"
+          @tutorials="showTutorials = true"
           @help="showHelp = true"
           @manage-character="showCharacter = true"
           @manage-campaign="router.push({ name: 'referee' })"
@@ -319,10 +320,11 @@
   </div>
 
   <!-- Dialogs -->
-  <ThemeDialog     v-model="showThemes"    />
-  <AboutDialog     v-model="showAbout"     />
-  <HelpDialog      v-model="showHelp"      />
-  <CharacterDialog v-model="showCharacter" />
+  <ThemeDialog     v-model="showThemes"     />
+  <AboutDialog     v-model="showAbout"      />
+  <TutorialDialog  v-model="showTutorials"  />
+  <HelpDialog      v-model="showHelp"       />
+  <CharacterDialog v-model="showCharacter"  />
 
   <!-- Error banner -->
   <div v-if="map.error || tick.error || ship.error" class="error-banner">
@@ -343,10 +345,11 @@ import EventsHistory  from '../components/EventsHistory.vue'
 import CargoHold      from '../components/CargoHold.vue'
 import BuyDialog      from '../components/BuyDialog.vue'
 import HamburgerMenu  from '../components/HamburgerMenu.vue'
-import AboutDialog     from '../components/AboutDialog.vue'
-import HelpDialog      from '../components/HelpDialog.vue'
-import ThemeDialog     from '../components/ThemeDialog.vue'
-import CharacterDialog from '../components/CharacterDialog.vue'
+import AboutDialog      from '../components/AboutDialog.vue'
+import HelpDialog       from '../components/HelpDialog.vue'
+import ThemeDialog      from '../components/ThemeDialog.vue'
+import CharacterDialog  from '../components/CharacterDialog.vue'
+import TutorialDialog   from '../components/TutorialDialog.vue'
 import RouteAnalysis   from '../components/RouteAnalysis.vue'
 import { useShipStore } from '../stores/ship.js'
 
@@ -368,6 +371,7 @@ const chartedGoods   = ref(new Set())
 const showAbout      = ref(false)
 const showHelp       = ref(false)
 const showThemes     = ref(false)
+const showTutorials  = ref(false)
 const showCharacter  = ref(false)
 const showBuyDialog  = ref(false)
 const buyLoading     = ref(false)
@@ -475,7 +479,7 @@ onUnmounted(() => {
 function handleGlobalKey(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
       || e.target.isContentEditable) return
-  if (showAbout.value || showHelp.value) return   // dialogs handle Esc themselves
+  if (showAbout.value || showHelp.value || showTutorials.value) return   // dialogs handle Esc themselves
 
   switch (e.key) {
     case '?': showHelp.value = true; break

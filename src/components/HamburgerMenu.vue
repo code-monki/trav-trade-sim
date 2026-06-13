@@ -10,6 +10,7 @@
     <div v-if="isOpen" class="hm-dropdown" role="menu">
       <button class="hm-item" role="menuitem" @click="select('themes')">Themes</button>
       <button class="hm-item" role="menuitem" @click="select('about')">About</button>
+      <button class="hm-item" role="menuitem" @click="select('tutorials')">Tutorials</button>
       <button class="hm-item" role="menuitem" @click="select('help')">Help &amp; User Manual</button>
       <div class="hm-divider" role="separator" />
       <button class="hm-item" role="menuitem" @click="select('manage-character')">
@@ -29,7 +30,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const props  = defineProps({ isReferee: { type: Boolean, default: false } })
-const emit   = defineEmits(['themes', 'about', 'help', 'manage-character', 'manage-campaign', 'signout'])
+const emit   = defineEmits(['themes', 'about', 'tutorials', 'help', 'manage-character', 'manage-campaign', 'signout'])
 const isOpen = ref(false)
 const wrapEl = ref(null)
 

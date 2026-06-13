@@ -178,10 +178,16 @@
     @close="recoveryCode = null; router.push({ name: 'map' })"
   />
 
+    <button class="tutorials-link" @click="showTutorials = true">
+      Tutorials &amp; Workflows
+    </button>
+
     <p class="login-footer">
       Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing Ltd. · Copyright 1977–Present
     </p>
   </div>
+
+  <TutorialDialog v-model="showTutorials" />
 </template>
 
 <script setup>
@@ -190,13 +196,15 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { MILIEUS } from '../lib/traveller-data.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
+import TutorialDialog     from '../components/TutorialDialog.vue'
 
 const auth   = useAuthStore()
 const router = useRouter()
 
-const mode         = ref('login')
-const recoveryCode = ref(null)   // shown once after campaign creation
-const resetSuccess = ref(false)
+const mode           = ref('login')
+const recoveryCode   = ref(null)   // shown once after campaign creation
+const resetSuccess   = ref(false)
+const showTutorials  = ref(false)
 
 const form = reactive({
   code:          '',
@@ -462,8 +470,23 @@ async function doReset() {
   font-size: 0.82rem;
 }
 
+.tutorials-link {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 0.45rem 1.1rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 440px;
+}
+.tutorials-link:hover { border-color: var(--accent-dim); color: var(--accent); }
+
 .login-footer {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   font-size: 0.68rem;
   color: var(--text-dim);
   text-align: center;
