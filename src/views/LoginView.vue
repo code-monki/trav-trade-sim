@@ -25,7 +25,8 @@
         <div class="field-row">
           <label>Campaign Code</label>
           <input v-model="form.code" type="text" placeholder="e.g. SPINWARD-42"
-                 autocomplete="off" spellcheck="false" required />
+                 autocomplete="off" spellcheck="false" required
+                 @input="form.code = form.code.toUpperCase().replace(/\s+/g,'-')" />
         </div>
         <div class="field-row">
           <label>Character Name</label>
@@ -48,7 +49,8 @@
         <div class="field-row">
           <label>Campaign Code</label>
           <input v-model="form.code" type="text" placeholder="From your Referee"
-                 autocomplete="off" spellcheck="false" required />
+                 autocomplete="off" spellcheck="false" required
+                 @input="form.code = form.code.toUpperCase().replace(/\s+/g,'-')" />
         </div>
         <div class="field-row">
           <label>Character Name</label>
@@ -141,7 +143,8 @@
         <div class="field-row">
           <label>Campaign Code</label>
           <input v-model="form.code" type="text" placeholder="e.g. SPINWARD-42"
-                 autocomplete="off" spellcheck="false" required />
+                 autocomplete="off" spellcheck="false" required
+                 @input="form.code = form.code.toUpperCase().replace(/\s+/g,'-')" />
         </div>
         <div class="field-row">
           <label>Character Name</label>
