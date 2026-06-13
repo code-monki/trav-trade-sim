@@ -44,6 +44,7 @@
               <th class="num">Jump</th>
               <th>Port</th>
               <th v-if="ship.cargo.length" class="num">Projected Profit</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -55,6 +56,9 @@
               <td class="w-port">{{ w.starport }}</td>
               <td v-if="ship.cargo.length" class="num profit-cell" :class="w.totalProfit >= 0 ? 'pos' : 'neg'">
                 {{ w.totalProfit >= 0 ? '+' : '' }}Cr {{ fmt(w.totalProfit) }}
+              </td>
+              <td class="select-col">
+                <button class="select-btn" @click.stop="selectWorld(w)">→</button>
               </td>
             </tr>
           </tbody>
@@ -82,6 +86,8 @@ const props = defineProps({
   world:      { type: Object, default: null },
   sectorName: { type: String, default: '' },
 })
+
+const emit = defineEmits(['select-world'])
 
 const ship = useShipStore()
 const map  = useMapStore()
@@ -129,6 +135,7 @@ const projections = computed(() => {
       dist,
       starport:    (w.UWP || '?')[0],
       totalProfit,
+      worldObj:    w,
     })
   }
 
@@ -142,6 +149,11 @@ const maxProfit = computed(() =>
 )
 
 function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
+
+function selectWorld(w) {
+  map.selectWorld(w.worldObj)
+  emit('select-world')
+}
 </script>
 
 <style scoped>
@@ -304,6 +316,20 @@ function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
 .profit-cell { font-family: monospace; font-weight: 600; }
 .pos { color: var(--green); }
 .neg { color: var(--red); }
+
+.select-col { text-align: right; padding-right: 0.5rem; }
+
+.select-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.select-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
 
 /* ── Disclaimer ─────────────────────────────────────────────────────────── */
 .ra-disclaimer {
