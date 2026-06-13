@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase.js'
+import { useShipStore } from './ship.js'
 
 const SESSION_KEY = 'tts_session'
 
@@ -118,6 +119,11 @@ export const useAuthStore = defineStore('auth', () => {
       campaign.value = data.campaign
       player.value   = data.player
       saveSession(data.campaign, data.player)
+
+      // Load the ship assigned to this player (non-blocking — ship store
+      // handles the null case gracefully if no ship is assigned yet)
+      useShipStore().loadShip(data.player.id, data.campaign.id)
+
       return { ok: true }
     } catch (e) {
       error.value = e.message
@@ -132,6 +138,7 @@ export const useAuthStore = defineStore('auth', () => {
     campaign.value = null
     player.value   = null
     clearSession()
+    useShipStore().clear()
   }
 
   return {

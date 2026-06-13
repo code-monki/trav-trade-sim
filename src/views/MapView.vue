@@ -34,9 +34,11 @@
         <span class="session-campaign">{{ auth.campaign?.code }}</span>
         <span v-if="auth.isReferee" class="role-badge">REF</span>
         <HamburgerMenu
+          :is-referee="auth.isReferee"
           @themes="showThemes = true"
           @about="showAbout = true"
           @help="showHelp = true"
+          @manage-campaign="router.push('/referee')"
           @signout="doLogout"
         />
       </div>

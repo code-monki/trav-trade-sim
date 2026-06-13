@@ -11,6 +11,12 @@
       <button class="hm-item" role="menuitem" @click="select('themes')">Themes</button>
       <button class="hm-item" role="menuitem" @click="select('about')">About</button>
       <button class="hm-item" role="menuitem" @click="select('help')">Help &amp; User Manual</button>
+      <template v-if="isReferee">
+        <div class="hm-divider" role="separator" />
+        <button class="hm-item referee" role="menuitem" @click="select('manage-campaign')">
+          Manage Campaign
+        </button>
+      </template>
       <div class="hm-divider" role="separator" />
       <button class="hm-item danger" role="menuitem" @click="select('signout')">Sign Out</button>
     </div>
@@ -20,7 +26,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const emit   = defineEmits(['themes', 'about', 'help', 'signout'])
+const props  = defineProps({ isReferee: { type: Boolean, default: false } })
+const emit   = defineEmits(['themes', 'about', 'help', 'manage-campaign', 'signout'])
 const isOpen = ref(false)
 const wrapEl = ref(null)
 
@@ -106,8 +113,9 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 }
 
 .hm-item:hover      { background: var(--bg-item); }
-.hm-item.danger     { color: var(--red); }
+.hm-item.danger       { color: var(--red); }
 .hm-item.danger:hover { background: rgba(217,58,58,0.08); }
+.hm-item.referee      { color: var(--accent); }
 
 .hm-divider {
   height: 1px;

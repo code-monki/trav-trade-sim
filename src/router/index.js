@@ -13,6 +13,12 @@ const routes = [
     component: () => import('../views/MapView.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/referee',
+    name: 'referee',
+    component: () => import('../views/RefereeView.vue'),
+    meta: { requiresAuth: true, requiresReferee: true },
+  },
 ]
 
 const router = createRouter({
@@ -26,6 +32,9 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
   if (to.name === 'login' && auth.isAuthenticated) {
+    return { name: 'map' }
+  }
+  if (to.meta.requiresReferee && !auth.isReferee) {
     return { name: 'map' }
   }
 })
