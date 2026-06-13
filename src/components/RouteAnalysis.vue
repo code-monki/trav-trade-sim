@@ -6,10 +6,6 @@
       <p class="dim">Ask your referee to assign you to a vessel.</p>
     </div>
 
-    <div v-else-if="!jumpRating" class="ra-notice">
-      Jump rating not configured — ask your referee to set it on the ship.
-    </div>
-
     <div v-else-if="!map.worlds.length" class="ra-state">
       <p class="dim">Load a sector to see reachable worlds.</p>
     </div>
@@ -18,9 +14,17 @@
 
       <div class="ra-header">
         <span class="ra-origin">
-          Jump-{{ jumpRating }} from <strong>{{ world?.Name || world?.Hex }}</strong>
+          From <strong>{{ world?.Name || world?.Hex }}</strong>
         </span>
-        <span class="ra-count">{{ projections.length }} worlds in range</span>
+        <div class="ra-controls">
+          <label class="jump-label">Jump</label>
+          <div class="jump-stepper">
+            <button class="step-btn" :disabled="localJump <= 1" @click="localJump--">−</button>
+            <span class="jump-val">{{ localJump }}</span>
+            <button class="step-btn" :disabled="localJump >= 6" @click="localJump++">+</button>
+          </div>
+          <span class="ra-count">{{ projections.length }} worlds</span>
+        </div>
       </div>
 
       <div v-if="!ship.cargo.length" class="ra-notice">
@@ -66,7 +70,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useShipStore } from '../stores/ship.js'
 import { useMapStore  } from '../stores/map.js'
 import { useTickStore } from '../stores/tick.js'
@@ -84,17 +88,23 @@ const map  = useMapStore()
 const tick = useTickStore()
 const auth = useAuthStore()
 
-const jumpRating = computed(() => ship.ship?.jump_rating ?? 0)
+// Local jump rating — seeds from ship config but user can adjust freely
+const localJump = ref(ship.ship?.jump_rating || 1)
+
+// Keep in sync if the ship's configured rating changes (e.g. referee updates it)
+watch(() => ship.ship?.jump_rating, (val) => {
+  if (val) localJump.value = val
+})
 
 const projections = computed(() => {
-  if (!props.world?.Hex || !jumpRating.value || !map.worlds.length) return []
+  if (!props.world?.Hex || !localJump.value || !map.worlds.length) return []
 
   const hasCargo = ship.cargo.length > 0
   const results = []
 
   for (const w of map.worlds) {
     const dist = hexDistance(props.world.Hex, w.Hex)
-    if (dist === 0 || dist > jumpRating.value) continue
+    if (dist === 0 || dist > localJump.value) continue
 
     let totalProfit = 0
     if (hasCargo) {
@@ -160,6 +170,7 @@ function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
   border: 1px solid rgba(232, 160, 32, 0.3);
   border-radius: var(--radius);
   padding: 0.5rem 0.75rem;
+  flex-shrink: 0;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
@@ -172,11 +183,63 @@ function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
   border-radius: var(--radius);
   padding: 0.45rem 0.75rem;
   flex-shrink: 0;
+  gap: 0.75rem;
 }
 
 .ra-origin {
   font-size: 0.82rem;
   color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ra-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.jump-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+
+.jump-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.1rem 0.3rem;
+}
+
+.step-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+  border-radius: 2px;
+}
+.step-btn:hover:not(:disabled) { color: var(--accent); }
+.step-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.jump-val {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: monospace;
+  color: var(--text);
+  min-width: 1rem;
+  text-align: center;
 }
 
 .ra-count {
