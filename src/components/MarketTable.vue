@@ -24,6 +24,8 @@
         <span class="row-count">{{ filteredRows.length }} / {{ rows.length }} goods</span>
       </div>
 
+      <p class="chart-hint">Check a good to plot its price history below the table.</p>
+
       <div class="table-scroll">
         <table class="market-table">
           <thead>
@@ -251,6 +253,13 @@ function priceClass(price, base) {
 .market-search:focus { border-color: var(--accent-dim); }
 
 .row-count { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+
+.chart-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0;
+}
 
 /* Table */
 .table-scroll {
