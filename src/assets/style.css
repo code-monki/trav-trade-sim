@@ -204,6 +204,7 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 .world-list {
   list-style: none;
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
 }
 

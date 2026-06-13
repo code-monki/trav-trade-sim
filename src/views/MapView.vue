@@ -262,6 +262,7 @@
                    :aria-valuemin="MIN_CHART"
                    :aria-valuemax="600"
                    @mousedown.prevent="startResize"
+                   @touchstart.prevent="startResizeTouch"
                    @keydown="resizeWithKeys" />
               <PriceChart
                 :world-hex="map.selectedWorld.Hex"
@@ -419,7 +420,7 @@ function startResize(e) {
 }
 
 function doResize(e) {
-  const delta     = _resizeStartY - e.clientY   // drag up → chart grows
+  const delta     = _resizeStartY - e.clientY
   const available = marketLayoutEl.value?.clientHeight ?? 600
   chartHeight.value = Math.max(MIN_CHART,
     Math.min(_resizeStartH + delta, available - MIN_TABLE - 10))
@@ -428,6 +429,26 @@ function doResize(e) {
 function stopResize() {
   document.removeEventListener('mousemove', doResize)
   document.removeEventListener('mouseup',  stopResize)
+}
+
+function startResizeTouch(e) {
+  _resizeStartY = e.touches[0].clientY
+  _resizeStartH = chartHeight.value
+  document.addEventListener('touchmove', doResizeTouch, { passive: false })
+  document.addEventListener('touchend',  stopResizeTouch)
+}
+
+function doResizeTouch(e) {
+  e.preventDefault()
+  const delta     = _resizeStartY - e.touches[0].clientY
+  const available = marketLayoutEl.value?.clientHeight ?? 600
+  chartHeight.value = Math.max(MIN_CHART,
+    Math.min(_resizeStartH + delta, available - MIN_TABLE - 10))
+}
+
+function stopResizeTouch() {
+  document.removeEventListener('touchmove', doResizeTouch)
+  document.removeEventListener('touchend',  stopResizeTouch)
 }
 
 // WCAG 2.5.7: keyboard alternative for drag resize (arrow keys, 10px steps)
@@ -445,6 +466,8 @@ function resizeWithKeys(e) {
 onUnmounted(() => {
   document.removeEventListener('mousemove', doResize)
   document.removeEventListener('mouseup',  stopResize)
+  document.removeEventListener('touchmove', doResizeTouch)
+  document.removeEventListener('touchend',  stopResizeTouch)
   document.removeEventListener('keydown',  handleGlobalKey)
 })
 
@@ -624,6 +647,7 @@ header {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ── World detail header ───────────────────────────────────────────────────── */
@@ -701,6 +725,7 @@ header {
   border-radius: 4px;
   margin: 3px 0;
   transition: background 0.15s;
+  touch-action: none;
 }
 
 .resize-handle:hover { background: var(--accent-dim); }

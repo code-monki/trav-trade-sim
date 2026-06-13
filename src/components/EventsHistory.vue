@@ -159,6 +159,7 @@ const filtered = computed(() => {
 /* List */
 .events-list {
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
   display: flex;

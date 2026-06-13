@@ -320,6 +320,7 @@ watch(() => themeStore.revision, applyThemeToChart)
   padding: 0.75rem;
   flex-shrink: 0;
   overflow: hidden;
+  touch-action: none;
 }
 
 .chart-header {

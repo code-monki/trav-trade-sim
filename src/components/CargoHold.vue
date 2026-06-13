@@ -349,6 +349,7 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 /* ── Cargo table ────────────────────────────────────────────────────────── */
 .cargo-table-wrap {
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
   border: 1px solid var(--border);
   border-radius: var(--radius);
