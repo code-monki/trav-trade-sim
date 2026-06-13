@@ -348,6 +348,7 @@ const SHORTCUTS = [
   { key: 'M',   action: 'Switch to Market tab' },
   { key: 'C',   action: 'Switch to Cargo tab' },
   { key: 'E',   action: 'Switch to Events tab' },
+  { key: 'J',   action: 'Switch to Jump tab' },
   { key: 'T',   action: 'Advance Tick (Referee only)' },
   { key: 'Esc', action: 'Close dialog' },
 ]

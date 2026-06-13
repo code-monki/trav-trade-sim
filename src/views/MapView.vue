@@ -308,6 +308,16 @@
             />
           </div>
         </template>
+
+        <!-- ── Jump tab ──────────────────────────────────────────────────── -->
+        <template v-if="detailTab === 'jump'">
+          <div class="jump-tab-wrap">
+            <RouteAnalysis
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
       </div>
     </main>
   </div>
@@ -341,6 +351,7 @@ import AboutDialog     from '../components/AboutDialog.vue'
 import HelpDialog      from '../components/HelpDialog.vue'
 import ThemeDialog     from '../components/ThemeDialog.vue'
 import CharacterDialog from '../components/CharacterDialog.vue'
+import RouteAnalysis   from '../components/RouteAnalysis.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
@@ -363,6 +374,7 @@ const DETAIL_TABS = [
   { key: 'market',   label: 'Market'   },
   { key: 'cargo',    label: 'Cargo'    },
   { key: 'events',   label: 'Events'   },
+  { key: 'jump',     label: 'Jump'     },
 ]
 
 const canBuy = computed(() =>
@@ -441,6 +453,7 @@ function handleGlobalKey(e) {
     case 'm': case 'M': if (map.selectedWorld) detailTab.value = 'market';   break
     case 'e': case 'E': if (map.selectedWorld) detailTab.value = 'events';   break
     case 'c': case 'C': if (map.selectedWorld) detailTab.value = 'cargo';    break
+    case 'j': case 'J': if (map.selectedWorld) detailTab.value = 'jump';     break
     case 't': case 'T':
       if (auth.isReferee && !tick.loading) doAdvanceTick()
       break
@@ -679,6 +692,15 @@ header {
 
 /* ── Cargo tab ─────────────────────────────────────────────────────────────── */
 .cargo-tab-wrap {
+  height: calc(100vh - 248px);
+  min-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Jump tab ──────────────────────────────────────────────────────────────── */
+.jump-tab-wrap {
   height: calc(100vh - 248px);
   min-height: 420px;
   overflow: hidden;
