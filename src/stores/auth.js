@@ -61,7 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
       campaign.value = data.campaign
       player.value   = data.player
       saveSession(data.campaign, data.player)
-      return { ok: true }
+      return { ok: true, recoveryCode: data.recovery_code }
     } catch (e) {
       error.value = e.message
       return { ok: false, error: e.message }
@@ -133,6 +133,29 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // ── Reset PIN with recovery code ─────────────────────────────────────────────
+  async function resetPin({ code, characterName, recoveryCode, newPin }) {
+    loading.value = true
+    error.value   = null
+    try {
+      requireSupabase()
+      const { data, error: rpcError } = await supabase.rpc('reset_pin_with_recovery_code', {
+        p_code:      code,
+        p_char_name: characterName,
+        p_recovery:  recoveryCode,
+        p_new_pin:   newPin,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      if (data?.error) throw new Error(data.error)
+      return { ok: true }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ── Log out ─────────────────────────────────────────────────────────────────
   function logout() {
     campaign.value = null
@@ -144,6 +167,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     campaign, player, loading, error,
     isAuthenticated, isReferee,
-    clearError, createCampaign, joinCampaign, login, logout,
+    clearError, createCampaign, joinCampaign, login, resetPin, logout,
   }
 })

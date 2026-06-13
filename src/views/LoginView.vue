@@ -11,6 +11,7 @@
         <button :class="['tab', { active: mode === 'login' }]"   @click="setMode('login')">Sign In</button>
         <button :class="['tab', { active: mode === 'join' }]"    @click="setMode('join')">Join Campaign</button>
         <button :class="['tab', { active: mode === 'create' }]"  @click="setMode('create')">New Campaign</button>
+        <button :class="['tab', { active: mode === 'reset' }]"   @click="setMode('reset')">Reset PIN</button>
       </div>
 
       <!-- Error banner -->
@@ -70,7 +71,7 @@
       </form>
 
       <!-- ── New Campaign ── -->
-      <form v-else @submit.prevent="doCreate" class="auth-form">
+      <form v-else-if="mode === 'create'" @submit.prevent="doCreate" class="auth-form">
         <p class="form-hint">Create a new campaign. You become the Referee. Share the code with your players.</p>
         <div class="field-row">
           <label>Campaign Name</label>
@@ -132,7 +133,49 @@
           {{ auth.loading ? 'Creating…' : 'Create Campaign' }}
         </button>
       </form>
+
+      <!-- ── Reset PIN ── -->
+      <form v-else-if="mode === 'reset'" @submit.prevent="doReset" class="auth-form">
+        <p class="form-hint">Reset a character's PIN using the campaign recovery code shown when the campaign was created.</p>
+        <div class="field-row">
+          <label>Campaign Code</label>
+          <input v-model="form.code" type="text" placeholder="e.g. SPINWARD-42"
+                 autocomplete="off" spellcheck="false" required />
+        </div>
+        <div class="field-row">
+          <label>Character Name</label>
+          <input v-model="form.characterName" type="text" placeholder="The character whose PIN to reset"
+                 autocomplete="off" required />
+        </div>
+        <div class="field-row">
+          <label>Recovery Code</label>
+          <input v-model="form.recoveryCode" type="text" placeholder="From campaign creation"
+                 autocomplete="off" spellcheck="false" required />
+        </div>
+        <div class="field-row">
+          <label>New PIN <span class="hint">(min 4 characters)</span></label>
+          <input v-model="form.pin" type="password" placeholder="Choose a new PIN"
+                 autocomplete="new-password" required />
+        </div>
+        <div class="field-row">
+          <label>Confirm New PIN</label>
+          <input v-model="form.pinConfirm" type="password" placeholder="Repeat new PIN"
+                 autocomplete="new-password" required />
+        </div>
+        <div v-if="resetSuccess" class="reset-success">
+          PIN reset successfully. You can now sign in.
+        </div>
+        <button type="submit" class="submit-btn" :disabled="auth.loading || resetSuccess">
+          {{ auth.loading ? 'Resetting…' : 'Reset PIN' }}
+        </button>
+      </form>
     </div>
+
+  <RecoveryCodeDialog
+    v-if="recoveryCode"
+    :code="recoveryCode"
+    @close="recoveryCode = null; router.push({ name: 'map' })"
+  />
 
     <p class="login-footer">
       Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing Ltd. · Copyright 1977–Present
@@ -145,11 +188,14 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { MILIEUS } from '../lib/traveller-data.js'
+import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 
 const auth   = useAuthStore()
 const router = useRouter()
 
-const mode = ref('login')
+const mode         = ref('login')
+const recoveryCode = ref(null)   // shown once after campaign creation
+const resetSuccess = ref(false)
 
 const form = reactive({
   code:          '',
@@ -157,6 +203,7 @@ const form = reactive({
   characterName: '',
   pin:           '',
   pinConfirm:    '',
+  recoveryCode:  '',
   milieu:        'M1105',
   tradeRules:    'CT7',
   startYear:     1105,
@@ -169,10 +216,12 @@ const derivedStartWeek = computed(() =>
 )
 
 function setMode(m) {
-  mode.value = m
+  mode.value    = m
+  resetSuccess.value = false
   auth.clearError()
   form.pin        = ''
   form.pinConfirm = ''
+  form.recoveryCode = ''
 }
 
 function pinsMatch() {
@@ -214,7 +263,26 @@ async function doCreate() {
     characterName: form.characterName,
     pin:           form.pin,
   })
-  if (result.ok) router.push({ name: 'map' })
+  if (result.ok) {
+    recoveryCode.value = result.recoveryCode
+    // Navigation happens after the referee dismisses the recovery code dialog
+  }
+}
+
+async function doReset() {
+  if (!pinsMatch()) return
+  const result = await auth.resetPin({
+    code:          form.code,
+    characterName: form.characterName,
+    recoveryCode:  form.recoveryCode,
+    newPin:        form.pin,
+  })
+  if (result.ok) {
+    resetSuccess.value = true
+    form.pin        = ''
+    form.pinConfirm = ''
+    form.recoveryCode = ''
+  }
 }
 </script>
 
@@ -382,6 +450,15 @@ async function doCreate() {
 
 .submit-btn:hover:not(:disabled) { background: var(--accent); }
 .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.reset-success {
+  background: rgba(76, 175, 114, 0.1);
+  border: 1px solid var(--green);
+  color: var(--green);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.82rem;
+}
 
 .login-footer {
   margin-top: 1.5rem;
