@@ -38,6 +38,7 @@
           @themes="showThemes = true"
           @about="showAbout = true"
           @help="showHelp = true"
+          @manage-character="showCharacter = true"
           @manage-campaign="router.push('/referee')"
           @signout="doLogout"
         />
@@ -312,9 +313,10 @@
   </div>
 
   <!-- Dialogs -->
-  <ThemeDialog v-model="showThemes" />
-  <AboutDialog v-model="showAbout" />
-  <HelpDialog  v-model="showHelp"  />
+  <ThemeDialog     v-model="showThemes"    />
+  <AboutDialog     v-model="showAbout"     />
+  <HelpDialog      v-model="showHelp"      />
+  <CharacterDialog v-model="showCharacter" />
 
   <!-- Error banner -->
   <div v-if="map.error || tick.error || ship.error" class="error-banner">
@@ -335,9 +337,10 @@ import EventsHistory  from '../components/EventsHistory.vue'
 import CargoHold      from '../components/CargoHold.vue'
 import BuyDialog      from '../components/BuyDialog.vue'
 import HamburgerMenu  from '../components/HamburgerMenu.vue'
-import AboutDialog    from '../components/AboutDialog.vue'
-import HelpDialog     from '../components/HelpDialog.vue'
-import ThemeDialog    from '../components/ThemeDialog.vue'
+import AboutDialog     from '../components/AboutDialog.vue'
+import HelpDialog      from '../components/HelpDialog.vue'
+import ThemeDialog     from '../components/ThemeDialog.vue'
+import CharacterDialog from '../components/CharacterDialog.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
@@ -351,6 +354,7 @@ const selectedGood   = ref(null)
 const showAbout      = ref(false)
 const showHelp       = ref(false)
 const showThemes     = ref(false)
+const showCharacter  = ref(false)
 const showBuyDialog  = ref(false)
 const buyLoading     = ref(false)
 

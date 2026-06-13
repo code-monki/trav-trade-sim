@@ -11,12 +11,14 @@
       <button class="hm-item" role="menuitem" @click="select('themes')">Themes</button>
       <button class="hm-item" role="menuitem" @click="select('about')">About</button>
       <button class="hm-item" role="menuitem" @click="select('help')">Help &amp; User Manual</button>
-      <template v-if="isReferee">
-        <div class="hm-divider" role="separator" />
-        <button class="hm-item referee" role="menuitem" @click="select('manage-campaign')">
-          Manage Campaign
-        </button>
-      </template>
+      <div class="hm-divider" role="separator" />
+      <button class="hm-item" role="menuitem" @click="select('manage-character')">
+        Manage Character
+      </button>
+      <button v-if="isReferee" class="hm-item referee" role="menuitem"
+              @click="select('manage-campaign')">
+        Manage Campaign
+      </button>
       <div class="hm-divider" role="separator" />
       <button class="hm-item danger" role="menuitem" @click="select('signout')">Sign Out</button>
     </div>
@@ -27,7 +29,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const props  = defineProps({ isReferee: { type: Boolean, default: false } })
-const emit   = defineEmits(['themes', 'about', 'help', 'manage-campaign', 'signout'])
+const emit   = defineEmits(['themes', 'about', 'help', 'manage-character', 'manage-campaign', 'signout'])
 const isOpen = ref(false)
 const wrapEl = ref(null)
 
