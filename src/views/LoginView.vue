@@ -7,11 +7,24 @@
       </div>
 
       <!-- Mode tabs -->
-      <div class="mode-tabs">
-        <button :class="['tab', { active: mode === 'login' }]"   @click="setMode('login')">Sign In</button>
-        <button :class="['tab', { active: mode === 'join' }]"    @click="setMode('join')">Join Campaign</button>
-        <button :class="['tab', { active: mode === 'create' }]"  @click="setMode('create')">New Campaign</button>
-        <button :class="['tab', { active: mode === 'reset' }]"   @click="setMode('reset')">Reset PIN</button>
+      <div class="mode-tabs" @mouseleave="hoveredHint = null">
+        <button :class="['tab', { active: mode === 'login' }]"
+                @click="setMode('login')">Sign In</button>
+        <button :class="['tab', { active: mode === 'join' }]"
+                @click="setMode('join')"
+                @mouseenter="hoveredHint = 'Join an existing campaign with a new character. Get the campaign code from your Referee.'">
+          Join Campaign</button>
+        <button :class="['tab', { active: mode === 'create' }]"
+                @click="setMode('create')"
+                @mouseenter="hoveredHint = 'Create a new campaign. You become the Referee. Share the code with your players.'">
+          New Campaign</button>
+        <button :class="['tab', { active: mode === 'reset' }]"
+                @click="setMode('reset')"
+                @mouseenter="hoveredHint = 'Reset a character\'s PIN using the campaign recovery code shown when the campaign was created.'">
+          Reset PIN</button>
+        <Transition name="tab-hint">
+          <p v-if="hoveredHint" class="tab-hint-popup">{{ hoveredHint }}</p>
+        </Transition>
       </div>
 
       <!-- Error banner -->
@@ -45,7 +58,6 @@
 
       <!-- ── Join Campaign ── -->
       <form v-else-if="mode === 'join'" @submit.prevent="doJoin" class="auth-form">
-        <p class="form-hint">Join an existing campaign with a new character. Get the campaign code from your Referee.</p>
         <div class="field-row">
           <label>Campaign Code</label>
           <input v-model="form.code" type="text" placeholder="From your Referee"
@@ -76,7 +88,6 @@
 
       <!-- ── New Campaign ── -->
       <form v-else-if="mode === 'create'" @submit.prevent="doCreate" class="auth-form">
-        <p class="form-hint">Create a new campaign. You become the Referee. Share the code with your players.</p>
         <div class="field-row">
           <label>Campaign Name</label>
           <input v-model="form.label" type="text" placeholder="e.g. Spinward Marches Run"
@@ -145,7 +156,6 @@
 
       <!-- ── Reset PIN ── -->
       <form v-else-if="mode === 'reset'" @submit.prevent="doReset" class="auth-form">
-        <p class="form-hint">Reset a character's PIN using the campaign recovery code shown when the campaign was created.</p>
         <div class="field-row">
           <label>Campaign Code</label>
           <input v-model="form.code" type="text" placeholder="e.g. SPINWARD-42"
@@ -216,6 +226,7 @@ const mode           = ref('login')
 const recoveryCode   = ref(null)   // shown once after campaign creation
 const resetSuccess   = ref(false)
 const showTutorials  = ref(false)
+const hoveredHint    = ref(null)
 
 const form = reactive({
   code:          '',
@@ -236,12 +247,13 @@ const derivedStartWeek = computed(() =>
 )
 
 function setMode(m) {
-  mode.value    = m
+  mode.value         = m
+  hoveredHint.value  = null
   resetSuccess.value = false
   auth.clearError()
-  form.pin        = ''
-  form.pinConfirm = ''
-  form.recoveryCode = ''
+  form.pin           = ''
+  form.pinConfirm    = ''
+  form.recoveryCode  = ''
 }
 
 function pinsMatch() {
@@ -352,7 +364,28 @@ async function doReset() {
   display: flex;
   gap: 0.25rem;
   margin-bottom: 1.25rem;
+  position: relative;
 }
+
+.tab-hint-popup {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  z-index: 10;
+  pointer-events: none;
+  margin: 0;
+}
+
+.tab-hint-enter-active, .tab-hint-leave-active { transition: opacity 0.12s; }
+.tab-hint-enter-from, .tab-hint-leave-to { opacity: 0; }
 
 .tab {
   flex: 1;
@@ -393,12 +426,6 @@ async function doReset() {
 }
 
 .auth-form { display: flex; flex-direction: column; gap: 0.85rem; }
-
-.form-hint {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
 
 .field-row { display: flex; flex-direction: column; gap: 0.3rem; }
 
