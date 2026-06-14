@@ -503,6 +503,18 @@ onMounted(async () => {
   document.addEventListener('keydown', handleGlobalKey)
 })
 
+// On first load, navigate to the ship's current location automatically.
+// Fires once when ship data arrives; stopped immediately after to prevent
+// re-triggering if the ship record updates later in the session.
+const stopShipNav = watch(() => ship.ship, async (s) => {
+  if (!s?.current_sector || !s?.current_world) return
+  stopShipNav()
+  map.selectedSectorName = s.current_sector
+  await map.onSectorChange()
+  const world = map.worlds.find(w => w.Hex === s.current_world)
+  if (world) map.selectWorld(world)
+}, { immediate: true })
+
 // Reset selections and pre-load event history when world changes
 watch(() => map.selectedWorld, (world) => {
   selectedGood.value  = null
