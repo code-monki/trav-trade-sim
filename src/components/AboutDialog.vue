@@ -28,22 +28,68 @@
           <hr class="section-rule" />
 
           <div class="legal-block">
-            <p class="legal-head">Mongoose Publishing</p>
+            <p class="legal-head">Legal Disclaimer &amp; Fair Use Notice</p>
             <p>
-              The Traveller game in all forms is owned by Mongoose Publishing Ltd..
-              Copyright 1977&nbsp;- Present Mongoose Publishing Ltd. Traveller is a
-              registered trademark of Mongoose Publishing, Ltd. Mongoose Publishing
-              permits web sites and fanzines for this game, provided it contains this
-              notice, that Mongoose Publishing is notified, and subject to a withdrawal
-              of permission on 90 days notice. The contents of this site are for
-              personal, non-commercial use only.
+              This application is a completely free, open-source fan creation intended
+              solely for personal, non-commercial use to support players and referees of
+              the Traveller role-playing game across multiple rulesets.
             </p>
             <p>
-              Any use of Mongoose Publishing's copyrighted material or trademarks
-              anywhere on this web site and its files should not be viewed as a
-              challenge to those copyrights or trademarks. In addition, any
-              program/articles/file on this site cannot be republished or distributed
-              without the consent of the author who contributed it.
+              The Traveller game in all forms, editions, and associated universes is owned
+              in its entirety by Mongoose Publishing. Traveller is a registered trademark
+              of Mongoose Publishing. This project is executed strictly under the
+              provisions of the Mongoose Publishing Fair Use Policy for non-commercial
+              fan-made materials, utilities, and automated game aids.
+            </p>
+            <p>
+              This application is not authorized, endorsed, approved, or affiliated with
+              Mongoose Publishing. Any use of copyrighted material, game system rules
+              parameters, or trademarks anywhere within this application and its source
+              files is done non-commercially and should not be viewed as a challenge to
+              those copyrights or trademarks. All intellectual property remains the
+              exclusive property of Mongoose Publishing.
+            </p>
+          </div>
+
+          <hr class="section-rule" />
+
+          <div class="legal-block">
+            <p class="legal-head">Acknowledgements</p>
+
+            <p class="ack-subhead">Foundational Designers</p>
+            <p>
+              <strong class="ack-name">Marc Miller</strong> — Deepest thanks and
+              acknowledgement to Marc Miller, the legendary original creator of Traveller
+              and designer of Classic Traveller and Traveller5 (T5). His foundational
+              genius in crafting a robust, simulation-focused rules architecture laid the
+              groundwork for decades of interstellar charting and made both group and solo
+              sandbox play a reality.
+            </p>
+            <p>
+              <strong class="ack-name">Matthew Sprange</strong> — Acknowledgement is
+              gratefully extended to Matthew Sprange, the designer of Mongoose Traveller
+              and managing director of Mongoose Publishing, whose continuous stewardship,
+              modernization, and structural refinement of the core systems keep the Free
+              Trader dream thriving.
+            </p>
+
+            <p class="ack-subhead">Mechanical Inspiration</p>
+            <p>
+              <strong class="ack-name">Dani Bunten Berry (Ozark Softscape)</strong> — The
+              dynamic, randomized market events subsystem utilized in this simulator was
+              directly inspired by the brilliant macroeconomic mechanics of the seminal
+              1983 computer game M.U.L.E. Its elegant approach to modeling supply and
+              demand shocks remains a gold standard for interactive economic systems.
+            </p>
+
+            <p class="ack-subhead">Testing &amp; Development Support</p>
+            <p>
+              Special thanks are due to Jeff Zeitlin, Timothy Collinson, Thomas
+              Jones-Low, and Robert Eaglestone. Their dedicated efforts in testing the
+              application, breaking the economic models, identifying edge cases, and
+              providing invaluable ideas and structural encouragement were vital to
+              transforming this architectural layout into a functional, multi-ruleset
+              sandbox.
             </p>
           </div>
         </div>
@@ -188,6 +234,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 }
 
 .legal-block p { margin: 0; }
+
+.ack-subhead {
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: var(--text);
+  margin: 0.75rem 0 0.1rem !important;
+  letter-spacing: 0.03em;
+}
+
+.ack-name {
+  color: var(--text);
+  font-weight: 600;
+}
 
 .dialog-footer {
   padding: 0.75rem 1.25rem;
