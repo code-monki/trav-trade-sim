@@ -29,8 +29,7 @@ also fire automatically on a world's first Market tab visit each tick.
 
 Click **Advance Tick ›** in the header, or press `T`. One tick = one jump-week = 7 Imperial days.
 
-> **📸 Screenshot:** `screenshots/gm-advance-tick-button.png` — Header with the
-> Advance Tick button visible alongside the Imperial date display.
+![Advance Tick Button](screenshots/gm-advance-tick-button.png)
 
 What happens automatically on tick advance:
 
@@ -40,7 +39,7 @@ What happens automatically on tick advance:
 - Monthly OHLC candlestick rollup triggers every 4 ticks
 - Annual rollup and event compaction triggers every 48 ticks
 
-> ℹ **Note:** Only the Referee character can advance the tick. All players see the current
+> ℹ️ **Note:** Only the Referee character can advance the tick. All players see the current
 > date in the header but cannot change it.
 
 ---
@@ -49,18 +48,17 @@ What happens automatically on tick advance:
 
 Open the Referee panel → **Events** tab → **New Event**.
 
-> **📸 Screenshot:** `screenshots/gm-events-new-event-form.png` — Events tab
-> with the New Event form open and all fields filled with an example.
+![New Event Form](screenshots/gm-events-new-event-form.png)
 
-| Field | Notes |
-|---|---|
-| Scope | *Local* — affects one world. *Subsector* — affects all worlds in the subsector. |
-| World | Which world (for Local scope) |
-| Trade Good | Specific good affected, or *All Goods* |
-| Effect % | Price modifier — positive raises price, negative lowers it. E.g. +25 = 25% increase. |
-| Severity | Minor / Major / Crisis — controls the badge color on the Market tab |
-| Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick. |
-| Description | Narrative text shown in the Market tab banner and Events history |
+| Field            | Notes                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Scope            | *Local* — affects one world. *Subsector* — affects all worlds in the subsector.      |
+| World            | Which world (for Local scope)                                                        |
+| Trade Good       | Specific good affected, or *All Goods*                                               |
+| Effect %         | Price modifier — positive raises price, negative lowers it. E.g. +25 = 25% increase. |
+| Severity         | Minor / Major / Crisis — controls the badge color on the Market tab                  |
+| Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick.                   |
+| Description      | Narrative text shown in the Market tab banner and Events history                     |
 
 Events fire automatically at random on a world's first Market tab visit each tick. Manual
 events stack on top of the automatic ones.

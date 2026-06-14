@@ -25,10 +25,7 @@ Decide in advance:
 
 Open the app and click the **New Campaign** tab on the login screen.
 
-![Log-in Screen](screenshots/log-in-screen.png)
-
-> **📸 Screenshot:** `screenshots/gm-new-campaign-form.png` — New Campaign tab
-> with all fields visible and the Create Campaign button at the bottom.
+![Log-in Screen](screenshots/gm-new-campaign-form.png)
 
 | Field               | Notes                                                                               |
 | ------------------- | ----------------------------------------------------------------------------------- |
@@ -50,12 +47,9 @@ different one.
 After creation, a one-time **Recovery Code** is displayed. **Save it now** — it is shown
 only once and cannot be retrieved later.
 
-> **📸 Screenshot:** `screenshots/gm-recovery-code-dialog.png` — Recovery Code
-> dialog with the code displayed prominently and a copy/dismiss button.
+![Recovery Code](screenshots/gm-recovery-code-dialog.png)
 
-> ⚠ **Warning:** If this code is lost you will need to generate a new one from
-> the Referee panel → Campaign tab. Generating a new code immediately invalidates
-> the old one.
+⚠️ **Warning:** If this code is lost you will need to generate a new one from the Referee panel → Campaign tab. Generating a new code immediately invalidates the old one.
 
 The recovery code lets you (or any locked-out player) reset a character's PIN from the
 **Reset PIN** tab on the login screen, without knowing the old PIN. See
@@ -87,8 +81,7 @@ opens the Referee panel.
 
 Click the **Ships** tab, then **New Ship**.
 
-> **📸 Screenshot:** `screenshots/gm-ships-tab-new-ship.png` — Ships tab with
-> the New Ship form open and all fields visible.
+![News Ship Tab](screenshots/gm-new-ship-tab.png)
 
 | Field       | Notes                                                            |
 | ----------- | ---------------------------------------------------------------- |
@@ -118,8 +111,7 @@ Each crew member has a **role** and a **Can Trade** flag:
 Only characters with *Can Trade* can buy and sell cargo. If a player reports that the
 Buy button is missing or Sell is disabled, check this flag in the crew row.
 
-> **📸 Screenshot:** `screenshots/gm-crew-row-can-trade.png` — Crew row with
-> the role dropdown and Can Trade checkbox visible.
+![Crew Row Can Trade](screenshots/gm-crew-row-can-trade.png)
 
 A character can only serve on one ship at a time. Remove them from the current ship before
 assigning them to another.

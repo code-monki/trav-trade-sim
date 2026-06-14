@@ -1,7 +1,6 @@
 # Player Tutorial: Route Analysis
 
-Use this tutorial to understand how to use the Jump tab to plan profitable trade routes
-before and after buying cargo.
+Use this tutorial to understand how to use the Jump tab to plan profitable trade routes before and after buying cargo.
 
 **Related tutorials:**
 - [Your First Trade → Find a Destination](./player-first-trade.md#3-find-a-destination)
@@ -13,13 +12,10 @@ before and after buying cargo.
 
 The Jump tab gives you two different views depending on whether your hold has cargo:
 
-- **Before buying:** Browse reachable worlds; check starport classes; open the Market tab
-  at destination candidates to compare sell prices with your current world's buy prices.
-- **After buying:** The Profit column shows the actual projected earnings from selling
-  your current hold at each destination. The list sorts by profit — best option at the top.
+- **Before buying:** Browse reachable worlds; check starport classes; open the Market tab at destination candidates to compare sell prices with your current world's buy prices.
+- **After buying:** The Profit column shows the actual projected earnings from selling your current hold at each destination. The list sorts by profit — best option at the top.
 
-To begin, select the world you are **departing from** in the left sidebar, then open the
-**Jump** tab (`J`). The route list is always relative to the selected world.
+To begin, select the world you are **departing from** in the left sidebar, then open the **Jump** tab (`J`). The route list is always relative to the selected world.
 
 ---
 
@@ -27,61 +23,47 @@ To begin, select the world you are **departing from** in the left sidebar, then 
 
 Each row represents a reachable destination:
 
-> **📸 Screenshot:** `screenshots/player-jump-tab-with-profit.png` — Jump tab
-> with several destination rows; the Profit column shows green positive values for
-> some destinations and red negative for others.
+![Player Jump Tab With Profit](screenshots/player-jump-tab-with-profit.png)
 
-| Column | What it means |
-|---|---|
-| World | Destination world name |
-| Hex | Hex coordinate in the sector grid |
-| Jump | Parsecs required. Must be ≤ your ship's jump rating for a direct jump. |
-| Port | Starport class (A–X). A and B ports offer larger quantities and generally better prices. |
+| Column | What it means                                                                                                                          |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| World  | Destination world name                                                                                                                 |
+| Hex    | Hex coordinate in the sector grid                                                                                                      |
+| Jump   | Parsecs required. Must be ≤ your ship's jump rating for a direct jump.                                                                 |
+| Port   | Starport class (A–X). A and B ports offer larger quantities and generally better prices.                                               |
 | Profit | Net projected profit from selling your entire current hold at this world. Green = profit, red = loss. Only shown when cargo is loaded. |
 
-**Sort order:** cargo loaded → sorted by profit (highest first). Empty hold → sorted by
-jump distance then name.
+**Sort order:** cargo loaded → sorted by profit (highest first). Empty hold → sorted by jump distance then name.
 
 ---
 
 ## 2. Use the Price Chart
 
-Before committing to buy a good, check its price trend in the **Market** tab chart. Check
-the **Plot** checkbox on any row to add it to the chart below the table.
+Before committing to buy a good, check its price trend in the **Market** tab chart. Check the **Plot** checkbox on any row to add it to the chart below the table.
 
-> **📸 Screenshot:** `screenshots/player-market-chart-weekly.png` — Market tab
-> with the Weekly chart visible below the table; event markers (circles/squares/arrows)
-> visible on the price line.
+![Player Market Chart Weekly](screenshots/player-market-chart-weekly.png)
 
 Three time frames are available when a single good is plotted:
 
-| Frame | Resolution | Best for |
-|---|---|---|
-| Weekly | One data point per tick | Spotting recent trends and event effects |
-| Monthly | One candlestick per 4 ticks | Identifying cyclical patterns |
-| Annual | One candlestick per 48 ticks | Long-term price history |
+| Frame   | Resolution                   | Best for                                 |
+| ------- | ---------------------------- | ---------------------------------------- |
+| Weekly  | One data point per tick      | Spotting recent trends and event effects |
+| Monthly | One candlestick per 4 ticks  | Identifying cyclical patterns            |
+| Annual  | One candlestick per 48 ticks | Long-term price history                  |
 
-Plot multiple goods simultaneously to compare them. Drag the divider between the table
-and chart to resize both panels.
+Plot multiple goods simultaneously to compare them. Drag the divider between the table and chart to resize both panels.
 
-Event markers appear on the weekly chart: blue circle = Minor, amber square = Major,
-red arrow = Crisis.
+Event markers appear on the weekly chart: blue circle = Minor, amber square = Major, red arrow = Crisis.
 
 ---
 
 ## 3. Adjust Jump Range
 
-The **−** / **+** stepper at the bottom of the Jump tab temporarily overrides your ship's
-rated jump range for planning. This does **not** change the ship's actual rating or commit
-anything.
+The **−** / **+** stepper at the bottom of the Jump tab temporarily overrides your ship's rated jump range for planning. This does **not** change the ship's actual rating or commit anything.
 
-Use a higher range to scout multi-hop routes — worlds your ship cannot reach in a single
-jump but that might be worth a layover at an intermediate world. Use a lower range to
-focus on the nearest options.
+Use a higher range to scout multi-hop routes — worlds your ship cannot reach in a single jump but that might be worth a layover at an intermediate world. Use a lower range to focus on the nearest options.
 
-> ℹ **Note:** Clicking Select does not enforce the range check — the simulator trusts you
-> to play within your ship's actual capabilities. Your Referee is the arbiter of what is
-> possible in-game.
+ℹ️ **Note:** Clicking Select does not enforce the range check — the simulator trusts you to play within your ship's actual capabilities. Your Referee is the arbiter of what is possible in-game.
 
 ---
 
@@ -96,9 +78,7 @@ Click **Select** on your chosen destination row. The sim will:
 You can now sell your cargo. See
 [Your First Trade → Sell at the Destination](./player-first-trade.md#5-sell-at-the-destination).
 
-If you navigated to the destination manually via the sidebar instead, use the **Set Here**
-button in the Cargo tab status bar to update your ship's recorded location without going
-through the Jump tab.
+If you navigated to the destination manually via the sidebar instead, use the **Set Here** button in the Cargo tab status bar to update your ship's recorded location without going through the Jump tab.
 
 ---
 
