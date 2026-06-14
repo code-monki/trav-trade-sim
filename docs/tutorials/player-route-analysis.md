@@ -4,12 +4,12 @@ Use this tutorial to understand how to use the Jump tab to plan profitable trade
 before and after buying cargo.
 
 **Related tutorials:**
-- [Your First Trade → Find a Destination](./player-first-trade.md#find-a-destination)
-- [Your First Trade → Sell at the Destination](./player-first-trade.md#sell-at-the-destination)
+- [Your First Trade → Find a Destination](./player-first-trade.md#3-find-a-destination)
+- [Your First Trade → Sell at the Destination](./player-first-trade.md#5-sell-at-the-destination)
 
 ---
 
-## When to Use Route Analysis {#when-to-use}
+## When to Use Route Analysis
 
 The Jump tab gives you two different views depending on whether your hold has cargo:
 
@@ -23,7 +23,7 @@ To begin, select the world you are **departing from** in the left sidebar, then 
 
 ---
 
-## 1. Reading the Route Table {#reading-the-route-table}
+## 1. Reading the Route Table
 
 Each row represents a reachable destination:
 
@@ -44,7 +44,7 @@ jump distance then name.
 
 ---
 
-## 2. Use the Price Chart {#use-the-price-chart}
+## 2. Use the Price Chart
 
 Before committing to buy a good, check its price trend in the **Market** tab chart. Check
 the **Plot** checkbox on any row to add it to the chart below the table.
@@ -69,7 +69,7 @@ red arrow = Crisis.
 
 ---
 
-## 3. Adjust Jump Range {#adjust-jump-range}
+## 3. Adjust Jump Range
 
 The **−** / **+** stepper at the bottom of the Jump tab temporarily overrides your ship's
 rated jump range for planning. This does **not** change the ship's actual rating or commit
@@ -85,7 +85,7 @@ focus on the nearest options.
 
 ---
 
-## 4. Commit the Jump {#commit-the-jump}
+## 4. Commit the Jump
 
 Click **Select** on your chosen destination row. The sim will:
 
@@ -94,7 +94,7 @@ Click **Select** on your chosen destination row. The sim will:
 3. Switch to the Market tab for the new world
 
 You can now sell your cargo. See
-[Your First Trade → Sell at the Destination](./player-first-trade.md#sell-at-the-destination).
+[Your First Trade → Sell at the Destination](./player-first-trade.md#5-sell-at-the-destination).
 
 If you navigated to the destination manually via the sidebar instead, use the **Set Here**
 button in the Cargo tab status bar to update your ship's recorded location without going

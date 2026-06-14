@@ -5,11 +5,11 @@ Before you read this, ask your Referee for the campaign code.
 
 **Related tutorials:**
 - [Your First Trade](./player-first-trade.md)
-- If you are locked out: [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#reset-a-players-pin)
+- If you are locked out: [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin)
 
 ---
 
-## Before You Start {#before-you-start}
+## Before You Start
 
 To join a campaign you need three things from your Referee:
 
@@ -22,11 +22,11 @@ You choose yourself:
 
 > ⚠ **Warning:** Your character name and PIN **cannot be changed after joining**.
 > If you forget your PIN, ask your Referee to reset it using the campaign's recovery code.
-> See [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#reset-a-players-pin).
+> See [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin).
 
 ---
 
-## 1. Join the Campaign {#join-the-campaign}
+## 1. Join the Campaign
 
 Open the app and click the **Join Campaign** tab on the login screen.
 
@@ -46,7 +46,7 @@ and PIN.
 
 ---
 
-## 2. Navigate the Interface {#navigate-the-interface}
+## 2. Navigate the Interface
 
 The main screen has two areas: a **left sidebar** and a **right detail panel**.
 
@@ -74,7 +74,7 @@ Keyboard shortcuts switch tabs when no input field is focused. Press `?` to open
 
 ---
 
-## 3. Read the World Overview {#read-the-world-overview}
+## 3. Read the World Overview
 
 With a world selected, the **Overview** tab shows the world's characteristics decoded
 from its **UWP** (Universal World Profile). Key fields for traders:
@@ -91,7 +91,7 @@ world reference information.
 
 ---
 
-## 4. Find Your Ship {#find-your-ship}
+## 4. Find Your Ship
 
 Click the **Cargo** tab (`C`). If your Referee has assigned you to a ship, the status bar
 at the top shows:
@@ -105,7 +105,7 @@ at the top shows:
 
 If you see "No ship assigned", ask your Referee to add you to a vessel (Referee panel →
 Ships tab → Add Crew). See
-[Campaign Setup → Assign Crew](./gm-campaign-setup.md#assign-crew).
+[Campaign Setup → Assign Crew](./gm-campaign-setup.md#5-assign-crew).
 
 ---
 

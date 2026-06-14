@@ -5,11 +5,11 @@ See [Campaign Setup](./gm-campaign-setup.md) if you have not done that yet.
 
 **Related tutorials:**
 - [Player: First Trade](./player-first-trade.md)
-- Reset PIN procedure references [Campaign Setup → Save the Recovery Code](./gm-campaign-setup.md#save-the-recovery-code)
+- Reset PIN procedure references [Campaign Setup → Save the Recovery Code](./gm-campaign-setup.md#2-save-the-recovery-code)
 
 ---
 
-## Typical Session Flow {#typical-session-flow}
+## Typical Session Flow
 
 Each session generally follows this rhythm:
 
@@ -25,7 +25,7 @@ also fire automatically on a world's first Market tab visit each tick.
 
 ---
 
-## 1. Advance the Tick {#advance-the-tick}
+## 1. Advance the Tick
 
 Click **Advance Tick ›** in the header, or press `T`. One tick = one jump-week = 7 Imperial days.
 
@@ -45,7 +45,7 @@ What happens automatically on tick advance:
 
 ---
 
-## 2. Create Market Events {#create-market-events}
+## 2. Create Market Events
 
 Open the Referee panel → **Events** tab → **New Event**.
 
@@ -67,7 +67,7 @@ events stack on top of the automatic ones.
 
 ---
 
-## 3. Expire Events Early {#expire-events-early}
+## 3. Expire Events Early
 
 In the Referee panel → Events tab, each active event has an **Expire** button. Click it
 to end the event immediately, regardless of its original duration.
@@ -78,7 +78,7 @@ of schedule.
 
 ---
 
-## 4. Manage Players {#manage-players}
+## 4. Manage Players
 
 The Referee panel → **Players** tab lists every character with their current ship
 assignment and skill list.
@@ -92,14 +92,14 @@ Remove a skill with the × button on the skill chip.
 
 ---
 
-## 5. Reset a Player's PIN {#reset-a-players-pin}
+## 5. Reset a Player's PIN
 
 If a player forgets their PIN:
 
 1. Go to the login screen → **Reset PIN** tab
 2. Enter the **Campaign Code**, the player's **Character Name**, and the campaign's
    **Recovery Code** (saved at campaign creation — see
-   [Campaign Setup → Save the Recovery Code](./gm-campaign-setup.md#save-the-recovery-code))
+   [Campaign Setup → Save the Recovery Code](./gm-campaign-setup.md#2-save-the-recovery-code))
 3. Enter and confirm a new PIN for that character
 4. Click **Reset PIN**
 
@@ -110,7 +110,7 @@ The player can then sign in with the new PIN. Character names are case-sensitive
 
 ---
 
-## 6. Delete a Campaign {#delete-a-campaign}
+## 6. Delete a Campaign
 
 The **Danger Zone** section at the bottom of the Referee panel → Campaign tab lets you
 permanently delete the campaign. This removes all associated data — ships, cargo, market

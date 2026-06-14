@@ -5,8 +5,8 @@ players, creating the first ship, and assigning crew. At the end your players wi
 be ready to trade.
 
 **Related tutorials:**
-- Players join after you set up: [Player: Getting Started → Join the Campaign](./player-getting-started.md#join-the-campaign)
-- After crew are assigned: [Player: First Trade → Read the Market](./player-first-trade.md#read-the-market)
+- Players join after you set up: [Player: Getting Started → Join the Campaign](./player-getting-started.md#1-join-the-campaign)
+- After crew are assigned: [Player: First Trade → Read the Market](./player-first-trade.md#1-read-the-market)
 
 ---
 
@@ -21,29 +21,31 @@ Decide in advance:
 
 ---
 
-## 1. Create the Campaign {#create-the-campaign}
+## 1. Create the Campaign
 
 Open the app and click the **New Campaign** tab on the login screen.
+
+![Log-in Screen](screenshots/log-in-screen.png)
 
 > **📸 Screenshot:** `screenshots/gm-new-campaign-form.png` — New Campaign tab
 > with all fields visible and the Create Campaign button at the bottom.
 
-| Field | Notes |
-|---|---|
-| Campaign Name | Human-readable label, e.g. "Spinward Marches Run" |
-| Campaign Code | Uppercase, no spaces. Share this with players. Auto-uppercased as you type. |
-| Milieu | Imperial era. Defaults to 1105 (Third Imperium classic). |
-| Trade Rules | CT7 or T5. **Cannot be changed after creation.** |
-| Starting Date | Imperial year and day (1–365). Week is derived automatically (day ÷ 7, rounded up). |
-| Your Character Name | Your Referee character's name. Must be unique in the campaign. |
-| PIN | Minimum 4 characters. **Cannot be changed.** Save it somewhere safe. |
+| Field               | Notes                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| Campaign Name       | Human-readable label, e.g. "Spinward Marches Run"                                   |
+| Campaign Code       | Uppercase, no spaces. Share this with players. Auto-uppercased as you type.         |
+| Milieu              | Imperial era. Defaults to 1105 (Third Imperium classic).                            |
+| Trade Rules         | CT7 or T5. **Cannot be changed after creation.**                                    |
+| Starting Date       | Imperial year and day (1–365). Week is derived automatically (day ÷ 7, rounded up). |
+| Your Character Name | Your Referee character's name. Must be unique in the campaign.                      |
+| PIN                 | Minimum 4 characters. **Cannot be changed.** Save it somewhere safe.                |
 
 Click **Create Campaign**. If the code is already in use you will be prompted to choose a
 different one.
 
 ---
 
-## 2. Save the Recovery Code {#save-the-recovery-code}
+## 2. Save the Recovery Code
 
 After creation, a one-time **Recovery Code** is displayed. **Save it now** — it is shown
 only once and cannot be retrieved later.
@@ -57,14 +59,14 @@ only once and cannot be retrieved later.
 
 The recovery code lets you (or any locked-out player) reset a character's PIN from the
 **Reset PIN** tab on the login screen, without knowing the old PIN. See
-[Running a Session → Reset a Player's PIN](./gm-running-session.md#reset-a-players-pin)
+[Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin)
 for the full procedure.
 
 Dismiss the dialog to enter the main map. You are now signed in as Referee.
 
 ---
 
-## 3. Invite Players {#invite-players}
+## 3. Invite Players
 
 Share the **campaign code** with your players (e.g. "SPINWARD-42"). They enter it on the
 **Join Campaign** tab of the login screen, along with a character name they choose and a
@@ -74,11 +76,11 @@ PIN they set themselves.
 > after joining. Remind players to choose carefully.
 
 Players create their own PINs — you never see them. Full player instructions:
-[Player: Getting Started → Join the Campaign](./player-getting-started.md#join-the-campaign).
+[Player: Getting Started → Join the Campaign](./player-getting-started.md#1-join-the-campaign).
 
 ---
 
-## 4. Create a Ship {#create-a-ship}
+## 4. Create a Ship
 
 Open the hamburger menu (≡) in the top-right corner and click **Manage Campaign**. This
 opens the Referee panel.
@@ -88,30 +90,30 @@ Click the **Ships** tab, then **New Ship**.
 > **📸 Screenshot:** `screenshots/gm-ships-tab-new-ship.png` — Ships tab with
 > the New Ship form open and all fields visible.
 
-| Field | Notes |
-|---|---|
-| Name | Ship name, e.g. "Free Trader Beowulf" |
-| Hull Type | Class designation, e.g. "Type-A Free Trader" |
-| Hull Tons | Total displacement in tons (cosmetic / reference) |
-| Cargo Tons | Available hold — constrains how much players can buy |
+| Field       | Notes                                                            |
+| ----------- | ---------------------------------------------------------------- |
+| Name        | Ship name, e.g. "Free Trader Beowulf"                            |
+| Hull Type   | Class designation, e.g. "Type-A Free Trader"                     |
+| Hull Tons   | Total displacement in tons (cosmetic / reference)                |
+| Cargo Tons  | Available hold — constrains how much players can buy             |
 | Jump Rating | Maximum parsecs per jump; sets the default range in the Jump tab |
-| Credits | Starting ship's treasury |
+| Credits     | Starting ship's treasury                                         |
 
 Click **Create**. The ship appears in the ships list.
 
 ---
 
-## 5. Assign Crew {#assign-crew}
+## 5. Assign Crew
 
 In the **Ships** tab, expand the ship row to see the crew section. Click **Add Crew**
 and select a player character.
 
 Each crew member has a **role** and a **Can Trade** flag:
 
-| Role | Can Trade by default? |
-|---|---|
-| Captain | Yes — automatically |
-| Pilot / Engineer / Medic / Gunner / Steward / Other | No — set manually |
+| Role                                                | Can Trade by default? |
+| --------------------------------------------------- | --------------------- |
+| Captain                                             | Yes — automatically   |
+| Pilot / Engineer / Medic / Gunner / Steward / Other | No — set manually     |
 
 Only characters with *Can Trade* can buy and sell cargo. If a player reports that the
 Buy button is missing or Sell is disabled, check this flag in the crew row.
@@ -123,7 +125,7 @@ A character can only serve on one ship at a time. Remove them from the current s
 assigning them to another.
 
 Once crew are assigned and *Can Trade* is set, they are ready to trade. Continue to:
-[Player: First Trade → Read the Market](./player-first-trade.md#read-the-market)
+[Player: First Trade → Read the Market](./player-first-trade.md#1-read-the-market)
 
 ---
 

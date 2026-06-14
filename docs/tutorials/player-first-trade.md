@@ -4,12 +4,12 @@
 See [Getting Started](./player-getting-started.md) if you have not done that yet.
 
 **Related tutorials:**
-- Selecting a world: [Getting Started → Navigate the Interface](./player-getting-started.md#navigate-the-interface)
+- Selecting a world: [Getting Started → Navigate the Interface](./player-getting-started.md#2-navigate-the-interface)
 - Finding profitable routes: [Route Analysis](./player-route-analysis.md)
 
 ---
 
-## Overview {#overview}
+## Overview
 
 A complete trade has four steps: **select a world → buy → jump → sell**. The goal is to
 buy goods where they are cheap and sell them where prices are high.
@@ -17,17 +17,17 @@ buy goods where they are cheap and sell them where prices are high.
 Prerequisites:
 
 - A ship with available hold space —
-  see [Getting Started → Find Your Ship](./player-getting-started.md#find-your-ship)
+  see [Getting Started → Find Your Ship](./player-getting-started.md#4-find-your-ship)
 - *Can Trade* authorization — if the Buy button is missing, ask your Referee to check
   your crew record
 - A world selected in the left sidebar
 
 ---
 
-## 1. Read the Market {#read-the-market}
+## 1. Read the Market
 
 Select a world in the left sidebar
-(see [Getting Started → Navigate the Interface](./player-getting-started.md#navigate-the-interface))
+(see [Getting Started → Navigate the Interface](./player-getting-started.md#2-navigate-the-interface))
 and open the **Market** tab (`M`).
 
 > **📸 Screenshot:** `screenshots/player-market-tab.png` — Market tab with
@@ -53,7 +53,7 @@ table explains the event.
 
 ---
 
-## 2. Buy Cargo {#buy-cargo}
+## 2. Buy Cargo
 
 Find a trade good with available quantity (Qty > 0) and click **Buy** on its row.
 A purchase dialog opens:
@@ -77,7 +77,7 @@ purchase price and source world recorded.
 
 ---
 
-## 3. Find a Destination {#find-a-destination}
+## 3. Find a Destination
 
 Switch to the **Jump** tab (`J`). This lists all worlds reachable from your current
 location within your ship's jump rating.
@@ -91,7 +91,7 @@ For a full breakdown of reading and using this tab, see
 
 ---
 
-## 4. Complete the Jump {#complete-the-jump}
+## 4. Complete the Jump
 
 In the **Jump** tab, click **Select** on your chosen destination. This:
 
@@ -108,7 +108,7 @@ going through the Jump tab.
 
 ---
 
-## 5. Sell at the Destination {#sell-at-the-destination}
+## 5. Sell at the Destination
 
 At the destination world, open the **Cargo** tab (`C`). Each row in your hold shows:
 
