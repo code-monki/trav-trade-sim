@@ -57,15 +57,17 @@
           <input v-model="form.characterName" type="text" placeholder="Must be unique in this campaign"
                  autocomplete="off" required />
         </div>
-        <div class="field-row">
-          <label>PIN <span class="hint">(min 4 characters — cannot be changed)</span></label>
-          <input v-model="form.pin" type="password" placeholder="Choose a PIN"
-                 autocomplete="new-password" required />
-        </div>
-        <div class="field-row">
-          <label>Confirm PIN</label>
-          <input v-model="form.pinConfirm" type="password" placeholder="Repeat PIN"
-                 autocomplete="new-password" required />
+        <div class="field-row-pair">
+          <div class="field-row">
+            <label>PIN <span class="hint">(min 4 — cannot be changed)</span></label>
+            <input v-model="form.pin" type="password" placeholder="Choose a PIN"
+                   autocomplete="new-password" required />
+          </div>
+          <div class="field-row">
+            <label>Confirm PIN</label>
+            <input v-model="form.pinConfirm" type="password" placeholder="Repeat PIN"
+                   autocomplete="new-password" required />
+          </div>
         </div>
         <button type="submit" class="submit-btn" :disabled="auth.loading">
           {{ auth.loading ? 'Registering…' : 'Join Campaign' }}
@@ -87,18 +89,20 @@
                  @input="form.code = form.code.toUpperCase().replace(/\s+/g,'-')"
                  required />
         </div>
-        <div class="field-row">
-          <label>Milieu</label>
-          <select v-model="form.milieu">
-            <option v-for="m in MILIEUS" :key="m.code" :value="m.code">{{ m.label }}</option>
-          </select>
-        </div>
-        <div class="field-row">
-          <label>Trade Rules</label>
-          <select v-model="form.tradeRules">
-            <option value="CT7">Classic Traveller Book 7</option>
-            <option value="T5">Traveller 5th Edition</option>
-          </select>
+        <div class="field-row-pair">
+          <div class="field-row">
+            <label>Milieu</label>
+            <select v-model="form.milieu">
+              <option v-for="m in MILIEUS" :key="m.code" :value="m.code">{{ m.label }}</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label>Trade Rules</label>
+            <select v-model="form.tradeRules">
+              <option value="CT7">Classic Traveller Book 7</option>
+              <option value="T5">Traveller 5th Edition</option>
+            </select>
+          </div>
         </div>
         <div class="field-row">
           <label>Starting Date <span class="hint">(Imperial calendar — week is derived from day)</span></label>
@@ -122,15 +126,17 @@
           <input v-model="form.characterName" type="text" placeholder="Referee character name"
                  autocomplete="off" required />
         </div>
-        <div class="field-row">
-          <label>PIN <span class="hint">(min 4 characters — cannot be changed)</span></label>
-          <input v-model="form.pin" type="password" placeholder="Choose a PIN"
-                 autocomplete="new-password" required />
-        </div>
-        <div class="field-row">
-          <label>Confirm PIN</label>
-          <input v-model="form.pinConfirm" type="password" placeholder="Repeat PIN"
-                 autocomplete="new-password" required />
+        <div class="field-row-pair">
+          <div class="field-row">
+            <label>PIN <span class="hint">(min 4 — cannot be changed)</span></label>
+            <input v-model="form.pin" type="password" placeholder="Choose a PIN"
+                   autocomplete="new-password" required />
+          </div>
+          <div class="field-row">
+            <label>Confirm PIN</label>
+            <input v-model="form.pinConfirm" type="password" placeholder="Repeat PIN"
+                   autocomplete="new-password" required />
+          </div>
         </div>
         <button type="submit" class="submit-btn" :disabled="auth.loading">
           {{ auth.loading ? 'Creating…' : 'Create Campaign' }}
@@ -156,15 +162,17 @@
           <input v-model="form.recoveryCode" type="text" placeholder="From campaign creation"
                  autocomplete="off" spellcheck="false" required />
         </div>
-        <div class="field-row">
-          <label>New PIN <span class="hint">(min 4 characters)</span></label>
-          <input v-model="form.pin" type="password" placeholder="Choose a new PIN"
-                 autocomplete="new-password" required />
-        </div>
-        <div class="field-row">
-          <label>Confirm New PIN</label>
-          <input v-model="form.pinConfirm" type="password" placeholder="Repeat new PIN"
-                 autocomplete="new-password" required />
+        <div class="field-row-pair">
+          <div class="field-row">
+            <label>New PIN <span class="hint">(min 4 characters)</span></label>
+            <input v-model="form.pin" type="password" placeholder="Choose a new PIN"
+                   autocomplete="new-password" required />
+          </div>
+          <div class="field-row">
+            <label>Confirm New PIN</label>
+            <input v-model="form.pinConfirm" type="password" placeholder="Repeat new PIN"
+                   autocomplete="new-password" required />
+          </div>
         </div>
         <div v-if="resetSuccess" class="reset-success">
           PIN reset successfully. You can now sign in.
@@ -393,6 +401,15 @@ async function doReset() {
 }
 
 .field-row { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.field-row-pair {
+  display: flex;
+  gap: 0.75rem;
+}
+.field-row-pair > .field-row {
+  flex: 1;
+  min-width: 0;
+}
 
 .date-pair {
   display: flex;
