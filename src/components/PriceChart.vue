@@ -247,10 +247,13 @@ function applyEventMarkers(series) {
   const markers = tick.worldEventHistory
     .map(ev => ({
       time:     tickToTime(ev.tick),
-      position: ev.effect_pct > 0 ? 'aboveBar' : 'belowBar',
+      position: (ev.sell_modifier_pct ?? ev.buy_modifier_pct ?? 0) > 0 ? 'aboveBar' : 'belowBar',
       color:    sevColor[ev.severity] ?? cssVar('--text-dim'),
       shape:    SEV_SHAPE[ev.severity] ?? 'circle',
-      text:     ev.effect_pct > 0 ? `+${ev.effect_pct}%` : `${ev.effect_pct}%`,
+      text:     [
+        ev.buy_modifier_pct  != null ? `B${ev.buy_modifier_pct  > 0 ? '+' : ''}${ev.buy_modifier_pct}%`  : null,
+        ev.sell_modifier_pct != null ? `S${ev.sell_modifier_pct > 0 ? '+' : ''}${ev.sell_modifier_pct}%` : null,
+      ].filter(Boolean).join('/'),
       size:     ev.severity === 'crisis' ? 2 : 1,
     }))
     .sort((a, b) => a.time - b.time)

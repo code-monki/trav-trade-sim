@@ -136,7 +136,7 @@ const eventIndex = computed(() => {
   for (const ev of worldEvents.value) {
     const key = ev.trade_good_die ?? '__all__'
     if (!idx[key]) idx[key] = { pct: 0, desc: ev.description }
-    idx[key].pct += ev.effect_pct
+    idx[key].pct += ev.sell_modifier_pct ?? ev.buy_modifier_pct ?? 0
   }
   return idx
 })

@@ -305,7 +305,8 @@
                 <span class="event-desc">{{ ev.description }}</span>
                 <span class="event-meta">
                   {{ ev.scope === 'local' ? ev.world_hex : 'Subsector' }}
-                  · {{ ev.effect_pct > 0 ? '+' : '' }}{{ ev.effect_pct }}%
+                  <template v-if="ev.buy_modifier_pct != null">· Buy {{ ev.buy_modifier_pct > 0 ? '+' : '' }}{{ ev.buy_modifier_pct }}%</template>
+                  <template v-if="ev.sell_modifier_pct != null">· Sell {{ ev.sell_modifier_pct > 0 ? '+' : '' }}{{ ev.sell_modifier_pct }}%</template>
                   · expires tick {{ ev.expires_tick }}
                 </span>
               </div>

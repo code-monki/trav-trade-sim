@@ -14,7 +14,7 @@
  *   'major'  — significant events,    ±20–35%, 4–10 ticks, ~1.5%
  *   'crisis' — sector-shaking events, ±38–55%, 8–20 ticks, ~0.4%
  *
- * effect_pct: percentage change applied to prices (+20 = 20% more expensive).
+ * buy_modifier_pct / sell_modifier_pct: independent percentage modifiers for purchase and sale prices.
  * trade_good_die: null means the event affects ALL goods at that world/scope.
  */
 
