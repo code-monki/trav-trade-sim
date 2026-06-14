@@ -94,7 +94,7 @@ function sumCT2DMs(dmList, worldCodes) {
  * @param {string}   opts.sectorName    — sector display name
  * @param {string}   opts.campaignId    — campaign UUID
  * @param {number}   opts.tick          — current tick
- * @param {object[]} opts.activeEvents  — [{trade_good_die, effect_pct}] active at this tick/world
+ * @param {object[]} opts.activeEvents  — [{trade_good_die, buy_modifier_pct, sell_modifier_pct}] active at this tick/world
  * @returns {object[]} rows for market_snapshots bulk insert
  */
 export function generateWorldSnapshot({ world, sectorName, campaignId, tick, activeEvents = [] }) {
@@ -102,11 +102,13 @@ export function generateWorldSnapshot({ world, sectorName, campaignId, tick, act
   const starport = starportFromUWP(world.UWP || '')
   const tl       = techFromUWP(world.UWP || '')
 
-  // Build event modifier map: goodDie → cumulative effect_pct
-  const eventMods = {}
+  // Build event modifier maps: goodDie → cumulative buy/sell modifier
+  const buyMods  = {}
+  const sellMods = {}
   for (const ev of activeEvents) {
     const key = ev.trade_good_die ?? '__all__'
-    eventMods[key] = (eventMods[key] ?? 0) + ev.effect_pct
+    if (ev.buy_modifier_pct  != null) buyMods[key]  = (buyMods[key]  ?? 0) + ev.buy_modifier_pct
+    if (ev.sell_modifier_pct != null) sellMods[key] = (sellMods[key] ?? 0) + ev.sell_modifier_pct
   }
 
   const rows = []
@@ -126,13 +128,11 @@ export function generateWorldSnapshot({ world, sectorName, campaignId, tick, act
     const saleRoll = d6(rng) + d6(rng) + saleDM
     let salePrice = actualPrice(marketBasePrice(codes, codes), saleRoll)
 
-    // Apply event modifiers (specific good or all goods)
-    const mod = (eventMods[good.die] ?? 0) + (eventMods['__all__'] ?? 0)
-    if (mod !== 0) {
-      const factor = 1 + mod / 100
-      purchasePrice = Math.round(purchasePrice * factor)
-      salePrice     = Math.round(salePrice     * factor)
-    }
+    // Apply buy/sell event modifiers independently
+    const buyMod  = (buyMods[good.die]  ?? 0) + (buyMods['__all__']  ?? 0)
+    const sellMod = (sellMods[good.die] ?? 0) + (sellMods['__all__'] ?? 0)
+    if (buyMod  !== 0) purchasePrice = Math.round(purchasePrice * (1 + buyMod  / 100))
+    if (sellMod !== 0) salePrice     = Math.round(salePrice     * (1 + sellMod / 100))
 
     const qtyRolls = Array.from({ length: 8 }, () => d6(rng))
     const qty      = rollQty(good.qty, qtyRolls)

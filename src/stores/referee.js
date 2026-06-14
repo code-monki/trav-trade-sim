@@ -209,19 +209,20 @@ export const useRefereeStore = defineStore('referee', () => {
 
   // ── Manual market events ───────────────────────────────────────────────────
 
-  async function createEvent(campaignId, { worldHex, sector, scope, tradeGoodDie, effectPct, description, durationTicks, currentTick }) {
+  async function createEvent(campaignId, { worldHex, sector, scope, tradeGoodDie, buyModifierPct, sellModifierPct, description, durationTicks, currentTick }) {
     const { data, error: err } = await supabase
       .from('market_events')
       .insert({
-        campaign_id:    campaignId,
-        tick:           currentTick,
+        campaign_id:       campaignId,
+        tick:              currentTick,
         scope,
-        world_hex:      scope === 'local' ? worldHex : null,
+        world_hex:         scope === 'local' ? worldHex : null,
         sector,
-        trade_good_die: tradeGoodDie || null,
-        effect_pct:     effectPct,
-        description:    description.trim(),
-        expires_tick:   currentTick + durationTicks,
+        trade_good_die:    tradeGoodDie || null,
+        buy_modifier_pct:  buyModifierPct  ?? null,
+        sell_modifier_pct: sellModifierPct ?? null,
+        description:       description.trim(),
+        expires_tick:      currentTick + durationTicks,
       })
       .select()
       .single()

@@ -346,10 +346,17 @@
             </div>
             <div class="form-row two-col">
               <div>
-                <label>Effect %</label>
-                <input v-model.number="newEvent.effectPct" type="number"
+                <label>Buy modifier %</label>
+                <input v-model.number="newEvent.buyModifierPct" type="number"
                        placeholder="+20 or -15" />
               </div>
+              <div>
+                <label>Sell modifier %</label>
+                <input v-model.number="newEvent.sellModifierPct" type="number"
+                       placeholder="+20 or -15" />
+              </div>
+            </div>
+            <div class="form-row two-col">
               <div>
                 <label>Duration (ticks)</label>
                 <input v-model.number="newEvent.durationTicks" type="number" min="1" />
@@ -694,7 +701,7 @@ const eventSuccess = ref(false)
 
 const newEvent = ref({
   scope: 'local', worldHex: '', sector: '', description: '',
-  effectPct: 0, durationTicks: 4, tradeGoodDie: '',
+  buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
 })
 
 const activeEvents = computed(() => tick.activeEvents ?? [])
@@ -722,7 +729,7 @@ async function submitEvent() {
     eventSuccess.value = true
     newEvent.value = {
       scope: 'local', worldHex: '', sector: '', description: '',
-      effectPct: 0, durationTicks: 4, tradeGoodDie: '',
+      buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
     }
     setTimeout(() => { eventSuccess.value = false }, 3000)
   } catch (e) {

@@ -39,8 +39,13 @@
           <div class="ev-meta">
             <span class="ev-date mono">{{ formatImperialDate(ev.tick) }}</span>
             <span :class="['ev-scope', ev.scope]">{{ ev.scope }}</span>
-            <span :class="['ev-effect', ev.effect_pct > 0 ? 'up' : 'down']">
-              {{ ev.effect_pct > 0 ? '+' : '' }}{{ ev.effect_pct }}%
+            <span v-if="ev.buy_modifier_pct != null"
+                  :class="['ev-effect', ev.buy_modifier_pct > 0 ? 'up' : 'down']">
+              Buy {{ ev.buy_modifier_pct > 0 ? '+' : '' }}{{ ev.buy_modifier_pct }}%
+            </span>
+            <span v-if="ev.sell_modifier_pct != null"
+                  :class="['ev-effect', ev.sell_modifier_pct > 0 ? 'up' : 'down']">
+              Sell {{ ev.sell_modifier_pct > 0 ? '+' : '' }}{{ ev.sell_modifier_pct }}%
             </span>
             <span :class="['ev-status', isExpired(ev) ? 'expired' : 'active']">
               {{ isExpired(ev)

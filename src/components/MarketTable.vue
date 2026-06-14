@@ -5,8 +5,10 @@
       <span class="events-label">Active Events</span>
       <div class="event-chips">
         <span v-for="ev in worldEvents" :key="ev.id" class="event-chip"
-              :class="ev.effect_pct > 0 ? 'chip-up' : 'chip-down'">
-          {{ ev.effect_pct > 0 ? '+' : '' }}{{ ev.effect_pct }}%
+              :class="(ev.sell_modifier_pct ?? ev.buy_modifier_pct ?? 0) > 0 ? 'chip-up' : 'chip-down'">
+          <template v-if="ev.buy_modifier_pct != null">Buy {{ ev.buy_modifier_pct > 0 ? '+' : '' }}{{ ev.buy_modifier_pct }}%</template>
+          <template v-if="ev.buy_modifier_pct != null && ev.sell_modifier_pct != null"> · </template>
+          <template v-if="ev.sell_modifier_pct != null">Sell {{ ev.sell_modifier_pct > 0 ? '+' : '' }}{{ ev.sell_modifier_pct }}%</template>
           {{ ev.trade_good_die ? `· ${goodName(ev.trade_good_die)}` : '· all goods' }}
           — {{ ev.description }}
         </span>
