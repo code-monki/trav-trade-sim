@@ -182,7 +182,8 @@ date in the header but cannot advance it.</p>
     <tr><td>Scope</td><td><em>Local</em> — affects one world. <em>Subsector</em> — affects all worlds in the subsector.</td></tr>
     <tr><td>World</td><td>Which world (for Local scope)</td></tr>
     <tr><td>Trade Good</td><td>Specific good affected, or <em>All Goods</em></td></tr>
-    <tr><td>Effect %</td><td>Price modifier — positive raises price, negative lowers it. E.g. +25 = 25% increase.</td></tr>
+    <tr><td>Buy modifier %</td><td>Adjusts the <em>purchase</em> price at this world — positive makes buying more expensive, negative cheaper. Leave blank for no effect on buying.</td></tr>
+    <tr><td>Sell modifier %</td><td>Adjusts the <em>sale</em> price at this world — positive means players receive more when selling, negative means less. Leave blank for no effect on selling.</td></tr>
     <tr><td>Severity</td><td>Minor / Major / Crisis — controls the badge color and icon on the Market tab</td></tr>
     <tr><td>Duration (ticks)</td><td>How many ticks the event lasts. Closes automatically at that tick.</td></tr>
     <tr><td>Description</td><td>Narrative text shown in the Market tab banner and Events history</td></tr>

@@ -116,7 +116,7 @@ Max backfill: 47 ticks × 36 goods = 1,692 rows — fits in a single Supabase in
 
 ### Market events
 43 events in three severity tiers (minor/major/crisis) at ~6% total base rate.
-Events affect purchase and sale prices by an `effect_pct` modifier.
+Events affect purchase and sale prices via independent `buy_modifier_pct` and `sell_modifier_pct` columns, allowing asymmetric effects (e.g. a shortage that raises sell prices without affecting purchase prices).
 Stored in `market_events`; expired events older than the prior year are compacted during
 the annual rollup (`rollup_year`).
 

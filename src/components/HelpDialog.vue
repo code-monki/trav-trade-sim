@@ -288,11 +288,14 @@
           <section class="help-section">
             <h3>Market Events</h3>
             <p>
-              Create events in the <strong>Events</strong> tab. Events apply a
-              percentage price modifier to one trade good (or all goods) at a
-              local world or across an entire subsector. Set a duration in ticks;
-              the event expires automatically at that tick. Expire an event early
-              with the <strong>Expire</strong> button.
+              Create events in the <strong>Events</strong> tab. Events apply
+              independent <strong>Buy</strong> and <strong>Sell</strong> price
+              modifiers to one trade good (or all goods) at a local world or
+              across an entire subsector — allowing asymmetric effects such as a
+              shortage that drives up sell prices without affecting what merchants
+              charge buyers. Set a duration in ticks; the event expires
+              automatically at that tick. Expire an event early with the
+              <strong>Expire</strong> button.
             </p>
             <p>
               Events fire automatically at random (M.U.L.E.-style) on a world's

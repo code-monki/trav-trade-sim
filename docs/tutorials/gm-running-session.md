@@ -55,7 +55,8 @@ Open the Referee panel → **Events** tab → **New Event**.
 | Scope            | *Local* — affects one world. *Subsector* — affects all worlds in the subsector.      |
 | World            | Which world (for Local scope)                                                        |
 | Trade Good       | Specific good affected, or *All Goods*                                               |
-| Effect %         | Price modifier — positive raises price, negative lowers it. E.g. +25 = 25% increase. |
+| Buy modifier %   | Adjusts the *purchase* price — positive makes buying more expensive, negative cheaper. Leave blank for no effect on buying. |
+| Sell modifier %  | Adjusts the *sale* price — positive means players receive more when selling, negative means less. Leave blank for no effect on selling. |
 | Severity         | Minor / Major / Crisis — controls the badge color on the Market tab                  |
 | Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick.                   |
 | Description      | Narrative text shown in the Market tab banner and Events history                     |
