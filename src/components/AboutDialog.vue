@@ -58,38 +58,31 @@
 
             <p class="ack-subhead">Foundational Designers</p>
             <p>
-              <strong class="ack-name">Marc Miller</strong> — Deepest thanks and
-              acknowledgement to Marc Miller, the legendary original creator of Traveller
-              and designer of Classic Traveller and Traveller5 (T5). His foundational
-              genius in crafting a robust, simulation-focused rules architecture laid the
-              groundwork for decades of interstellar charting and made both group and solo
-              sandbox play a reality.
+              <strong class="ack-name">Marc Miller</strong> — Thanks to Marc Miller, the
+              original creator of Traveller and designer of Classic Traveller and
+              Traveller5 (T5), whose work laid the groundwork for decades of interstellar
+              adventure and made both group and solo sandbox play a reality.
             </p>
             <p>
-              <strong class="ack-name">Matthew Sprange</strong> — Acknowledgement is
-              gratefully extended to Matthew Sprange, the designer of Mongoose Traveller
-              and managing director of Mongoose Publishing, whose continuous stewardship,
-              modernization, and structural refinement of the core systems keep the Free
-              Trader dream thriving.
+              <strong class="ack-name">Matthew Sprange</strong> — Thanks also to Matthew
+              Sprange, designer of Mongoose Traveller and managing director of Mongoose
+              Publishing, for his ongoing stewardship of the game.
             </p>
 
             <p class="ack-subhead">Mechanical Inspiration</p>
             <p>
               <strong class="ack-name">Dani Bunten Berry (Ozark Softscape)</strong> — The
-              dynamic, randomized market events subsystem utilized in this simulator was
-              directly inspired by the brilliant macroeconomic mechanics of the seminal
-              1983 computer game M.U.L.E. Its elegant approach to modeling supply and
-              demand shocks remains a gold standard for interactive economic systems.
+              market events system was inspired by the macroeconomic mechanics of the 1983
+              computer game M.U.L.E., designed by Dani Bunten Berry (Ozark Softscape). Its
+              approach to modeling supply and demand shocks remains a model for this kind
+              of design.
             </p>
 
             <p class="ack-subhead">Testing &amp; Development Support</p>
             <p>
-              Special thanks are due to Jeff Zeitlin, Timothy Collinson, Thomas
-              Jones-Low, and Robert Eaglestone. Their dedicated efforts in testing the
-              application, breaking the economic models, identifying edge cases, and
-              providing invaluable ideas and structural encouragement were vital to
-              transforming this architectural layout into a functional, multi-ruleset
-              sandbox.
+              Special thanks to Jeff Zeitlin, Timothy Collinson, Thomas Jones-Low, and
+              Robert Eaglestone for testing, finding edge cases, and providing ideas and
+              encouragement throughout development.
             </p>
           </div>
         </div>
