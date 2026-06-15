@@ -126,7 +126,7 @@ describe('LoginView — derivedStartWeek', () => {
   it('Starting Date section has Year input with correct bounds', async () => {
     const wrapper = mountLogin()
     await wrapper.findAll('.tab')[2].trigger('click')
-    const yearInput = wrapper.find('input[type="number"][min="1100"][max="1201"]')
+    const yearInput = wrapper.find('input[type="number"][min="0"][max="2500"]')
     expect(yearInput.exists()).toBe(true)
     expect(yearInput.element.value).toBe('1105')
   })

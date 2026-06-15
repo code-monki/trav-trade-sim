@@ -31,10 +31,10 @@ describe('HamburgerMenu', () => {
     expect(wrapper.find('.hm-dropdown').exists()).toBe(false)
   })
 
-  it('dropdown contains four menu items', async () => {
+  it('dropdown contains six menu items (non-referee)', async () => {
     const wrapper = mount(HamburgerMenu)
     await wrapper.find('.hm-btn').trigger('click')
-    expect(wrapper.findAll('.hm-item')).toHaveLength(4)
+    expect(wrapper.findAll('.hm-item')).toHaveLength(6)
   })
 
   it.each([

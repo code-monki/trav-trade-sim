@@ -46,15 +46,15 @@ describe('tickToCalendar', () => {
     }
   })
 
-  it('year advances after 365 days of ticks (~52.1 ticks)', () => {
-    // 52 ticks = 364 days (still 1105), 53 ticks = 371 days (1106)
-    expect(tickToCalendar(52).year).toBe(1105)
-    expect(tickToCalendar(53).year).toBe(1106)
+  it('year advances after 48 ticks (TICKS_PER_YEAR)', () => {
+    // 1 year = 48 ticks (12 months × 4 ticks/month)
+    expect(tickToCalendar(47).year).toBe(1105)
+    expect(tickToCalendar(48).year).toBe(1106)
   })
 
   it('day resets after a year boundary', () => {
-    // At tick 53, totalDays = 371, day = (371 % 365) + 1 = 7
-    expect(tickToCalendar(53).day).toBe(7)
+    // At tick 48 weekInYear = 0, so day = 0*7+1 = 1
+    expect(tickToCalendar(48).day).toBe(1)
   })
 })
 
