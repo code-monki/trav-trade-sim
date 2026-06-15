@@ -355,8 +355,8 @@ export function maybeGenerateEvent({ world, sectorName, campaignId, tick }) {
     world_hex:      ev.scope === 'local' ? world.Hex : null,
     sector:         sectorName,
     trade_good_die: ev.goodDie,
-    buy_modifier_pct:  ev.buyModifierPct  ?? null,
-    sell_modifier_pct: ev.sellModifierPct ?? null,
+    buy_modifier_pct:  ev.buyModifierPct  ?? ev.effectPct ?? null,
+    sell_modifier_pct: ev.sellModifierPct ?? ev.effectPct ?? null,
     description:    ev.description,
     expires_tick:   tick + ev.durationTicks,
     severity:       ev.severity,
@@ -371,10 +371,10 @@ export function maybeGenerateEvent({ world, sectorName, campaignId, tick }) {
  * @param {number}   tick
  * @returns {object[]}
  */
-export function activeEventsForWorld(allEvents, worldHex, tick) {
+export function activeEventsForWorld(allEvents, worldHex, tick, worldSector) {
   return allEvents.filter(ev => {
     if (ev.expires_tick !== null && ev.expires_tick <= tick) return false
-    if (ev.scope === 'subsector') return true
+    if (ev.scope === 'subsector') return !ev.sector || ev.sector === worldSector
     return ev.world_hex === worldHex
   })
 }

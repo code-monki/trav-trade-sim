@@ -127,7 +127,7 @@ watch(() => props.world?.Hex, () => { selectedDie.value = null })
 
 // ── Active events for this world ─────────────────────────────────────────────
 const worldEvents = computed(() =>
-  tick.eventsForWorld(props.world?.Hex ?? '')
+  tick.eventsForWorld(props.world?.Hex ?? '', props.sectorName ?? '')
 )
 
 // Build a set of affected goodDie → {pct, desc} for quick row lookup

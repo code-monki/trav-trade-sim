@@ -193,6 +193,7 @@ export const useTickStore = defineStore('tick', () => {
           activeEvents.value,
           world.Hex,
           currentTick.value,
+          sectorName,
         )
 
         // Generate all 36 good snapshots deterministically
@@ -312,8 +313,8 @@ export const useTickStore = defineStore('tick', () => {
 
   // ── Active events for display ──────────────────────────────────────────────
 
-  function eventsForWorld(worldHex) {
-    return activeEventsForWorld(activeEvents.value, worldHex, currentTick.value)
+  function eventsForWorld(worldHex, sectorName) {
+    return activeEventsForWorld(activeEvents.value, worldHex, currentTick.value, sectorName)
   }
 
   // ── World event history (active + expired) ─────────────────────────────────
