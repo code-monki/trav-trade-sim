@@ -141,6 +141,16 @@
               </div>
               <div class="form-row two-col">
                 <div>
+                  <label>Staterooms</label>
+                  <input v-model.number="editShipFields.stateroomCapacity" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Low Berths</label>
+                  <input v-model.number="editShipFields.lowBerthCapacity" type="number" min="0" placeholder="0" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
                   <label>Location Hex</label>
                   <input v-model="editShipFields.currentWorld" placeholder="e.g. 1910" maxlength="4" />
                 </div>
@@ -167,6 +177,12 @@
                   <span v-if="selectedShip.current_sector"> · {{ selectedShip.current_sector }}</span>
                 </span>
               </div>
+            </div>
+
+            <!-- Stateroom / low berth capacity (edit form shows these) -->
+            <div v-if="!editingShip" class="stat-grid" style="margin-top:0.5rem">
+              <div class="stat"><label>Staterooms</label><span>{{ selectedShip.stateroom_capacity }}</span></div>
+              <div class="stat"><label>Low Berths</label><span>{{ selectedShip.low_berth_capacity }}</span></div>
             </div>
 
             <!-- Crew roster -->
@@ -229,6 +245,40 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Passenger manifest (referee refund) -->
+            <div v-if="!editingShip" class="crew-section">
+              <div class="col-header">
+                <h3>Passengers In Transit</h3>
+              </div>
+              <div v-if="refPassengerLoading" class="placeholder sm">Loading…</div>
+              <div v-else-if="!shipPassengers.length" class="placeholder sm">No passengers in transit</div>
+              <table v-else class="crew-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th class="center">Count</th>
+                    <th>Destination</th>
+                    <th class="right">Fare</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in shipPassengers" :key="p.id">
+                    <td>{{ p.passage_type }}</td>
+                    <td class="center">{{ p.count }}</td>
+                    <td>{{ p.dest_world_name || p.dest_world_hex }} · {{ p.dest_sector }}</td>
+                    <td class="right">Cr{{ p.fare_total.toLocaleString() }}</td>
+                    <td>
+                      <button class="btn-danger btn-xs"
+                              @click="doRefundPassenger(p)">Refund</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="refPassengerError" class="form-error">{{ refPassengerError }}</p>
+            </div>
+
           </template>
 
           <div v-else class="placeholder">Select a ship or create a new one</div>
@@ -458,6 +508,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
 import { useRefereeStore } from '../stores/referee.js'
+import { supabase } from '../lib/supabase.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 
 const router = useRouter()
@@ -548,6 +599,63 @@ const unassignedPlayers = computed(() => {
   return referee.players.filter(p => !assignedIds.has(p.id))
 })
 
+const shipPassengers      = ref([])
+const refPassengerLoading = ref(false)
+const refPassengerError   = ref('')
+
+async function loadShipPassengers(shipId) {
+  if (!shipId) { shipPassengers.value = []; return }
+  refPassengerLoading.value = true
+  refPassengerError.value   = ''
+  const { data, error: err } = await supabase
+    .from('passenger_manifests')
+    .select('*')
+    .eq('ship_id', shipId)
+    .eq('campaign_id', auth.campaign.id)
+    .eq('status', 'in_transit')
+    .order('created_at', { ascending: true })
+  refPassengerLoading.value = false
+  if (err) { refPassengerError.value = err.message; return }
+  shipPassengers.value = data ?? []
+}
+
+async function doRefundPassenger(manifest) {
+  if (!confirm(`Refund ${manifest.count}× ${manifest.passage_type} passage (Cr${manifest.fare_total.toLocaleString()})?`)) return
+  refPassengerError.value = ''
+
+  const { error: mErr } = await supabase
+    .from('passenger_manifests')
+    .update({ status: 'refunded', resolve_tick: tick.currentTick })
+    .eq('id', manifest.id)
+    .eq('campaign_id', auth.campaign.id)
+
+  if (mErr) { refPassengerError.value = mErr.message; return }
+
+  await supabase.from('transactions').insert({
+    campaign_id: auth.campaign.id,
+    player_id:   manifest.player_id,
+    ship_id:     manifest.ship_id,
+    tick:        tick.currentTick,
+    type:        'passenger_refund',
+    total_cr:    -manifest.fare_total,
+    world_hex:   manifest.embark_world_hex,
+    sector:      manifest.embark_sector,
+    notes:       `Refund: ${manifest.count}× ${manifest.passage_type}`,
+  })
+
+  // Reverse the fare in the ship's credit account
+  await supabase
+    .from('ships')
+    .update({ credits: (selectedShip.value?.credits ?? 0) - manifest.fare_total })
+    .eq('id', manifest.ship_id)
+
+  // Update referee store local state
+  const s = referee.ships.find(sh => sh.id === manifest.ship_id)
+  if (s) s.credits = (s.credits ?? 0) - manifest.fare_total
+
+  shipPassengers.value = shipPassengers.value.filter(p => p.id !== manifest.id)
+}
+
 function selectShip(id) {
   selectedShipId.value = id
   showNewShipForm.value = false
@@ -555,19 +663,23 @@ function selectShip(id) {
   showAddCrew.value     = false
   shipError.value       = ''
   crewError.value       = ''
-  if (editShipFields.value && selectedShip.value) {
+  shipPassengers.value  = []
+  if (selectedShip.value) {
     const s = selectedShip.value
     editShipFields.value = {
-      hullType:       s.hull_type             ?? '',
-      hullTons:       s.hull_tons             ?? 200,
-      cargoCapacity:  s.cargo_capacity        ?? 80,
-      credits:        s.credits               ?? 0,
-      jumpRating:     s.jump_rating           ?? null,
-      maneuverRating: s.maneuver_drive_rating ?? null,
-      currentWorld:   s.current_world         ?? '',
-      currentSector:  s.current_sector        ?? '',
+      hullType:          s.hull_type             ?? '',
+      hullTons:          s.hull_tons             ?? 200,
+      cargoCapacity:     s.cargo_capacity        ?? 80,
+      stateroomCapacity: s.stateroom_capacity    ?? 0,
+      lowBerthCapacity:  s.low_berth_capacity    ?? 0,
+      credits:           s.credits               ?? 0,
+      jumpRating:        s.jump_rating           ?? null,
+      maneuverRating:    s.maneuver_drive_rating ?? null,
+      currentWorld:      s.current_world         ?? '',
+      currentSector:     s.current_sector        ?? '',
     }
   }
+  loadShipPassengers(id)
 }
 
 function openNewShip() {
@@ -594,20 +706,97 @@ async function submitNewShip() {
 }
 
 async function submitEditShip() {
+  const prevWorld  = selectedShip.value?.current_world  ?? null
+  const prevSector = selectedShip.value?.current_sector ?? null
+  const newWorld   = editShipFields.value.currentWorld  || null
+  const newSector  = editShipFields.value.currentSector || null
+
   try {
     await referee.updateShip(selectedShipId.value, {
-      hull_type:             editShipFields.value.hullType        || null,
+      hull_type:             editShipFields.value.hullType           || null,
       hull_tons:             editShipFields.value.hullTons,
       cargo_capacity:        editShipFields.value.cargoCapacity,
+      stateroom_capacity:    editShipFields.value.stateroomCapacity  ?? 0,
+      low_berth_capacity:    editShipFields.value.lowBerthCapacity   ?? 0,
       credits:               editShipFields.value.credits,
-      jump_rating:           editShipFields.value.jumpRating       || null,
-      maneuver_drive_rating: editShipFields.value.maneuverRating   || null,
-      current_world:         editShipFields.value.currentWorld     || null,
-      current_sector:        editShipFields.value.currentSector    || null,
+      jump_rating:           editShipFields.value.jumpRating          || null,
+      maneuver_drive_rating: editShipFields.value.maneuverRating      || null,
+      current_world:         newWorld,
+      current_sector:        newSector,
     })
     editingShip.value = false
+
+    // Auto-deliver passengers/mail if ship moved to a new world
+    if (newWorld && newSector && (newWorld !== prevWorld || newSector !== prevSector)) {
+      await autoDeliverOnMove(selectedShipId.value, newWorld, newSector)
+      await loadShipPassengers(selectedShipId.value)
+    }
   } catch (e) {
     shipError.value = e.message
+  }
+}
+
+async function autoDeliverOnMove(shipId, worldHex, sector) {
+  // Mark matching in-transit passengers as delivered
+  const { data: delivered } = await supabase
+    .from('passenger_manifests')
+    .update({ status: 'delivered', resolve_tick: tick.currentTick })
+    .eq('ship_id', shipId)
+    .eq('campaign_id', auth.campaign.id)
+    .eq('status', 'in_transit')
+    .eq('dest_world_hex', worldHex)
+    .eq('dest_sector', sector)
+    .select()
+
+  // Write fare-collected transaction entries for delivered passengers
+  if (delivered?.length) {
+    for (const p of delivered) {
+      await supabase.from('transactions').insert({
+        campaign_id: auth.campaign.id,
+        player_id:   p.player_id,
+        ship_id:     shipId,
+        tick:        tick.currentTick,
+        type:        'passenger_fare',
+        total_cr:    0,   // fare was pre-collected at embarkation; this is a delivery record
+        world_hex:   worldHex,
+        sector,
+        notes:       `Delivered: ${p.count}× ${p.passage_type} from ${p.embark_world_name || p.embark_world_hex}`,
+      })
+    }
+  }
+
+  // Mark matching in-transit mail contracts as delivered and credit payment
+  const { data: deliveredMail } = await supabase
+    .from('mail_contracts')
+    .update({ status: 'delivered', resolve_tick: tick.currentTick })
+    .eq('ship_id', shipId)
+    .eq('campaign_id', auth.campaign.id)
+    .eq('status', 'in_transit')
+    .eq('dest_world_hex', worldHex)
+    .eq('dest_sector', sector)
+    .select()
+
+  if (deliveredMail?.length) {
+    for (const m of deliveredMail) {
+      await supabase.from('transactions').insert({
+        campaign_id: auth.campaign.id,
+        player_id:   m.player_id,
+        ship_id:     shipId,
+        tick:        tick.currentTick,
+        type:        'mail',
+        total_cr:    m.payment,
+        world_hex:   worldHex,
+        sector,
+        notes:       `Mail delivered from ${m.origin_world_name || m.origin_world_hex}`,
+      })
+
+      // Credit the ship
+      const s = referee.ships.find(sh => sh.id === shipId)
+      if (s) {
+        await supabase.from('ships').update({ credits: (s.credits ?? 0) + m.payment }).eq('id', shipId)
+        s.credits = (s.credits ?? 0) + m.payment
+      }
+    }
   }
 }
 

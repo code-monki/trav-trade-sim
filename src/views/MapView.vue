@@ -133,17 +133,35 @@
           </div>
         </div>
 
-        <!-- Detail tabs -->
+        <!-- Detail tabs: top level -->
         <div class="detail-tabs">
-          <button v-for="t in DETAIL_TABS" :key="t.key"
-                  :class="['dtab', { active: detailTab === t.key }]"
-                  @click="detailTab = t.key">
+          <button v-for="t in TOP_TABS" :key="t.key"
+                  :class="['dtab', { active: topTab === t.key }]"
+                  @click="topTab = t.key">
+            {{ t.label }}
+          </button>
+        </div>
+
+        <!-- Sub-tabs: Port -->
+        <div v-if="topTab === 'port'" class="detail-subtabs">
+          <button v-for="t in PORT_TABS" :key="t.key"
+                  :class="['dsubtab', { active: portTab === t.key }]"
+                  @click="portTab = t.key">
+            {{ t.label }}
+          </button>
+        </div>
+
+        <!-- Sub-tabs: Ship -->
+        <div v-if="topTab === 'ship'" class="detail-subtabs">
+          <button v-for="t in SHIP_TABS" :key="t.key"
+                  :class="['dsubtab', { active: shipTab === t.key }]"
+                  @click="shipTab = t.key">
             {{ t.label }}
           </button>
         </div>
 
         <!-- ── Overview tab ──────────────────────────────────────────────── -->
-        <template v-if="detailTab === 'overview'">
+        <template v-if="topTab === 'overview'">
           <div class="overview-content">
           <section class="field-group" v-if="map.selectedWorld.UWP">
             <h3>Universal World Profile</h3>
@@ -241,8 +259,8 @@
           </div><!-- /overview-content -->
         </template>
 
-        <!-- ── Market tab ────────────────────────────────────────────────── -->
-        <template v-if="detailTab === 'market'">
+        <!-- ── Port: Market tab ──────────────────────────────────────────── -->
+        <template v-if="topTab === 'port' && portTab === 'market'">
           <div class="market-layout" ref="marketLayoutEl">
             <MarketTable
               :world="map.selectedWorld"
@@ -285,8 +303,28 @@
           />
         </template>
 
-        <!-- ── Cargo tab ─────────────────────────────────────────────────── -->
-        <template v-if="detailTab === 'cargo'">
+        <!-- ── Port: Passengers tab ──────────────────────────────────────── -->
+        <template v-if="topTab === 'port' && portTab === 'passengers'">
+          <div class="subtab-wrap">
+            <PassengersPanel
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
+
+        <!-- ── Port: Services tab ────────────────────────────────────────── -->
+        <template v-if="topTab === 'port' && portTab === 'services'">
+          <div class="subtab-wrap">
+            <ShipServices
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
+
+        <!-- ── Ship: Cargo tab ───────────────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'cargo'">
           <div class="cargo-tab-wrap">
             <CargoHold
               :world="map.selectedWorld"
@@ -295,8 +333,22 @@
           </div>
         </template>
 
+        <!-- ── Ship: Manifest tab ────────────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'manifest'">
+          <div class="subtab-wrap">
+            <PassengerManifest />
+          </div>
+        </template>
+
+        <!-- ── Ship: Contracts tab ───────────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'contracts'">
+          <div class="subtab-wrap">
+            <ContractsPanel />
+          </div>
+        </template>
+
         <!-- ── Events tab ────────────────────────────────────────────────── -->
-        <template v-if="detailTab === 'events'">
+        <template v-if="topTab === 'events'">
           <div class="events-tab-wrap">
             <EventsHistory
               :world-hex="map.selectedWorld.Hex"
@@ -306,12 +358,12 @@
         </template>
 
         <!-- ── Jump tab ──────────────────────────────────────────────────── -->
-        <template v-if="detailTab === 'jump'">
+        <template v-if="topTab === 'jump'">
           <div class="jump-tab-wrap">
             <RouteAnalysis
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
-              @select-world="detailTab = 'market'"
+              @select-world="topTab = 'port'; portTab = 'market'"
             />
           </div>
         </template>
@@ -339,18 +391,22 @@ import { useRouter } from 'vue-router'
 import { useMapStore }  from '../stores/map.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
-import MarketTable    from '../components/MarketTable.vue'
-import PriceChart     from '../components/PriceChart.vue'
-import EventsHistory  from '../components/EventsHistory.vue'
-import CargoHold      from '../components/CargoHold.vue'
-import BuyDialog      from '../components/BuyDialog.vue'
-import HamburgerMenu  from '../components/HamburgerMenu.vue'
+import MarketTable      from '../components/MarketTable.vue'
+import PriceChart       from '../components/PriceChart.vue'
+import EventsHistory    from '../components/EventsHistory.vue'
+import CargoHold        from '../components/CargoHold.vue'
+import BuyDialog        from '../components/BuyDialog.vue'
+import HamburgerMenu    from '../components/HamburgerMenu.vue'
 import AboutDialog      from '../components/AboutDialog.vue'
 import HelpDialog       from '../components/HelpDialog.vue'
 import ThemeDialog      from '../components/ThemeDialog.vue'
 import CharacterDialog  from '../components/CharacterDialog.vue'
 import TutorialDialog   from '../components/TutorialDialog.vue'
-import RouteAnalysis   from '../components/RouteAnalysis.vue'
+import RouteAnalysis    from '../components/RouteAnalysis.vue'
+import PassengersPanel  from '../components/PassengersPanel.vue'
+import ShipServices     from '../components/ShipServices.vue'
+import PassengerManifest from '../components/PassengerManifest.vue'
+import ContractsPanel   from '../components/ContractsPanel.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
@@ -365,7 +421,9 @@ const filteredSectors = computed(() => {
   return q ? map.sectors.filter(s => s.name.toLowerCase().includes(q)) : map.sectors
 })
 
-const detailTab      = ref('overview')
+const topTab       = ref('overview')
+const portTab      = ref('market')
+const shipTab      = ref('cargo')
 const selectedGood   = ref(null)
 const chartedGoods   = ref(new Set())
 const showAbout      = ref(false)
@@ -376,12 +434,24 @@ const showCharacter  = ref(false)
 const showBuyDialog  = ref(false)
 const buyLoading     = ref(false)
 
-const DETAIL_TABS = [
+const TOP_TABS = [
   { key: 'overview', label: 'Overview' },
-  { key: 'market',   label: 'Market'   },
-  { key: 'cargo',    label: 'Cargo'    },
+  { key: 'port',     label: 'Port'     },
+  { key: 'ship',     label: 'Ship'     },
   { key: 'events',   label: 'Events'   },
   { key: 'jump',     label: 'Jump'     },
+]
+
+const PORT_TABS = [
+  { key: 'market',     label: 'Market'     },
+  { key: 'passengers', label: 'Passengers' },
+  { key: 'services',   label: 'Services'   },
+]
+
+const SHIP_TABS = [
+  { key: 'cargo',     label: 'Cargo'     },
+  { key: 'manifest',  label: 'Manifest'  },
+  { key: 'contracts', label: 'Contracts' },
 ]
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
@@ -483,11 +553,16 @@ function handleGlobalKey(e) {
 
   switch (e.key) {
     case '?': showHelp.value = true; break
-    case 'o': case 'O': if (map.selectedWorld) detailTab.value = 'overview'; break
-    case 'm': case 'M': if (map.selectedWorld) detailTab.value = 'market';   break
-    case 'e': case 'E': if (map.selectedWorld) detailTab.value = 'events';   break
-    case 'c': case 'C': if (map.selectedWorld) detailTab.value = 'cargo';    break
-    case 'j': case 'J': if (map.selectedWorld) detailTab.value = 'jump';     break
+    case 'o': case 'O':
+      if (map.selectedWorld) topTab.value = 'overview'; break
+    case 'm': case 'M':
+      if (map.selectedWorld) { topTab.value = 'port'; portTab.value = 'market' } break
+    case 'e': case 'E':
+      if (map.selectedWorld) topTab.value = 'events'; break
+    case 'c': case 'C':
+      if (map.selectedWorld) { topTab.value = 'ship'; shipTab.value = 'cargo' } break
+    case 'j': case 'J':
+      if (map.selectedWorld) topTab.value = 'jump'; break
     case 't': case 'T':
       if (auth.isReferee && !tick.loading) doAdvanceTick()
       break
@@ -746,10 +821,40 @@ header {
 
 .resize-handle:hover { background: var(--accent-dim); }
 
-/* ── Events / Cargo / Jump tabs ────────────────────────────────────────────── */
+/* ── Sub-tabs (Port / Ship groups) ────────────────────────────────────────── */
+.detail-subtabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.dsubtab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.dsubtab:hover { color: var(--text); border-color: var(--border); }
+.dsubtab.active {
+  background: var(--bg-selected);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Events / Cargo / Jump / generic subtab wraps ─────────────────────────── */
 .events-tab-wrap,
 .cargo-tab-wrap,
-.jump-tab-wrap {
+.jump-tab-wrap,
+.subtab-wrap {
   flex: 1;
   min-height: 0;
   overflow: hidden;
