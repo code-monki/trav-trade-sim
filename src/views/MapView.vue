@@ -333,17 +333,17 @@
           </div>
         </template>
 
-        <!-- ── Ship: Manifest tab ────────────────────────────────────────── -->
-        <template v-if="topTab === 'ship' && shipTab === 'manifest'">
+        <!-- ── Ship: Aboard tab ──────────────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'aboard'">
           <div class="subtab-wrap">
-            <PassengerManifest />
+            <AboardPanel />
           </div>
         </template>
 
-        <!-- ── Ship: Contracts tab ───────────────────────────────────────── -->
-        <template v-if="topTab === 'ship' && shipTab === 'contracts'">
+        <!-- ── Ship: Reports tab ─────────────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'reports'">
           <div class="subtab-wrap">
-            <ContractsPanel />
+            <ReportsPanel />
           </div>
         </template>
 
@@ -405,8 +405,8 @@ import TutorialDialog   from '../components/TutorialDialog.vue'
 import RouteAnalysis    from '../components/RouteAnalysis.vue'
 import PassengersPanel  from '../components/PassengersPanel.vue'
 import ShipServices     from '../components/ShipServices.vue'
-import PassengerManifest from '../components/PassengerManifest.vue'
-import ContractsPanel   from '../components/ContractsPanel.vue'
+import AboardPanel  from '../components/AboardPanel.vue'
+import ReportsPanel from '../components/ReportsPanel.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
@@ -449,9 +449,9 @@ const PORT_TABS = [
 ]
 
 const SHIP_TABS = [
-  { key: 'cargo',     label: 'Cargo'     },
-  { key: 'manifest',  label: 'Manifest'  },
-  { key: 'contracts', label: 'Contracts' },
+  { key: 'cargo',   label: 'Cargo'   },
+  { key: 'aboard',  label: 'Aboard'  },
+  { key: 'reports', label: 'Reports' },
 ]
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
