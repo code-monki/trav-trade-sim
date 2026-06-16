@@ -92,6 +92,16 @@
                   <input v-model.number="newShip.maneuverRating" type="number" min="1" max="9" placeholder="—" />
                 </div>
               </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Fuel Capacity (t)</label>
+                  <input v-model.number="newShip.fuelCapacity" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Current Fuel (t)</label>
+                  <input v-model.number="newShip.fuelCurrent" type="number" min="0" placeholder="0" />
+                </div>
+              </div>
               <div class="form-actions">
                 <button type="button" class="btn-ghost" @click="cancelNewShip">Cancel</button>
                 <button type="submit" class="btn-primary" :disabled="!newShip.name.trim()">Create Ship</button>
@@ -151,6 +161,16 @@
               </div>
               <div class="form-row two-col">
                 <div>
+                  <label>Fuel Capacity (t)</label>
+                  <input v-model.number="editShipFields.fuelCapacity" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Current Fuel (t)</label>
+                  <input v-model.number="editShipFields.fuelCurrent" type="number" min="0" placeholder="0" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
                   <label>Location Hex</label>
                   <input v-model="editShipFields.currentWorld" placeholder="e.g. 1910" maxlength="4" />
                 </div>
@@ -179,10 +199,12 @@
               </div>
             </div>
 
-            <!-- Stateroom / low berth capacity (edit form shows these) -->
+            <!-- Stateroom / berth / fuel (edit form shows these) -->
             <div v-if="!editingShip" class="stat-grid" style="margin-top:0.5rem">
               <div class="stat"><label>Staterooms</label><span>{{ selectedShip.stateroom_capacity }}</span></div>
               <div class="stat"><label>Low Berths</label><span>{{ selectedShip.low_berth_capacity }}</span></div>
+              <div class="stat"><label>Fuel Capacity</label><span>{{ selectedShip.fuel_capacity }}t</span></div>
+              <div class="stat"><label>Current Fuel</label><span>{{ selectedShip.fuel_current }}t</span></div>
             </div>
 
             <!-- Crew roster -->
@@ -622,7 +644,7 @@ const crewError       = ref('')
 const newCrewPlayerId = ref('')
 const newCrewRole     = ref('crew')
 
-const newShip = ref({ name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null })
+const newShip = ref({ name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null, fuelCapacity: 0, fuelCurrent: 0 })
 const editShipFields = ref({})
 
 const selectedShip = computed(() => referee.ships.find(s => s.id === selectedShipId.value) ?? null)
@@ -705,6 +727,8 @@ function selectShip(id) {
       cargoCapacity:     s.cargo_capacity        ?? 80,
       stateroomCapacity: s.stateroom_capacity    ?? 0,
       lowBerthCapacity:  s.low_berth_capacity    ?? 0,
+      fuelCapacity:      s.fuel_capacity         ?? 0,
+      fuelCurrent:       s.fuel_current          ?? 0,
       credits:           s.credits               ?? 0,
       jumpRating:        s.jump_rating           ?? null,
       maneuverRating:    s.maneuver_drive_rating ?? null,
@@ -719,7 +743,7 @@ function openNewShip() {
   showNewShipForm.value = true
   selectedShipId.value  = null
   shipError.value       = ''
-  newShip.value = { name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null }
+  newShip.value = { name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null, fuelCapacity: 0, fuelCurrent: 0 }
 }
 
 function cancelNewShip() {
@@ -751,6 +775,8 @@ async function submitEditShip() {
       cargo_capacity:        editShipFields.value.cargoCapacity,
       stateroom_capacity:    editShipFields.value.stateroomCapacity  ?? 0,
       low_berth_capacity:    editShipFields.value.lowBerthCapacity   ?? 0,
+      fuel_capacity:         editShipFields.value.fuelCapacity       ?? 0,
+      fuel_current:          editShipFields.value.fuelCurrent        ?? 0,
       credits:               editShipFields.value.credits,
       jump_rating:           editShipFields.value.jumpRating          || null,
       maneuver_drive_rating: editShipFields.value.maneuverRating      || null,

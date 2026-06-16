@@ -25,6 +25,15 @@
                   class="fuel-badge unrefined">Unrefined Cr{{ availableFuel.unrefined.toLocaleString() }}/t</span>
           </div>
 
+          <div v-if="fuelCapacity > 0" class="fuel-status">
+            <span class="fuel-status-label">Tank</span>
+            <div class="fuel-bar-wrap">
+              <div class="fuel-bar-fill" :style="{ width: fuelBarPct + '%' }"></div>
+            </div>
+            <span class="fuel-status-val">{{ fuelCurrent }}/{{ fuelCapacity }}t</span>
+            <span v-if="tankSpace <= 0" class="fuel-full">FULL</span>
+          </div>
+
           <form class="fuel-form" @submit.prevent="submitFuel">
             <div class="form-row two-col">
               <div>
@@ -44,18 +53,21 @@
                 <label>Tons</label>
                 <div class="stepper">
                   <button type="button" @click="decFuelTons" :disabled="fuelForm.tons <= 1">−</button>
-                  <input v-model.number="fuelForm.tons" type="number" min="1" class="count-input" />
-                  <button type="button" @click="incFuelTons">+</button>
+                  <input v-model.number="fuelForm.tons" type="number" min="1"
+                         :max="fuelCapacity > 0 && tankSpace > 0 ? tankSpace : undefined"
+                         class="count-input" />
+                  <button type="button" @click="incFuelTons" :disabled="fuelCapacity > 0 && tankSpace > 0 && fuelForm.tons >= tankSpace">+</button>
                 </div>
               </div>
             </div>
 
             <div class="hint-row">
               <span class="hint">
-                J-{{ ship.ship?.jump_rating ?? '?' }} jump needs
-                {{ jumpNeeded }} t
+                J-{{ ship.ship?.jump_rating ?? '?' }} jump needs {{ jumpNeeded }}t
+                <template v-if="fuelCapacity > 0"> · {{ tankSpace }}t space available</template>
               </span>
-              <button type="button" class="btn-ghost btn-xs" @click="fuelForm.tons = jumpNeeded">
+              <button type="button" class="btn-ghost btn-xs" @click="fillForJump"
+                      :disabled="tankSpace <= 0">
                 Fill for jump
               </button>
             </div>
@@ -173,6 +185,11 @@ const pricePerTon = computed(() =>
 
 const fuelTotal = computed(() => fuelCost(fuelForm.value.tons, pricePerTon.value))
 
+const fuelCapacity = computed(() => ship.ship?.fuel_capacity ?? 0)
+const fuelCurrent  = computed(() => ship.ship?.fuel_current  ?? 0)
+const tankSpace    = computed(() => fuelCapacity.value > 0 ? fuelCapacity.value - fuelCurrent.value : Infinity)
+const fuelBarPct   = computed(() => fuelCapacity.value > 0 ? Math.min(100, (fuelCurrent.value / fuelCapacity.value) * 100) : 0)
+
 const jumpNeeded = computed(() =>
   jumpFuelTons(ship.ship?.hull_tons ?? 200, ship.ship?.jump_rating ?? 1)
 )
@@ -180,8 +197,14 @@ const jumpNeeded = computed(() =>
 const canBuyFuel = computed(() =>
   fuelForm.value.tons > 0 &&
   pricePerTon.value > 0 &&
-  (ship.ship?.credits ?? 0) >= fuelTotal.value
+  (ship.ship?.credits ?? 0) >= fuelTotal.value &&
+  (fuelCapacity.value === 0 || fuelForm.value.tons <= tankSpace.value)
 )
+
+function fillForJump() {
+  const needed = jumpNeeded.value
+  fuelForm.value.tons = fuelCapacity.value > 0 ? Math.min(needed, tankSpace.value) : needed
+}
 
 async function submitFuel() {
   fuelError.value   = ''
@@ -206,7 +229,10 @@ async function submitFuel() {
   setTimeout(() => { fuelSuccess.value = '' }, 3500)
 }
 
-function incFuelTons() { fuelForm.value.tons++ }
+function incFuelTons() {
+  if (tankSpace.value !== Infinity && fuelForm.value.tons >= tankSpace.value) return
+  fuelForm.value.tons++
+}
 function decFuelTons() { if (fuelForm.value.tons > 1) fuelForm.value.tons-- }
 
 // ── Mail form ─────────────────────────────────────────────────────────────────
@@ -276,7 +302,31 @@ async function submitMail() {
   font-style: italic;
 }
 
-.fuel-availability { display: flex; gap: 0.5rem; margin-bottom: 0.25rem; }
+.fuel-availability { display: flex; gap: 0.5rem; }
+
+.fuel-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.1rem;
+}
+.fuel-status-label { color: var(--text-dim); min-width: 2.5rem; }
+.fuel-status-val   { color: var(--text); font-family: monospace; min-width: 4rem; }
+.fuel-full { color: var(--accent); font-size: 0.7rem; font-weight: 700; }
+.fuel-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-item, var(--border));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.fuel-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
 .fuel-badge {
   font-size: 0.72rem;
   padding: 0.2rem 0.6rem;

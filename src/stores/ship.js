@@ -471,6 +471,12 @@ export const useShipStore = defineStore('ship', () => {
   async function purchaseFuel({ campaignId, playerId, fuelType, tons, pricePerTon, worldHex, sector, tick }) {
     if (!ship.value) return { ok: false, error: 'No active ship' }
 
+    const fuelCapacity = ship.value.fuel_capacity ?? 0
+    const fuelCurrent  = ship.value.fuel_current  ?? 0
+    const tankSpace    = fuelCapacity - fuelCurrent
+    if (fuelCapacity > 0 && tons > tankSpace)
+      return { ok: false, error: `Tank can only hold ${tankSpace}t more fuel (capacity ${fuelCapacity}t)` }
+
     const totalCost = Math.round(tons * pricePerTon)
     if ((ship.value.credits ?? 0) < totalCost)
       return { ok: false, error: 'Insufficient credits' }
@@ -498,6 +504,14 @@ export const useShipStore = defineStore('ship', () => {
 
       const credResult = await adjustCredits(-totalCost)
       if (!credResult.ok) throw new Error(credResult.error)
+
+      // Update fuel_current on the ship record
+      const newFuelCurrent = fuelCurrent + tons
+      const { error: fuelErr } = await supabase
+        .from('ships')
+        .update({ fuel_current: newFuelCurrent })
+        .eq('id', ship.value.id)
+      if (!fuelErr) ship.value = { ...ship.value, fuel_current: newFuelCurrent }
 
       return { ok: true, totalCost }
     } catch (e) {
