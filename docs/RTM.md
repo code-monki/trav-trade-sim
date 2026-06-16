@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -126,6 +126,57 @@ This matrix links each functional requirement to its design artefacts, implement
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-1001 | Referee manages skills | DD §1.1 `player_skills` | `RefereeView.vue` Players tab, migration 010 | — | — | — | — |
 | FR-1002 | Skills visible to referee | HLD §5.1 | `RefereeView.vue` Players tab expand | — | — | — | — |
+
+## 2.11 Passengers
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-1101 | Book passengers at Port > Passengers | DD §2 `PassengersPanel` | `PassengersPanel.vue`, `ship.js:bookPassengers`, migration 021 | — | — | — | — |
+| FR-1102 | Validate capacity before booking | DD §3 | `ship.js:bookPassengers` (stateroomsAvailable check) | UT-501–504 | — | — | — |
+| FR-1103 | CT7/T5 fare calculation | DD §1.1 `passenger_manifests` | `passengers.js:passengerFare` | UT-501–504 | — | — | — |
+| FR-1104 | Booking creates manifest + transaction | HLD §4 | `ship.js:bookPassengers` | — | — | — | — |
+| FR-1105 | Auto-deliver on arrival | HLD §5.1 | `ship.js:updateLocation`, `ship.js:deliverPassengers`, `RefereeView.vue:autoDeliverOnMove` | — | — | — | — |
+| FR-1106 | Manifest tab shows occupancy + passengers | DD §2 `PassengerManifest` | `PassengerManifest.vue` | — | — | — | — |
+| FR-1107 | Referee refund | HLD §5.1, DD §2 | `RefereeView.vue:doRefundPassenger`, `ship.js:refundPassenger` | — | — | — | — |
+
+## 2.12 Fuel Purchasing
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-1201 | Fuel availability from starport class | DD §2 `ShipServices` | `passengers.js:availableFuelTypes`, `ShipServices.vue` | UT-505–509 | — | — | — |
+| FR-1202 | Refined/unrefined pricing by starport | DD §2 | `passengers.js:FUEL_PRICES` | UT-505–509 | — | — | — |
+| FR-1203 | Cap at remaining tank capacity | DD §3 | `ship.js:purchaseFuel` (capacity check), `ShipServices.vue` (stepper max) | — | — | — | — |
+| FR-1204 | Fill for jump shortcut | DD §2 | `ShipServices.vue:fillForJump` | UT-510 | — | — | — |
+| FR-1205 | Fuel purchase writes transaction + updates fuel_current | DD §3 | `ship.js:purchaseFuel`, migration 022 | — | — | — | — |
+| FR-1206 | Fill-level indicator | DD §7 | `ShipServices.vue` `.fuel-bar` | — | — | — | — |
+
+## 2.13 Mail Contracts
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-1301 | Accept mail at Port > Services | DD §2 `ShipServices` | `ShipServices.vue`, `ship.js:acceptMailContract`, migration 021 | — | — | — | — |
+| FR-1302 | CT7/T5 payment calculation | DD §2 | `passengers.js:mailPayment` | UT-511–512 | — | — | — |
+| FR-1303 | Track in mail_contracts table | DD §1.1 | migration 021, `ship.js:acceptMailContract` | — | — | — | — |
+| FR-1304 | Auto-deliver + credit on arrival | HLD §4 | `ship.js:deliverMail`, `RefereeView.vue:autoDeliverOnMove` | — | — | — | — |
+| FR-1305 | Contracts tab | DD §2 `ContractsPanel` | `ContractsPanel.vue` | — | — | — | — |
+
+## 2.1 Campaign Management (additions)
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-110 | Referee edits campaign label | DD §7 | `RefereeView.vue` Campaign tab inline edit, supabase UPDATE campaigns SET label | — | — | — | — |
+
+## 2.8 Market Events (additions)
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-807 | Pre-built event catalogue | DD §7 | `RefereeView.vue:EVENT_CATALOGUE` (20 entries) | — | — | — | — |
+
+## 2.4 Market (additions)
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-408 (realized) | Realized OHLCV chart tab | DD §2 `PriceChart` | `PriceChart.vue` Realized tab, `realized_ohlcv` view (migration 008) | — | — | — | — |
 
 ---
 

@@ -4,7 +4,7 @@
 
 export const TUTORIAL_GROUPS = [
   { role: 'GM',     ids: ['gm-campaign-setup', 'gm-running-session'] },
-  { role: 'Player', ids: ['player-getting-started', 'player-first-trade', 'player-route-analysis'] },
+  { role: 'Player', ids: ['player-getting-started', 'player-first-trade', 'player-services', 'player-route-analysis'] },
 ]
 
 export const TUTORIALS = [
@@ -97,13 +97,19 @@ recovery code to reset their PIN. Full player instructions:
   <tbody>
     <tr><td>Name</td><td>Ship name, e.g. "Free Trader Beowulf"</td></tr>
     <tr><td>Hull Type</td><td>Class designation, e.g. "Type-A Free Trader"</td></tr>
-    <tr><td>Hull Tons</td><td>Total displacement in tons (cosmetic / reference)</td></tr>
+    <tr><td>Hull Tons</td><td>Total displacement in tons. Used to compute jump fuel (10% per parsec).</td></tr>
     <tr><td>Cargo Tons</td><td>Available hold — constrains how much players can buy</td></tr>
     <tr><td>Jump Rating</td><td>Maximum parsecs per jump; sets the default in the Jump tab</td></tr>
+    <tr><td>Staterooms</td><td>Number of High/Middle passenger berths available</td></tr>
+    <tr><td>Low Berths</td><td>Number of Low passage cryo-berths</td></tr>
+    <tr><td>Fuel Capacity (t)</td><td>Total fuel tank size. Leave 0 if not tracking fuel.</td></tr>
+    <tr><td>Current Fuel (t)</td><td>Fuel already aboard when the ship enters play</td></tr>
     <tr><td>Credits</td><td>Starting ship's treasury</td></tr>
   </tbody>
 </table>
 <p>Click <strong>Create</strong>. The ship appears in the ships list.</p>
+<p class="tut-note">ℹ All capacity fields can be changed later from the ship edit form. Fuel is not
+consumed automatically — decrease <em>Current Fuel</em> manually after each jump.</p>
 `
       },
       {
@@ -203,8 +209,51 @@ resolves ahead of schedule.</p>
 `
       },
       {
+        id: 'manage-passengers',
+        title: '4. Manage Passengers',
+        body: `
+<p>When players book passengers, they appear in the Referee panel → <strong>Ships</strong>
+tab → expand ship → passenger manifest section. Each row shows the passenger type, count,
+destination, and booked fare.</p>
+<p>Passengers are <strong>automatically delivered</strong> when you move the ship to their
+destination via the ship edit form. You can also let players trigger delivery themselves
+by using the Jump tab.</p>
+<p>To issue a refund: click <strong>Refund</strong> on a manifest row. This sets the
+passenger status to <em>refunded</em>, reverses the fare credit from the ship account,
+and records a refund transaction. Use this when passengers disembark early or an
+in-game event requires compensation.</p>
+<p class="tut-warn">⚠ Refunds cannot be undone. The fare is debited from the ship's
+current credit balance.</p>
+`
+      },
+      {
+        id: 'events-catalogue',
+        title: '5. Use the Events Catalogue',
+        body: `
+<p>The Referee panel → <strong>Events</strong> tab includes a <strong>Catalogue</strong>
+section — 20 pre-built M.U.L.E.-style events ranging from shortages and surpluses to
+piracy and industrial accidents.</p>
+<p>Click any catalogue entry to pre-fill the <strong>New Event</strong> form below it.
+Review and adjust the fields (especially scope and which world), then click
+<strong>Create Event</strong> to activate it.</p>
+<p>You can also create events from scratch — the catalogue is just a time-saving shortcut
+for common scenarios.</p>
+`
+      },
+      {
+        id: 'edit-campaign-label',
+        title: '6. Edit the Campaign Label',
+        body: `
+<p>The campaign display name can be changed at any time. Open the Referee panel →
+<strong>Campaign</strong> tab. Click the <strong>✎</strong> (edit) button next to the
+campaign name, type the new label, and press <strong>Save</strong> or hit Enter.</p>
+<p class="tut-note">ℹ Only the label changes — the campaign code, trade rules, and milieu
+are locked at creation and cannot be modified.</p>
+`
+      },
+      {
         id: 'manage-players',
-        title: '4. Manage Players',
+        title: '7. Manage Players',
         body: `
 <p>The Referee panel → <strong>Players</strong> tab lists every character with their current
 ship assignment and skill list.</p>
@@ -217,7 +266,7 @@ a skill with the × button on the skill chip.</p>
       },
       {
         id: 'reset-pin',
-        title: '5. Reset a Player\'s PIN',
+        title: '8. Reset a Player\'s PIN',
         body: `
 <p>If a player forgets their PIN:</p>
 <ol>
@@ -293,13 +342,25 @@ character name, and PIN.</p>
   <li><em>World list</em> — all worlds in that sector; click one to open it in the detail panel</li>
   <li>Use the filter box above the world list to search by name or hex coordinate</li>
 </ul>
-<p><strong>Right detail panel — five tabs</strong></p>
+<p><strong>Right detail panel — top-level tabs</strong></p>
 <ul>
   <li><strong>Overview</strong> (<kbd>O</kbd>) — world characteristics, UWP, trade codes</li>
-  <li><strong>Market</strong> (<kbd>M</kbd>) — current buy/sell prices for all trade goods</li>
-  <li><strong>Cargo</strong> (<kbd>C</kbd>) — your ship's hold and running trade ledger</li>
+  <li><strong>Port</strong> (<kbd>M</kbd> for Market) — port services; sub-tabs below</li>
+  <li><strong>Ship</strong> (<kbd>C</kbd> for Cargo) — your ship; sub-tabs below</li>
   <li><strong>Events</strong> (<kbd>E</kbd>) — market event history for this world</li>
   <li><strong>Jump</strong> (<kbd>J</kbd>) — worlds reachable within your ship's jump range</li>
+</ul>
+<p><strong>Port sub-tabs</strong> (appear when Port is selected)</p>
+<ul>
+  <li><strong>Market</strong> — current buy/sell prices for all trade goods</li>
+  <li><strong>Passengers</strong> — book passenger berths</li>
+  <li><strong>Services</strong> — purchase fuel and accept mail contracts</li>
+</ul>
+<p><strong>Ship sub-tabs</strong> (appear when Ship is selected)</p>
+<ul>
+  <li><strong>Cargo</strong> — your ship's hold and running trade ledger</li>
+  <li><strong>Manifest</strong> — passengers currently in transit</li>
+  <li><strong>Contracts</strong> — mail contracts in transit</li>
 </ul>
 <p>Keyboard shortcuts switch tabs when no input field is focused. Press <kbd>?</kbd> to
 open Help at any time.</p>
@@ -460,6 +521,120 @@ and net profit, then click <strong>Confirm</strong>. Credits are added to the sh
 account and a trade record is logged automatically.</p>
 <p>A brief flash in the bottom-right corner confirms the profit or loss. Repeat for each
 cargo row you want to sell.</p>
+`
+      }
+    ]
+  },
+
+  // ── Player: Passengers, Fuel & Mail ────────────────────────────────────────
+  {
+    id: 'player-services',
+    title: 'Passengers, Fuel & Mail',
+    role: 'Player',
+    sections: [
+      {
+        id: 'services-overview',
+        title: 'Overview',
+        body: `
+<p>Beyond cargo trading, your ship can earn income through three additional services:</p>
+<ul>
+  <li><strong>Passengers</strong> — fare collected upfront at embarkation; auto-delivered on arrival</li>
+  <li><strong>Fuel</strong> — purchased at starports to keep the ship running</li>
+  <li><strong>Mail contracts</strong> — payment on delivery; low risk, predictable income</li>
+</ul>
+<p>All three are found under the <strong>Port</strong> top-level tab. Fuel and mail share the
+<strong>Services</strong> sub-tab; passengers have their own <strong>Passengers</strong> sub-tab.</p>
+`
+      },
+      {
+        id: 'book-passengers',
+        title: '1. Book Passengers',
+        body: `
+<p>Open <strong>Port → Passengers</strong>. The booking form shows your ship's current
+stateroom and low berth occupancy.</p>
+<div class="tut-shot">📸 Passengers sub-tab showing capacity summary and booking form</div>
+<table class="tut-table">
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Passage Type</td><td>High / Middle / Low. High and Middle share staterooms; Low uses cryo-berths.</td></tr>
+    <tr><td>Count</td><td>Number of passengers. Must not exceed available berths.</td></tr>
+    <tr><td>Parsecs</td><td>T5 campaigns only — jump distance determines the fare.</td></tr>
+    <tr><td>Destination</td><td>Destination world hex and sector. Optional name for display.</td></tr>
+  </tbody>
+</table>
+<p>The <strong>fare preview</strong> updates as you enter details. Click <strong>Book</strong>
+to confirm. The fare is credited to the ship immediately and passengers appear on the
+<strong>Ship → Manifest</strong> tab.</p>
+<p class="tut-note">ℹ CT7 fares are flat per jump (High Cr10,000 · Middle Cr8,000 · Low Cr1,000).
+T5 fares for High and Middle scale with parsecs; Low is always flat.</p>
+`
+      },
+      {
+        id: 'passenger-delivery',
+        title: '2. Delivering Passengers',
+        body: `
+<p>Passengers are delivered automatically when the ship arrives at their destination world.
+Use <strong>Jump → Select</strong> on the destination to trigger auto-delivery, or ask
+your Referee to move the ship via the campaign management panel.</p>
+<p>After delivery, the passengers disappear from the Manifest tab. No extra action is
+required — the fare was already collected at boarding.</p>
+<p>If a passenger needs to disembark early, your Referee can issue a refund from the
+campaign management panel. The fare will be reversed from the ship account.</p>
+`
+      },
+      {
+        id: 'purchase-fuel',
+        title: '3. Purchase Fuel',
+        body: `
+<p>Open <strong>Port → Services</strong>. The Fuel section shows what types of fuel are
+available at the current starport.</p>
+<div class="tut-shot">📸 Services tab fuel section showing availability badges and stepper</div>
+<table class="tut-table">
+  <thead><tr><th>Starport</th><th>Available</th><th>Price</th></tr></thead>
+  <tbody>
+    <tr><td>A, B</td><td>Refined</td><td>Cr500/t</td></tr>
+    <tr><td>C, D</td><td>Unrefined</td><td>Cr100/t</td></tr>
+    <tr><td>E, X</td><td>None</td><td>—</td></tr>
+  </tbody>
+</table>
+<p>The <strong>tank fill bar</strong> shows your current/maximum fuel level. The stepper
+is capped at remaining tank space so you cannot over-fill.</p>
+<p>Click <strong>Fill for jump</strong> to automatically set the tons to exactly what a
+single jump at your ship's jump rating requires (or less, if the tank is nearly full).</p>
+<p class="tut-note">ℹ Jump fuel = hull tons × 10% × parsecs. A J-2 jump in a 200t ship
+uses 40 tons.</p>
+`
+      },
+      {
+        id: 'accept-mail',
+        title: '4. Accept a Mail Contract',
+        body: `
+<p>In <strong>Port → Services</strong>, scroll to the Mail Contract section.
+Mail is an Imperial obligation — once accepted it must be delivered.</p>
+<div class="tut-shot">📸 Services tab mail section showing destination fields and payment preview</div>
+<p>Enter the <strong>destination hex</strong> and <strong>sector</strong>.
+For T5 campaigns, enter the <strong>parsecs</strong> (jump distance) — this sets the payment.
+An optional destination name helps you identify the contract later.</p>
+<p>The <strong>payment preview</strong> shows what you will receive on delivery:
+CT7 flat Cr25,000; T5 Cr25,000 × parsecs.</p>
+<p>Click <strong>Accept Mail Contract</strong>. The contract appears on
+<strong>Ship → Contracts</strong>. <strong>No credits are transferred yet</strong> —
+payment is on delivery only.</p>
+<p>When the ship arrives at the destination, the payment is credited automatically and
+the contract is marked delivered.</p>
+`
+      },
+      {
+        id: 'track-contracts',
+        title: '5. Track Contracts',
+        body: `
+<p>Open <strong>Ship → Contracts</strong> to see all mail contracts currently in transit
+and the total pending payment.</p>
+<div class="tut-shot">📸 Contracts sub-tab showing in-transit mail contracts table</div>
+<p>Each row shows origin, destination, parsecs, payment amount, and the tick the contract
+was accepted. Contracts disappear from this list once delivered.</p>
+<p>Similarly, <strong>Ship → Manifest</strong> shows in-transit passengers with their
+destination and booked fare.</p>
 `
       }
     ]

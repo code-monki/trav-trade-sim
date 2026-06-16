@@ -5,7 +5,8 @@ Before you read this, ask your Referee for the campaign code.
 
 **Related tutorials:**
 - [Your First Trade](./player-first-trade.md)
-- If you are locked out: [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin)
+- [Passengers, Fuel & Mail](./player-services.md)
+- If you are locked out: [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#9-reset-a-players-pin)
 
 ---
 
@@ -57,15 +58,31 @@ The main screen has two areas: a **left sidebar** and a **right detail panel**.
 - *World list* — all worlds in that sector; click one to open its detail panel
 - Use the filter box above the world list to search by name or hex coordinate
 
-**Right detail panel — five tabs**
+**Right detail panel — top-level tabs**
 
-| Tab      | Shortcut | Content                                                         |
-| -------- | -------- | --------------------------------------------------------------- |
-| Overview | `O`      | World characteristics: UWP, trade codes, government, tech level |
-| Market   | `M`      | Current buy/sell prices for all trade goods; price chart        |
-| Cargo    | `C`      | Your ship's hold and running trade ledger                       |
-| Events   | `E`      | Market event history for this world                             |
-| Jump     | `J`      | Worlds reachable within your ship's jump range                  |
+| Tab      | Shortcut | Content                                               |
+| -------- | -------- | ----------------------------------------------------- |
+| Overview | `O`      | World characteristics: UWP, trade codes, tech level   |
+| Port     | `M`      | Port services (sub-tabs below)                        |
+| Ship     | `C`      | Your ship (sub-tabs below)                            |
+| Events   | `E`      | Market event history for this world                   |
+| Jump     | `J`      | Worlds reachable within your ship's jump range        |
+
+**Port sub-tabs** (visible when Port is selected)
+
+| Sub-tab    | Content                                                      |
+| ---------- | ------------------------------------------------------------ |
+| Market     | Current buy/sell prices for all trade goods; price chart     |
+| Passengers | Book High, Middle, or Low passage                            |
+| Services   | Purchase fuel; accept mail contracts                         |
+
+**Ship sub-tabs** (visible when Ship is selected)
+
+| Sub-tab   | Content                                      |
+| --------- | -------------------------------------------- |
+| Cargo     | Ship's hold and running trade ledger         |
+| Manifest  | Passengers currently in transit              |
+| Contracts | Mail contracts in transit + pending payment  |
 
 Keyboard shortcuts switch tabs when no input field is focused. Press `?` to open Help.
 
@@ -106,4 +123,4 @@ Ships tab → Add Crew). See
 
 ---
 
-*Next: [Your First Trade](./player-first-trade.md)*
+*Next: [Your First Trade](./player-first-trade.md) · [Passengers, Fuel & Mail](./player-services.md)*

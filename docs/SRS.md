@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.1.0  
+**Version:** 0.2.0  
 **Status:** Active development
 
 ---
@@ -34,7 +34,8 @@
 | FR-106 | Any character's PIN in a campaign shall be resettable using the campaign recovery code |
 | FR-107 | The referee shall be able to regenerate the campaign recovery code; the old code shall be immediately invalidated |
 | FR-108 | Session state (campaign, player) shall be persisted to localStorage and restored on page reload |
-| FR-109 | The referee shall be able to permanently delete their campaign; deletion shall require PIN confirmation and shall cascade-delete all associated data (players, ships, market history, cargo, events, trade records) |
+| FR-109 | The referee shall be able to permanently delete their campaign; deletion shall require PIN confirmation and shall cascade-delete all associated data |
+| FR-110 | The referee shall be able to edit the campaign display label at any time; trade rules, milieu, and campaign code shall remain locked after creation |
 
 ### 2.2 Imperial Calendar
 
@@ -69,7 +70,7 @@
 | FR-405 | Price colours shall indicate deviation from the CT7 base price (green = below base, red = above) |
 | FR-406 | Active market events shall be displayed in a banner above the market table; affected rows shall be visually distinguished |
 | FR-407 | The user shall be able to select multiple goods for simultaneous price charting via checkboxes |
-| FR-408 | Price charts shall support weekly (line), monthly (candlestick), and annual (candlestick) time frames |
+| FR-408 | Price charts shall support weekly (line), monthly (candlestick), annual (candlestick), and realized (candlestick/line from trade records) time frames |
 | FR-409 | A Buy button shall appear on each market row when the player has a ship and trading authorisation |
 
 ### 2.5 Trading — Buy
@@ -104,22 +105,24 @@
 | ID | Requirement |
 |----|------------|
 | FR-801 | The system shall probabilistically generate a market event on a world's first market visit each tick (~6% chance) |
-| FR-802 | Events shall be classified as Minor, Major, or Crisis, each with defined effect percentage ranges and durations |
+| FR-802 | Events shall be classified as Minor, Major, or Crisis, each with defined buy/sell modifier percentage ranges and durations |
 | FR-803 | Events shall affect either one specific trade good or all goods, at local or subsector scope |
 | FR-804 | The referee shall be able to manually create events with custom scope, good, effect, and expiry |
 | FR-805 | The referee shall be able to expire an active event early |
 | FR-806 | Event history shall be displayed on the Events tab; records older than one prior year shall be purged during annual rollup |
+| FR-807 | The referee panel shall provide a pre-built event catalogue (≥15 entries) that pre-fills the event creation form |
 
 ### 2.9 Ships and Crew
 
 | ID | Requirement |
 |----|------------|
-| FR-901 | The referee shall be able to create ships with name, hull type, hull tonnage, cargo capacity, and starting credits |
+| FR-901 | The referee shall be able to create ships with name, hull type, hull tonnage, cargo capacity, stateroom capacity, low berth capacity, fuel capacity, current fuel level, jump rating, maneuver rating, and starting credits |
 | FR-902 | The referee shall be able to assign players to ships with a crew role |
 | FR-903 | The referee shall be able to set or remove the `can_trade` flag on any crew member |
 | FR-904 | Captains shall automatically receive `can_trade` when assigned or promoted |
 | FR-905 | A player may only be assigned to one active ship at a time |
-| FR-906 | The ship's current world/sector shall update when the player uses the Jump tab Select function |
+| FR-906 | The ship's current world/sector shall update when the player uses the Jump tab Select function or when the referee moves the ship via the edit form |
+| FR-907 | Moving the ship to a new world (via Jump Select or referee edit) shall automatically deliver matching in-transit passengers and mail contracts |
 
 ### 2.10 Player Skills
 
@@ -127,6 +130,39 @@
 |----|------------|
 | FR-1001 | The referee shall be able to add, edit, and remove free-form skills for any player character |
 | FR-1002 | Skills shall be visible to the referee in the Players tab |
+
+### 2.11 Passengers
+
+| ID | Requirement |
+|----|------------|
+| FR-1101 | A player shall be able to book passengers (High, Middle, or Low passage) at the Port > Passengers tab |
+| FR-1102 | The booking form shall validate that stateroom/berth capacity is available before accepting the booking |
+| FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 per-parsec for High/Middle, flat for Low |
+| FR-1104 | A passenger booking shall create a `passenger_manifests` record, write a `passenger_fare` transaction, and credit the ship account |
+| FR-1105 | Passengers shall be automatically delivered when the ship arrives at their destination world |
+| FR-1106 | The Ship > Manifest tab shall display stateroom/berth occupancy and all in-transit passengers |
+| FR-1107 | The referee shall be able to issue a refund for any in-transit passenger; refund shall create a `passenger_refund` transaction and debit the ship account |
+
+### 2.12 Fuel Purchasing
+
+| ID | Requirement |
+|----|------------|
+| FR-1201 | The Port > Services tab shall display fuel availability and pricing based on the selected world's starport class |
+| FR-1202 | Refined fuel (Cr500/t) shall be available at Class A and B starports; unrefined (Cr100/t) at Class C and D; no commercial fuel at E or X |
+| FR-1203 | Fuel purchase shall be capped at the ship's remaining tank capacity (`fuel_capacity − fuel_current`) |
+| FR-1204 | A "Fill for jump" shortcut shall compute the fuel required for one jump at the ship's jump rating, capped at available tank space |
+| FR-1205 | A successful fuel purchase shall write a `fuel` transaction, debit the ship account, and increment `fuel_current` |
+| FR-1206 | The Services tab shall display a visual fill-level indicator showing current/capacity fuel |
+
+### 2.13 Mail Contracts
+
+| ID | Requirement |
+|----|------------|
+| FR-1301 | A player shall be able to accept a mail contract at the Port > Services tab by specifying a destination and (for T5) parsecs |
+| FR-1302 | Mail payment shall be CT7: flat Cr25,000; T5: Cr25,000 × parsecs |
+| FR-1303 | Mail contracts shall be tracked in `mail_contracts` as `in_transit` until the ship arrives at the destination |
+| FR-1304 | On delivery, the mail payment shall be credited to the ship account and a `mail` transaction written |
+| FR-1305 | Active mail contracts shall be visible in the Ship > Contracts tab |
 
 ---
 
@@ -153,6 +189,7 @@
 - Referee can create a campaign, receive a recovery code, log in, and see the map
 - A second user can join the campaign with a different character name and PIN
 - Both users see the same tick value and market prices for the same world
+- Referee can edit the campaign label without affecting trade rules or campaign code
 
 ### AC-2: PIN recovery
 - Entering an incorrect PIN 5 times locks the account for 15 minutes
@@ -173,16 +210,32 @@
 - On the first market visit for a new world/tick, an event occasionally fires and is visible in the banner
 - A manually created subsector event raises prices across all worlds in the sector
 - Expiring an event removes it from the banner and stops price modification
+- Loading a catalogue preset pre-fills the event creation form
 
 ### AC-6: Route analysis
 - Jump tab shows worlds within jump range sorted by projected profit
 - Clicking Select on a row updates the ship location and switches to Market tab with the destination world selected
 
-### AC-8: Campaign deletion
+### AC-7: Campaign deletion
 - Entering an incorrect PIN in the Delete Campaign form shows an error and does not delete
 - Entering the correct PIN deletes the campaign, clears the session, and redirects to the login screen
 - After deletion the campaign code cannot be used to sign in
 
-### AC-7: Date display
+### AC-8: Date display
 - A campaign starting in year 1900 shows `001-1900` at tick 0
 - After 48 ticks, the date shows `001-1901`
+
+### AC-9: Passengers
+- Booking 2 High passage passengers debits staterooms, creates a manifest row, and credits the ship fare
+- Arriving at the destination automatically delivers the passengers
+- Referee can refund a passenger; ship credits are debited by the original fare
+
+### AC-10: Fuel
+- Services tab shows fuel availability badges based on the world's starport class
+- Purchasing fuel debits ship credits, increments fuel_current, and blocks over-fill
+- "Fill for jump" sets tons to min(jump fuel needed, remaining tank space)
+
+### AC-11: Mail
+- Accepting a mail contract creates a contract record (status=in_transit) with no upfront payment
+- Arriving at the destination delivers the mail and credits the ship
+- Contracts tab lists all in-transit contracts with pending payment total

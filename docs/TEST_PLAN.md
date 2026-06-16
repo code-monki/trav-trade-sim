@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 ---
 
@@ -92,6 +92,23 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 | UT-304 | `activeEventsForWorld` | local event different hex | Excluded |
 | UT-305 | `activeEventsForWorld` | subsector event | Always included |
 | UT-306 | `activeEventsForWorld` | expired event (expires_tick ≤ tick) | Excluded |
+
+### 3.5 `src/lib/passengers.js`
+
+| TC-ID | Function | Input | Expected Output |
+|-------|----------|-------|-----------------|
+| UT-501 | `passengerFare` | High, 1 pax, CT7, parsecs=1 | `{ farePerHead: 10000, fareTotal: 10000 }` |
+| UT-502 | `passengerFare` | High, 2 pax, CT7, parsecs=3 | `{ farePerHead: 10000, fareTotal: 20000 }` (CT7 flat, parsecs ignored) |
+| UT-503 | `passengerFare` | High, 1 pax, T5, parsecs=3 | `{ farePerHead: 30000, fareTotal: 30000 }` (per parsec) |
+| UT-504 | `passengerFare` | Low, 1 pax, T5, parsecs=3 | `{ farePerHead: 1000, fareTotal: 1000 }` (Low always flat) |
+| UT-505 | `availableFuelTypes` | `'A'` | `{ refined: 500, unrefined: undefined }` |
+| UT-506 | `availableFuelTypes` | `'B'` | `{ refined: 500, unrefined: undefined }` |
+| UT-507 | `availableFuelTypes` | `'C'` | `{ refined: undefined, unrefined: 100 }` |
+| UT-508 | `availableFuelTypes` | `'E'` | `{}` (no fuel) |
+| UT-509 | `availableFuelTypes` | `'X'` | `{}` (no fuel) |
+| UT-510 | `jumpFuelTons` | hull=200, parsecs=1 | `20` (ceil(200 × 0.1 × 1)) |
+| UT-511 | `mailPayment` | CT7, parsecs=1 | `25000` |
+| UT-512 | `mailPayment` | T5, parsecs=3 | `75000` (25000 × 3) |
 
 ### 3.4 `src/utils/hexDistance.js`
 
@@ -251,6 +268,19 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 2. Open Jump tab on origin world
 3. Verify only worlds within 2 hexes are listed
 4. Click Select on a destination — verify ship location updates and Market tab opens for that world
+
+### MTS-7: Passengers, Fuel, and Mail
+
+1. Referee creates a ship with stateroom_capacity=4, fuel_capacity=40, starting location Regina (1910)
+2. Player opens Port > Services; verify fuel availability badge shows "Refined Cr500/t" (Class A starport)
+3. Player purchases 20t refined fuel; verify ship credits decrease by Cr10,000 and fuel bar shows 20/40t
+4. Click "Fill for jump" (J-2 ship, hull 200t); verify stepper sets to min(40, 40-20) = 20t (fills to capacity)
+5. Player opens Port > Passengers; book 2 High passage to Efate (1705); verify staterooms show 2/4, credits increase by Cr20,000
+6. Player accepts a mail contract to Efate; verify Contracts tab shows pending payment Cr25,000
+7. Referee advances tick; player uses Jump tab to Select Efate
+8. Verify passengers auto-deliver (Manifest tab shows no in-transit passengers)
+9. Verify mail auto-delivers and ship credits increase by Cr25,000
+10. Return to Regina; referee issues refund on a second booked passenger; verify ship credits decrease by fare amount
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

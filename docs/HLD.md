@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 ---
 
@@ -71,22 +71,33 @@ src/
 ├── main.js                   Entry point; mounts Vue app
 ├── App.vue                   Root component; RouterView
 ├── router/
-│   └── index.js              Routes + auth guards
+│   └── index.js              Routes + auth guards (always use push({ name }) not push('/path'))
 ├── stores/
 │   ├── auth.js               Campaign/player session, login RPCs
 │   ├── map.js                Sector/world data, Traveller Map API
 │   ├── tick.js               Calendar, snapshots, price history, events
-│   ├── ship.js               Ship, cargo, buy/sell operations
-│   ├── referee.js            Referee panel data (ships, crew, events, players)
+│   ├── ship.js               Ship, cargo, passengers, mail; buy/sell/fuel/passenger/mail actions;
+│   │                         updateLocation auto-delivers passengers + mail when opts provided
+│   ├── referee.js            Referee panel data (ships, crew, events, players); createShip
+│   │                         includes fuelCapacity / fuelCurrent
 │   └── theme.js              UI theme management
 ├── views/
 │   ├── LoginView.vue         Sign In / Join / New Campaign / Reset PIN
-│   ├── MapView.vue           Main dashboard (sector+world navigation, market, cargo, jump)
-│   └── RefereeView.vue       Campaign management panel
+│   ├── MapView.vue           Main dashboard — two-level tabs:
+│   │                           TOP_TABS: overview / port / ship / events / jump
+│   │                           PORT_TABS: market / passengers / services
+│   │                           SHIP_TABS: cargo / manifest / contracts
+│   └── RefereeView.vue       Campaign management; inline label edit; ship stat grid with
+│                             fuel/stateroom/berth fields; passenger manifest + refund;
+│                             events catalogue; auto-delivery on ship move
 ├── components/
 │   ├── MarketTable.vue       Trade goods table with sort, filter, chart checkboxes, buy buttons
-│   ├── PriceChart.vue        lightweight-charts line/candlestick chart (multi-series)
-│   ├── CargoHold.vue         Hold display + sell flow
+│   ├── PriceChart.vue        lightweight-charts chart — Weekly/Monthly/Annual/Realized tabs
+│   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow
+│   ├── PassengersPanel.vue   Port > Passengers sub-tab: booking form, capacity check, fare preview
+│   ├── ShipServices.vue      Port > Services sub-tab: fuel purchase + mail contract booking
+│   ├── PassengerManifest.vue Ship > Manifest sub-tab: occupancy + in-transit passengers
+│   ├── ContractsPanel.vue    Ship > Contracts sub-tab: mail contracts + pending payment
 │   ├── BuyDialog.vue         Purchase quantity dialog
 │   ├── RouteAnalysis.vue     Jump range route table with profit projection
 │   ├── EventsHistory.vue     World event log
@@ -94,6 +105,7 @@ src/
 │   ├── CharacterDialog.vue   Character stats display
 │   ├── HamburgerMenu.vue     Navigation menu
 │   ├── HelpDialog.vue        In-app user manual (tabbed)
+│   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links
 │   ├── AboutDialog.vue       About/license information
 │   └── ThemeDialog.vue       UI theme picker
 ├── lib/
@@ -101,10 +113,13 @@ src/
 │   ├── trade-engine-t5.js    T5 price formulas (pure functions)
 │   ├── market-tick.js        Snapshot generation, seeded RNG, calendar helpers
 │   ├── market-events.js      Event table, probability engine, active event filter
+│   ├── passengers.js         passengerFare, passageCapacityNeeded, availableFuelTypes,
+│   │                         jumpFuelTons, fuelCost, mailPayment (all pure functions)
 │   ├── traveller-data.js     CT2 trade goods, CT7 lookup tables, milieu list
 │   ├── traveller-helpers.js  UWP decode, hex distance, subsector helpers
+│   ├── tutorials.js          In-app tutorial content (HTML strings)
 │   ├── supabase.js           Supabase client singleton
-│   ├── theme-db.js           Theme persistence (Supabase or localStorage)
+│   ├── theme-db.js           Theme persistence (IndexedDB)
 │   └── theme-tokens.js       CSS variable generation from theme config
 ├── composables/
 │   └── useFocusTrap.js       WCAG focus containment for modal dialogs
@@ -205,19 +220,33 @@ MapView
 │   ├── sector select + filter
 │   └── world list
 └── (detail panel)
-    ├── Overview tab: world data sections
-    ├── Market tab:
-    │   ├── MarketTable
-    │   │   └── emits: select-good, toggle-chart, buy-good
-    │   ├── (resize handle)
-    │   └── PriceChart (when chartedGoods.size > 0)
-    ├── Cargo tab:
-    │   └── CargoHold
-    ├── Events tab:
+    ├── TOP TAB: Overview — world data sections (UWP, trade codes, routes)
+    │
+    ├── TOP TAB: Port
+    │   ├── (sub-tab bar) [Market] [Passengers] [Services]
+    │   ├── PORT SUB-TAB: Market
+    │   │   ├── MarketTable (emits: select-good, toggle-chart, buy-good)
+    │   │   ├── (resize handle)
+    │   │   └── PriceChart (Weekly / Monthly / Annual / Realized)
+    │   ├── PORT SUB-TAB: Passengers
+    │   │   └── PassengersPanel
+    │   └── PORT SUB-TAB: Services
+    │       └── ShipServices (fuel + mail sections)
+    │
+    ├── TOP TAB: Ship
+    │   ├── (sub-tab bar) [Cargo] [Manifest] [Contracts]
+    │   ├── SHIP SUB-TAB: Cargo
+    │   │   └── CargoHold
+    │   ├── SHIP SUB-TAB: Manifest
+    │   │   └── PassengerManifest
+    │   └── SHIP SUB-TAB: Contracts
+    │       └── ContractsPanel
+    │
+    ├── TOP TAB: Events
     │   └── EventsHistory
-    └── Jump tab:
-        └── RouteAnalysis
-            └── emits: select-world
+    │
+    └── TOP TAB: Jump
+        └── RouteAnalysis (emits: select-world → sets topTab='port', portTab='market')
 ```
 
 ### 5.2 Store Dependencies

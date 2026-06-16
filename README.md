@@ -5,11 +5,14 @@ A Morningstar-style speculative trade dashboard for Classic Traveller, built on 
 ## Features
 
 - **Sector & world browser** — browse all sectors across multiple milieus (1105 Classic Era through Year 1900)
-- **Speculative trade engine** — Classic Traveller Book 7 rules (Book 2 goods table included); pluggable engine architecture for future editions (TNE, T4, etc.)
-- **Price history charts** — candlestick charts per world/trade-good using weekly snapshots with monthly and annual OHLC rollups
-- **Campaign management** — multi-player campaigns identified by a short campaign code + mandatory PIN (no email, no PII stored)
-- **Market events** — M.U.L.E.-style local and subsector events that affect pricing
-- **Imperial Calendar** — DDD-YYYY format; 1 tick = 1 jump-week
+- **Speculative trade engine** — Classic Traveller Book 7 and T5 rules; buy/sell cargo with deterministic pricing driven by world trade codes
+- **Passengers** — book High, Middle, and Low passage with automatic fare collection; manifests auto-deliver on arrival; referee can issue refunds
+- **Fuel purchasing** — refined/unrefined fuel priced by starport class with tank capacity tracking; fill-level bar and "Fill for jump" shortcut
+- **Mail contracts** — accept Imperial mail contracts for on-delivery payment (CT7 flat; T5 per-parsec)
+- **Price history charts** — candlestick charts with Weekly, Monthly, Annual, and Realized (actual trade prices) time frames
+- **Campaign management** — multi-player campaigns with a short campaign code + mandatory PIN (no email, no PII stored)
+- **Market events** — M.U.L.E.-style local and subsector events with independent buy/sell modifiers; 20-entry referee catalogue
+- **Imperial Calendar** — DDD-YYYY format; 1 tick = 1 jump-week; auto-delivery of passengers and mail on ship arrival
 
 ## License & Copyright Notice
 

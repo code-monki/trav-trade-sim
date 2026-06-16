@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 ---
 
@@ -111,7 +111,7 @@ Same structure as `market_monthly` but without `month` column.
 | `player_id` | uuid | FK | |
 | `ship_id` | uuid | FK | |
 | `tick` | bigint | NOT NULL | |
-| `type` | text | CHECK IN ('buy','sell','fee','event') | |
+| `type` | text | CHECK IN ('buy','sell','fee','event','fuel','passenger_fare','passenger_refund','mail') | |
 | `trade_good_die` | text | nullable | |
 | `trade_good_name` | text | nullable | |
 | `tons` | int | nullable | |
@@ -134,7 +134,8 @@ Index: `idx_txn_player (campaign_id, player_id, tick DESC)`
 | `world_hex` | text | nullable | null = subsector-wide |
 | `sector` | text | nullable | |
 | `trade_good_die` | text | nullable | null = affects all goods |
-| `effect_pct` | int | NOT NULL | e.g. +20 or -15 |
+| `buy_modifier_pct` | int | nullable | Purchase price modifier % (migration 020) |
+| `sell_modifier_pct` | int | nullable | Sale price modifier % (migration 020) |
 | `description` | text | NOT NULL | Human-readable event text |
 | `expires_tick` | bigint | nullable | null = permanent |
 | `severity` | text | nullable | `'minor'`, `'major'`, `'crisis'` |
@@ -149,14 +150,59 @@ Index: `idx_txn_player (campaign_id, player_id, tick DESC)`
 | `hull_type` | text | nullable | e.g. `'Free Trader'` |
 | `hull_tons` | int | NOT NULL, default 200 | Total displacement |
 | `cargo_capacity` | int | NOT NULL, default 80 | Hold in tons |
+| `stateroom_capacity` | int | NOT NULL, default 0 | High/Middle passenger berths (migration 021) |
+| `low_berth_capacity` | int | NOT NULL, default 0 | Low passage berths (migration 021) |
+| `fuel_capacity` | int | NOT NULL, default 0 | Maximum fuel tank in tons (migration 022) |
+| `fuel_current` | int | NOT NULL, default 0 | Current fuel level in tons (migration 022) |
 | `current_world` | text | nullable | Hex of current location |
 | `current_sector` | text | nullable | |
 | `credits` | bigint | NOT NULL, default 0 | Operating account |
 | `jump_rating` | int | nullable | Jump drive rating (1–6) |
-| `maneuver_rating` | int | nullable | Maneuver drive rating |
-| `power_rating` | int | nullable | Power plant rating |
+| `maneuver_drive_rating` | int | nullable | Maneuver drive rating (migration 013) |
 | `created_at` | timestamptz | NOT NULL | |
 | UNIQUE | `(campaign_id, name)` | | |
+
+#### `passenger_manifests`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | uuid | PK | |
+| `campaign_id` | uuid | FK | |
+| `ship_id` | uuid | FK → ships(id) | |
+| `player_id` | uuid | FK → players(id) | Who booked them |
+| `passage_type` | text | CHECK IN ('high','middle','low') | |
+| `count` | int | NOT NULL | Number of passengers |
+| `embark_world_hex` | text | NOT NULL | Origin hex |
+| `embark_world_sector` | text | NOT NULL | |
+| `embark_world_name` | text | NOT NULL | |
+| `embark_tick` | bigint | NOT NULL | |
+| `dest_world_hex` | text | NOT NULL | Destination hex |
+| `dest_world_sector` | text | NOT NULL | |
+| `dest_world_name` | text | NOT NULL | |
+| `fare_per_head` | int | NOT NULL | Credits per passenger |
+| `fare_total` | int | NOT NULL | count × fare_per_head |
+| `status` | text | CHECK IN ('in_transit','delivered','refunded') | |
+| `resolve_tick` | bigint | nullable | Tick of delivery or refund |
+| `created_at` | timestamptz | NOT NULL | |
+
+#### `mail_contracts`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | uuid | PK | |
+| `campaign_id` | uuid | FK | |
+| `ship_id` | uuid | FK → ships(id) | |
+| `player_id` | uuid | FK → players(id) | Who accepted it |
+| `origin_world_hex` | text | NOT NULL | |
+| `origin_world_sector` | text | NOT NULL | |
+| `origin_world_name` | text | NOT NULL | |
+| `accept_tick` | bigint | NOT NULL | Tick contract was accepted |
+| `dest_world_hex` | text | NOT NULL | |
+| `dest_world_sector` | text | NOT NULL | |
+| `dest_world_name` | text | NOT NULL | |
+| `parsecs` | int | NOT NULL, default 1 | Jump distance (used by T5 for payment) |
+| `payment` | int | NOT NULL | Cr to credit on delivery |
+| `status` | text | CHECK IN ('in_transit','delivered') | |
+| `resolve_tick` | bigint | nullable | Tick of delivery |
+| `created_at` | timestamptz | NOT NULL | |
 
 #### `crew`
 | Column | Type | Constraints | Description |
@@ -292,6 +338,28 @@ No emits. Self-contained sell flow with two-click confirm.
 
 Teleported to `<body>`. Requires the user to check an acknowledgement checkbox before the Continue button is enabled. Cannot be dismissed by clicking outside.
 
+### `PassengersPanel`
+| Prop | Type | Description |
+|------|------|-------------|
+| `world` | Object | Current world (for embark metadata) |
+| `sectorName` | String | |
+
+No emits. Booking form with passage type selector, count stepper, T5 parsecs input (shown when tradeRules='T5'), destination fields, real-time fare preview, success flash. Validates stateroom/berth availability before submitting.
+
+### `ShipServices`
+| Prop | Type | Description |
+|------|------|-------------|
+| `world` | Object | Current world (determines fuel availability) |
+| `sectorName` | String | |
+
+No emits. Two sections: **Fuel** (availability badges, type buttons, stepper capped at tank space, fill-level bar, "Fill for jump" shortcut) and **Mail Contract** (destination fields, T5 parsecs, payment preview).
+
+### `PassengerManifest`
+No props. No emits. Displays stateroom/berth occupancy summary and table of in-transit passengers from `useShipStore().passengers`. Shows total booked revenue in tfoot. Hint about auto-delivery.
+
+### `ContractsPanel`
+No props. No emits. Table of in-transit mail contracts from `useShipStore().mailContracts`. Shows total pending payment. Hint about auto-delivery.
+
 ### `HelpDialog` / `AboutDialog` / `ThemeDialog` / `CharacterDialog`
 All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`).
 
@@ -352,22 +420,35 @@ All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`).
 |-------|-------------|
 | `ship` | `{ ...shipRow, crew_role, can_trade }` or null |
 | `cargo` | cargo rows array |
+| `passengers` | `passenger_manifests` rows with `status='in_transit'` |
+| `mailContracts` | `mail_contracts` rows with `status='in_transit'` |
 
 | Computed | Description |
 |----------|-------------|
 | `hasShip` | Boolean |
 | `canTrade` | Boolean |
 | `cargoUsed` | Total tons in hold |
-| `cargoCapacity` | Ship max hold |
+| `cargoCapacity` | Ship max hold (`ship.cargo_capacity`) |
 | `cargoAvailable` | `cargoCapacity - cargoUsed` |
+| `stateroomsTotal` | `ship.stateroom_capacity` |
+| `stateroomsUsed` | Sum of passenger count where passage_type in ('high','middle') |
+| `stateroomsAvailable` | `stateroomsTotal - stateroomsUsed` |
+| `lowBerthsTotal` | `ship.low_berth_capacity` |
+| `lowBerthsUsed` | Sum of passenger count where passage_type='low' |
+| `lowBerthsAvailable` | `lowBerthsTotal - lowBerthsUsed` |
 
 | Action | Description |
 |--------|-------------|
-| `loadShip(playerId, campaignId)` | Joins crew → ships → cargo |
-| `createShip(opts)` | Inserts ship + captain crew row |
-| `updateLocation(worldHex, sector)` | Updates ships.current_world |
+| `loadShip(playerId, campaignId)` | Joins crew → ships → cargo + passengers + mailContracts |
+| `updateLocation(worldHex, sector, opts?)` | Updates ships.current_world; if opts `{tick, campaignId, playerId}` provided, also calls deliverPassengers + deliverMail |
 | `buyCargo(opts)` | INSERT cargo + transaction; UPDATE credits |
 | `sellCargo(opts)` | DELETE cargo; INSERT transaction + trade_record; UPDATE credits |
+| `bookPassengers(opts)` | INSERT passenger_manifests; INSERT passenger_fare transaction; credit ship |
+| `deliverPassengers(worldHex, sector, tick, campaignId)` | Batch update manifests matching destination to 'delivered' |
+| `refundPassenger(manifestId, tick, campaignId, playerId)` | Update to 'refunded'; INSERT passenger_refund transaction; debit ship |
+| `purchaseFuel(opts)` | Validates tons ≤ tank space; INSERT fuel transaction; debit ship; UPDATE fuel_current |
+| `acceptMailContract(opts)` | INSERT mail_contracts record (no upfront payment) |
+| `deliverMail(worldHex, sector, tick, campaignId, playerId)` | Update matching contracts to 'delivered'; INSERT mail transaction; credit ship |
 
 ---
 
@@ -447,6 +528,8 @@ Rows stored in `market_snapshots`:
 
 ### MapView (main dashboard)
 
+Two-level tab system: **TOP_TABS** select the major section; a second **sub-tab bar** appears when the top tab is Port or Ship.
+
 ```
 ┌────────────────── header (grid: left | center | right) ─────────────────────┐
 │ TTS · Campaign Name   │  001-1105 Tick 0 · CT7  [Advance Tick]  │  User [≡]  │
@@ -454,14 +537,17 @@ Rows stored in `market_snapshots`:
 ┌────── sidebar ──────────┬──────────────── main panel ────────────────────────┐
 │ Sector                  │ World Name                         UWP ↗            │
 │ [filter] [select]       │ Sector · Hex · Subsector                           │
-│                         │ [Overview] [Market] [Cargo] [Events] [Jump]        │
-│ Worlds (n/total)        ├────────────────────────────────────────────────────┤
-│ [filter]                │                                                    │
-│ World/Hex               │  (tab content — see below)                         │
-│ ─────────────────       │                                                    │
-│ World list (scrollable) │                                                    │
+│                         │ [Overview] [Port ▾] [Ship ▾] [Events] [Jump]       │
+│ Worlds (n/total)        │ ── sub-tab bar (when Port selected) ───────────── │
+│ [filter]                │ [Market] [Passengers] [Services]                   │
+│ World/Hex               │ ── sub-tab bar (when Ship selected) ───────────── │
+│ ─────────────────       │ [Cargo] [Manifest] [Contracts]                     │
+│ World list (scrollable) ├────────────────────────────────────────────────────┤
+│                         │  (sub-tab content — see below)                     │
 └─────────────────────────┴────────────────────────────────────────────────────┘
 ```
+
+Keyboard shortcuts: `O` = Overview, `M` = Port/Market, `C` = Ship/Cargo, `E` = Events, `J` = Jump
 
 ### Market tab content
 
@@ -482,14 +568,36 @@ Rows stored in `market_snapshots`:
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Port sub-tabs
+
+| Sub-tab | Component | Content |
+|---------|-----------|---------|
+| Market | MarketTable + PriceChart | Trade goods, buy buttons, price chart |
+| Passengers | PassengersPanel | Booking form, capacity check, fare preview |
+| Services | ShipServices | Fuel purchase (fill bar, tank cap) + mail contract form |
+
+### Ship sub-tabs
+
+| Sub-tab | Component | Content |
+|---------|-----------|---------|
+| Cargo | CargoHold | Hold contents, sell flow |
+| Manifest | PassengerManifest | Stateroom/berth occupancy, in-transit passengers |
+| Contracts | ContractsPanel | In-transit mail contracts, pending payment total |
+
 ### Referee Panel (RefereeView)
 
 ```
 ┌── Campaign │ Ships │ Events │ Players ──────────────────────────────────────┐
 │                                                                             │
-│  Campaign tab:  Campaign info, recovery code regeneration                  │
-│  Ships tab:     Ship list → expand → crew table with can_trade checkboxes  │
-│  Events tab:    Active event list, create event form                       │
+│  Campaign tab:  Campaign label (inline editable) + info, recovery code     │
+│                 regeneration, danger zone (delete campaign)                 │
+│  Ships tab:     Ship list → expand → stat grid (hull, cargo, staterooms,   │
+│                 low berths, fuel capacity, fuel level, drives, credits,     │
+│                 location) → crew table → passenger manifest                 │
+│                 Edit form: all ship fields; moving ship auto-delivers       │
+│                 passengers and mail matching new location                   │
+│  Events tab:    Active event list, create event form, event catalogue       │
+│                 (20 M.U.L.E.-style presets)                                 │
 │  Players tab:   Character list → expand → skill management                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

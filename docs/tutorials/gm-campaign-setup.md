@@ -83,16 +83,24 @@ Click the **Ships** tab, then **New Ship**.
 
 ![News Ship Tab](screenshots/gm-new-ship-tab.png)
 
-| Field       | Notes                                                            |
-| ----------- | ---------------------------------------------------------------- |
-| Name        | Ship name, e.g. "Free Trader Beowulf"                            |
-| Hull Type   | Class designation, e.g. "Type-A Free Trader"                     |
-| Hull Tons   | Total displacement in tons (cosmetic / reference)                |
-| Cargo Tons  | Available hold — constrains how much players can buy             |
-| Jump Rating | Maximum parsecs per jump; sets the default range in the Jump tab |
-| Credits     | Starting ship's treasury                                         |
+| Field            | Notes                                                               |
+| ---------------- | ------------------------------------------------------------------- |
+| Name             | Ship name, e.g. "Free Trader Beowulf"                               |
+| Hull Type        | Class designation, e.g. "Type-A Free Trader"                        |
+| Hull Tons        | Total displacement. Used to compute jump fuel (10% × parsecs).      |
+| Cargo Tons       | Available hold — constrains how much players can buy                |
+| Jump Rating      | Maximum parsecs per jump; sets the default range in the Jump tab    |
+| Maneuver Drive   | Drive rating (1–9) — cosmetic / reference                           |
+| Staterooms       | High/Middle passenger berths available for booking                  |
+| Low Berths       | Low passage cryo-berths available for booking                       |
+| Fuel Capacity    | Total tank size in tons. Leave 0 if not tracking fuel.              |
+| Current Fuel     | Fuel already aboard at campaign start                               |
+| Credits          | Starting ship's treasury                                            |
 
 Click **Create**. The ship appears in the ships list.
+
+> ℹ **Note:** All fields can be changed later via the ship edit form. Fuel is not consumed
+> automatically — reduce *Current Fuel* manually after each jump.
 
 ---
 
