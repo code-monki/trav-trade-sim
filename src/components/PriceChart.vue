@@ -22,7 +22,8 @@
     <div v-if="tick.loading" class="chart-placeholder">Loading price history…</div>
     <div v-else-if="!props.goods.length" class="chart-placeholder">No goods selected</div>
     <div v-else-if="!hasData" class="chart-placeholder">
-      No history yet — visit this world each tick to record prices.
+      <template v-if="activeTab === 'realized'">No realized trades at this world yet.</template>
+      <template v-else>No history yet — visit this world each tick to record prices.</template>
     </div>
     <div ref="chartEl" class="chart-el" v-show="props.goods.length && hasData && !tick.loading"></div>
   </div>
@@ -31,8 +32,10 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { createChart, ColorType } from 'lightweight-charts'
-import { useTickStore } from '../stores/tick.js'
+import { useTickStore }  from '../stores/tick.js'
 import { useThemeStore } from '../stores/theme.js'
+import { useAuthStore }  from '../stores/auth.js'
+import { supabase }      from '../lib/supabase.js'
 import { formatImperialDate, tickToCalendar } from '../lib/market-tick.js'
 
 const props = defineProps({
@@ -43,14 +46,16 @@ const props = defineProps({
 
 const tick       = useTickStore()
 const themeStore = useThemeStore()
+const auth       = useAuthStore()
 const chartEl    = ref(null)
 const activeTab  = ref('weekly')
 const hasData    = ref(false)
 
 const TABS = [
-  { key: 'weekly',  label: 'Weekly'  },
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'annual',  label: 'Annual'  },
+  { key: 'weekly',   label: 'Weekly'   },
+  { key: 'monthly',  label: 'Monthly'  },
+  { key: 'annual',   label: 'Annual'   },
+  { key: 'realized', label: 'Realized' },
 ]
 
 // Visually distinct colors for overlaid series
@@ -169,6 +174,28 @@ async function loadSeriesData(series, goodDie) {
   } else if (activeTab.value === 'monthly') {
     const raw = await tick.loadMonthlyHistory(props.worldHex, props.sectorName, goodDie)
     if (!raw.length) return false
+    if (props.goods.length === 1) {
+      series.setData(raw.map(r => ({
+        time:  monthToTime(r.year, r.month),
+        open:  r.open_price,
+        high:  r.high_price,
+        low:   r.low_price,
+        close: r.close_price,
+      })))
+    } else {
+      series.setData(raw.map(r => ({ time: monthToTime(r.year, r.month), value: r.close_price })))
+    }
+  } else if (activeTab.value === 'realized') {
+    const { data: raw } = await supabase
+      .from('realized_ohlcv')
+      .select('year, month, open_price, high_price, low_price, close_price, volume_tons, trade_count')
+      .eq('campaign_id',    auth.campaign?.id)
+      .eq('world_hex',      props.worldHex)
+      .eq('sector',         props.sectorName)
+      .eq('trade_good_die', goodDie)
+      .order('year')
+      .order('month')
+    if (!raw?.length) return false
     if (props.goods.length === 1) {
       series.setData(raw.map(r => ({
         time:  monthToTime(r.year, r.month),

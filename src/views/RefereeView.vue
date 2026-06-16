@@ -425,6 +425,27 @@
             <p v-if="eventSuccess" class="form-success">Event created.</p>
           </form>
         </div>
+
+        <!-- Catalogue -->
+        <div class="events-col">
+          <h2>Quick Events</h2>
+          <p class="cat-hint">Click a preset to pre-fill the form — then set scope/world and create.</p>
+          <div class="catalogue-list">
+            <button v-for="e in EVENT_CATALOGUE" :key="e.description"
+                    class="cat-entry"
+                    @click="loadCatalogueEntry(e)">
+              <span class="cat-desc">{{ e.description }}</span>
+              <span class="cat-meta">
+                <span v-if="e.buyModifierPct != null" :class="e.buyModifierPct > 0 ? 'mod-up' : 'mod-down'">
+                  Buy {{ e.buyModifierPct > 0 ? '+' : '' }}{{ e.buyModifierPct }}%
+                </span>
+                <span v-if="e.sellModifierPct != null" :class="e.sellModifierPct > 0 ? 'mod-up' : 'mod-down'">
+                  Sell {{ e.sellModifierPct > 0 ? '+' : '' }}{{ e.sellModifierPct }}%
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -436,7 +457,19 @@
         <h2>Campaign Settings</h2>
         <div class="stat-grid wide">
           <div class="stat"><label>Campaign Code</label><span>{{ auth.campaign?.code }}</span></div>
-          <div class="stat"><label>Label</label><span>{{ auth.campaign?.label }}</span></div>
+          <div class="stat">
+            <label>Label</label>
+            <form v-if="editingLabel" class="inline-label-form" @submit.prevent="submitLabel">
+              <input v-model="labelDraft" class="label-input" required />
+              <button type="submit" class="btn-primary btn-xs" :disabled="labelSaving">Save</button>
+              <button type="button" class="btn-ghost btn-xs" @click="cancelLabel">Cancel</button>
+            </form>
+            <span v-else class="label-display">
+              {{ auth.campaign?.label }}
+              <button class="edit-inline-btn" @click="startEditLabel">Edit</button>
+            </span>
+            <p v-if="labelError" class="form-error">{{ labelError }}</p>
+          </div>
           <div class="stat"><label>Milieu</label><span>{{ auth.campaign?.milieu }}</span></div>
           <div class="stat locked">
             <label>Trade Rules</label>
@@ -894,6 +927,41 @@ const newEvent = ref({
   buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
 })
 
+// Pre-built M.U.L.E.-style events. Referee selects one to pre-fill the form,
+// then sets the world/scope/duration before creating.
+const EVENT_CATALOGUE = [
+  { description: 'Pirate raid disrupts supply lines',       buyModifierPct:  30, sellModifierPct: null, durationTicks: 4 },
+  { description: 'Trade embargo imposed',                   buyModifierPct:  20, sellModifierPct: -20,  durationTicks: 8 },
+  { description: 'Bumper harvest floods the market',        buyModifierPct: -20, sellModifierPct: -30,  durationTicks: 4 },
+  { description: 'Drought: food & consumables scarce',      buyModifierPct:  25, sellModifierPct:  25,  durationTicks: 6 },
+  { description: 'Tech festival drives demand',             buyModifierPct:  15, sellModifierPct:  20,  durationTicks: 3 },
+  { description: 'Port workers strike',                     buyModifierPct:  10, sellModifierPct: -10,  durationTicks: 3 },
+  { description: 'Imperial subsidy lowers prices',          buyModifierPct: -15, sellModifierPct: null, durationTicks: 4 },
+  { description: 'Megacorp buyout: prices spike',           buyModifierPct:  20, sellModifierPct:  20,  durationTicks: 6 },
+  { description: 'Military contract boosts demand',         buyModifierPct:  20, sellModifierPct:  25,  durationTicks: 4 },
+  { description: 'Misjump quarantine: traffic halted',      buyModifierPct:  15, sellModifierPct: -25,  durationTicks: 5 },
+  { description: 'New refinery opens: fuel costs drop',     buyModifierPct: -10, sellModifierPct: null, durationTicks: 8 },
+  { description: 'Scout survey finds rich lode',            buyModifierPct: -20, sellModifierPct:  15,  durationTicks: 6 },
+  { description: 'Political unrest disrupts distribution',  buyModifierPct:  15, sellModifierPct: -15,  durationTicks: 4 },
+  { description: 'Festival of the Traveller: demand surge', buyModifierPct:  10, sellModifierPct:  15,  durationTicks: 2 },
+  { description: 'Counterfeit goods scandal',               buyModifierPct: null, sellModifierPct: -20,  durationTicks: 4 },
+  { description: 'Pandemic scare: medical goods scarce',    buyModifierPct:  30, sellModifierPct:  30,  durationTicks: 6 },
+  { description: 'Surplus clearance: bulk discount',        buyModifierPct: -25, sellModifierPct: -15,  durationTicks: 3 },
+  { description: 'Noble house patronage: luxury demand up', buyModifierPct:  15, sellModifierPct:  25,  durationTicks: 4 },
+  { description: 'Wormhole route opens: competition rises', buyModifierPct: -10, sellModifierPct: -10,  durationTicks: 12 },
+  { description: 'Natural disaster: relief goods needed',   buyModifierPct:  35, sellModifierPct:  35,  durationTicks: 6 },
+]
+
+function loadCatalogueEntry(entry) {
+  newEvent.value = {
+    ...newEvent.value,
+    description:     entry.description,
+    buyModifierPct:  entry.buyModifierPct  ?? null,
+    sellModifierPct: entry.sellModifierPct ?? null,
+    durationTicks:   entry.durationTicks   ?? 4,
+  }
+}
+
 const activeEvents = computed(() => tick.activeEvents ?? [])
 
 async function doExpireEvent(eventId) {
@@ -928,6 +996,37 @@ async function submitEvent() {
 }
 
 // ── Campaign tab ─────────────────────────────────────────────────────────────
+
+const editingLabel = ref(false)
+const labelDraft   = ref('')
+const labelSaving  = ref(false)
+const labelError   = ref('')
+
+function startEditLabel() {
+  labelDraft.value   = auth.campaign?.label ?? ''
+  editingLabel.value = true
+  labelError.value   = ''
+}
+
+function cancelLabel() {
+  editingLabel.value = false
+  labelError.value   = ''
+}
+
+async function submitLabel() {
+  const trimmed = labelDraft.value.trim()
+  if (!trimmed) return
+  labelSaving.value = true
+  labelError.value  = ''
+  const { error: err } = await supabase
+    .from('campaigns')
+    .update({ label: trimmed })
+    .eq('id', auth.campaign.id)
+  labelSaving.value = false
+  if (err) { labelError.value = err.message; return }
+  auth.campaign = { ...auth.campaign, label: trimmed }
+  editingLabel.value = false
+}
 
 const travellerMapUrl = computed(() => {
   const milieu = auth.campaign?.milieu ?? 'M1105'
@@ -1271,7 +1370,62 @@ onMounted(async () => {
 .event-desc { font-size: 0.83rem; }
 .event-meta { font-size: 0.72rem; color: var(--text-dim); }
 
+/* ── Events catalogue ────────────────────────────────────────────────────── */
+.cat-hint { font-size: 0.75rem; color: var(--text-dim); margin: 0 0 0.5rem; }
+
+.catalogue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow-y: auto;
+  max-height: 420px;
+}
+
+.cat-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.1s;
+}
+.cat-entry:hover { border-color: var(--accent-dim); }
+
+.cat-desc { font-size: 0.8rem; color: var(--text); flex: 1; }
+.cat-meta { display: flex; gap: 0.4rem; flex-shrink: 0; font-size: 0.72rem; font-family: monospace; }
+.mod-up   { color: var(--red, #e05); }
+.mod-down { color: var(--accent); }
+
 /* ── Campaign tab ────────────────────────────────────────────────────────── */
+
+.label-display { display: flex; align-items: center; gap: 0.5rem; }
+.edit-inline-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.edit-inline-btn:hover { color: var(--accent); }
+
+.inline-label-form { display: flex; align-items: center; gap: 0.4rem; }
+.label-input {
+  flex: 1;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.83rem;
+  padding: 0.25rem 0.5rem;
+}
+.label-input:focus { border-color: var(--accent-dim); outline: none; }
 
 .campaign-settings { max-width: 560px; }
 .campaign-settings h2 { font-size: 0.95rem; margin: 0 0 1rem; }
