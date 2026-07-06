@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '../lib/supabase.js'
+import { api } from '../lib/api.js'
 import { useAuthStore } from './auth.js'
 import { generateWorldSnapshot, tickToCalendar, formatImperialDate, TICKS_PER_YEAR } from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
@@ -17,7 +17,7 @@ export const useTickStore = defineStore('tick', () => {
   const error         = ref(null)
 
   // Cached snapshots for the currently viewed world: goodDie → snapshot row
-  const worldSnapshots  = ref({})
+  const worldSnapshots   = ref({})
   const snapshotWorldKey = ref('')   // '{campaignId}:{worldHex}:{sector}:{tick}'
 
   // Active events for current campaign (loaded once per session / tick advance)
@@ -33,21 +33,15 @@ export const useTickStore = defineStore('tick', () => {
 
   async function loadCalendar() {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return
+    if (!campaignId) return
 
-    const { data, error: err } = await supabase
-      .from('campaign_calendar')
-      .select('current_tick, year, day')
-      .eq('campaign_id', campaignId)
-      .single()
-
-    if (err) { error.value = err.message; return }
+    const { data, error: err } = await api.get(`/api/campaigns/${campaignId}/calendar`)
+    if (err) { error.value = err; return }
 
     currentTick.value  = data.current_tick
     currentYear.value  = data.year
     currentDay.value   = data.day
-    const cal = tickToCalendar(data.current_tick)
-    currentMonth.value = cal.month
+    currentMonth.value = tickToCalendar(data.current_tick).month
   }
 
   // ── Tick advancement (referee only) ────────────────────────────────────────
@@ -58,18 +52,11 @@ export const useTickStore = defineStore('tick', () => {
       return { ok: false }
     }
 
-    if (!supabase) {
-      error.value = 'Database not configured.'
-      return { ok: false }
-    }
     loading.value = true
     error.value   = null
     try {
-      const { data, error: rpcError } = await supabase.rpc('advance_tick', {
-        p_campaign_id: auth.campaign.id,
-      })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
+      const { data, error: apiErr } = await api.post(`/api/campaigns/${auth.campaign.id}/advance-tick`, {})
+      if (apiErr) throw new Error(apiErr)
 
       currentTick.value  = data.tick
       currentYear.value  = data.year
@@ -77,12 +64,10 @@ export const useTickStore = defineStore('tick', () => {
       currentMonth.value = data.month
 
       // Invalidate snapshot cache — prices change each tick
-      worldSnapshots.value    = {}
-      snapshotWorldKey.value  = ''
+      worldSnapshots.value   = {}
+      snapshotWorldKey.value = ''
 
-      // Reload events after tick advance
       await loadActiveEvents()
-
       return { ok: true, tick: data.tick }
     } catch (e) {
       error.value = e.message
@@ -96,54 +81,37 @@ export const useTickStore = defineStore('tick', () => {
 
   async function loadActiveEvents() {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return
+    if (!campaignId) return
 
-    const { data } = await supabase
-      .from('market_events')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .or(`expires_tick.is.null,expires_tick.gt.${currentTick.value}`)
-
+    const { data } = await api.get(`/api/campaigns/${campaignId}/events`, {
+      active:       true,
+      current_tick: currentTick.value,
+    })
     activeEvents.value = data ?? []
   }
 
   async function maybeInsertEvent(world, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return
+    if (!campaignId) return
 
-    const ev = maybeGenerateEvent({
-      world,
-      sectorName,
-      campaignId,
-      tick: currentTick.value,
-    })
+    const ev = maybeGenerateEvent({ world, sectorName, campaignId, tick: currentTick.value })
     if (!ev) return
 
-    // Avoid duplicate events for the same (campaign, world, tick)
-    const { count } = await supabase
-      .from('market_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('campaign_id', campaignId)
-      .eq('tick', currentTick.value)
-      .eq('world_hex', ev.world_hex ?? '')
+    // Check for an existing event at the same (campaign, tick, world_hex) first
+    const { data: dupCheck } = await api.post(`/api/campaigns/${campaignId}/events`, {
+      ...ev, check_duplicate: true,
+    })
+    if (dupCheck?.count > 0) return
 
-    if (!count || count === 0) {
-      await supabase.from('market_events').insert(ev)
-      // Refresh active events to include the new one
-      await loadActiveEvents()
-    }
+    await api.post(`/api/campaigns/${campaignId}/events`, ev)
+    await loadActiveEvents()
   }
 
   // ── World snapshot ─────────────────────────────────────────────────────────
 
-  /**
-   * Ensure market snapshots exist for a world at the current tick.
-   * Generates and inserts them if missing (lazy evaluation — only when viewed).
-   * Returns the 36 snapshot rows sorted by die code.
-   */
   async function ensureWorldSnapshot(world, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return []
+    if (!campaignId) return []
 
     const cacheKey = `${campaignId}:${world.Hex}:${sectorName}:${currentTick.value}`
     if (snapshotWorldKey.value === cacheKey && Object.keys(worldSnapshots.value).length > 0) {
@@ -153,65 +121,51 @@ export const useTickStore = defineStore('tick', () => {
     loading.value = true
     error.value   = null
     try {
-      // Check if snapshots already exist in Supabase
-      const { count } = await supabase
-        .from('market_snapshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('campaign_id', campaignId)
-        .eq('world_hex', world.Hex)
-        .eq('sector', sectorName)
-        .eq('tick', currentTick.value)
+      // Check if snapshots already exist
+      const { data: countData } = await api.get(`/api/campaigns/${campaignId}/snapshots`, {
+        count:     true,
+        world_hex: world.Hex,
+        sector:    sectorName,
+        tick:      currentTick.value,
+      })
 
-      if (!count || count === 0) {
+      if (!(countData?.count > 0)) {
         // Maybe fire a market event first (affects prices below)
         await maybeInsertEvent(world, sectorName)
 
-        // On first visit to this world, backfill the current year's history so
-        // price charts have context from the start of the year rather than a
-        // single data point.
-        const { count: priorCount } = await supabase
-          .from('market_snapshots')
-          .select('id', { count: 'exact', head: true })
-          .eq('campaign_id', campaignId)
-          .eq('world_hex', world.Hex)
-          .eq('sector', sectorName)
+        // Check if any prior snapshots exist for backfill decision
+        const { data: priorData } = await api.get(`/api/campaigns/${campaignId}/snapshots/prior-count`, {
+          world_hex: world.Hex,
+          sector:    sectorName,
+        })
 
         const yearStartTick = Math.floor(currentTick.value / TICKS_PER_YEAR) * TICKS_PER_YEAR
 
-        if ((!priorCount || priorCount === 0) && currentTick.value > yearStartTick) {
+        if (!(priorData?.count > 0) && currentTick.value > yearStartTick) {
           const backfillRows = []
           for (let t = yearStartTick; t < currentTick.value; t++) {
             backfillRows.push(...generateWorldSnapshot({
               world, sectorName, campaignId, tick: t, activeEvents: [],
             }))
           }
-          await supabase.from('market_snapshots').insert(backfillRows)
+          if (backfillRows.length) {
+            await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows: backfillRows })
+          }
         }
 
-        // Get active events for this world
         const eventsForWorld = activeEventsForWorld(
-          activeEvents.value,
-          world.Hex,
-          currentTick.value,
-          sectorName,
+          activeEvents.value, world.Hex, currentTick.value, sectorName,
         )
 
-        // Generate all 36 good snapshots deterministically
         const rows = generateWorldSnapshot({
-          world,
-          sectorName,
-          campaignId,
-          tick: currentTick.value,
+          world, sectorName, campaignId,
+          tick:         currentTick.value,
           activeEvents: eventsForWorld,
         })
 
-        const { error: insertErr } = await supabase
-          .from('market_snapshots')
-          .insert(rows)
+        const { error: insertErr } = await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows })
+        if (insertErr) throw new Error(insertErr)
 
-        if (insertErr) throw new Error(insertErr.message)
-
-        // Cache locally
         const cache = {}
         for (const row of rows) cache[row.trade_good_die] = row
         worldSnapshots.value   = cache
@@ -219,23 +173,19 @@ export const useTickStore = defineStore('tick', () => {
         return rows
       }
 
-      // Load from Supabase
-      const { data, error: fetchErr } = await supabase
-        .from('market_snapshots')
-        .select('*')
-        .eq('campaign_id', campaignId)
-        .eq('world_hex', world.Hex)
-        .eq('sector', sectorName)
-        .eq('tick', currentTick.value)
-        .order('trade_good_die')
-
-      if (fetchErr) throw new Error(fetchErr.message)
+      // Load from D1
+      const { data, error: fetchErr } = await api.get(`/api/campaigns/${campaignId}/snapshots`, {
+        world_hex: world.Hex,
+        sector:    sectorName,
+        tick:      currentTick.value,
+      })
+      if (fetchErr) throw new Error(fetchErr)
 
       const cache = {}
-      for (const row of data) cache[row.trade_good_die] = row
+      for (const row of data ?? []) cache[row.trade_good_die] = row
       worldSnapshots.value   = cache
       snapshotWorldKey.value = cacheKey
-      return data
+      return data ?? []
     } catch (e) {
       error.value = e.message
       return []
@@ -246,68 +196,36 @@ export const useTickStore = defineStore('tick', () => {
 
   // ── Price history ──────────────────────────────────────────────────────────
 
-  /**
-   * Load weekly price history for one good at one world.
-   * Returns raw ticks suitable for a candlestick chart (time = tick).
-   */
   async function loadWeeklyHistory(worldHex, sectorName, goodDie, limit = 52) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return []
+    if (!campaignId) return []
 
-    const { data, error: err } = await supabase
-      .from('market_snapshots')
-      .select('tick, purchase_price, sale_price, qty_available')
-      .eq('campaign_id', campaignId)
-      .eq('world_hex', worldHex)
-      .eq('sector', sectorName)
-      .eq('trade_good_die', goodDie)
-      .order('tick', { ascending: false })
-      .limit(limit)
-
-    if (err) { error.value = err.message; return [] }
-    return (data ?? []).reverse()
+    const { data, error: err } = await api.get(`/api/campaigns/${campaignId}/market/weekly`, {
+      world_hex: worldHex, sector: sectorName, good_die: goodDie, limit,
+    })
+    if (err) { error.value = err; return [] }
+    return data ?? []
   }
 
-  /**
-   * Load monthly OHLC history for candlestick charts.
-   * Each bar = one Imperial month (4 ticks).
-   */
   async function loadMonthlyHistory(worldHex, sectorName, goodDie, limit = 24) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return []
+    if (!campaignId) return []
 
-    const { data, error: err } = await supabase
-      .from('market_monthly')
-      .select('year, month, open_price, high_price, low_price, close_price, volume_tons')
-      .eq('campaign_id', campaignId)
-      .eq('world_hex', worldHex)
-      .eq('sector', sectorName)
-      .eq('trade_good_die', goodDie)
-      .order('year',  { ascending: false })
-      .order('month', { ascending: false })
-      .limit(limit)
-
-    if (err) { error.value = err.message; return [] }
-    return (data ?? []).reverse()
+    const { data, error: err } = await api.get(`/api/campaigns/${campaignId}/market/monthly`, {
+      world_hex: worldHex, sector: sectorName, good_die: goodDie, limit,
+    })
+    if (err) { error.value = err; return [] }
+    return data ?? []
   }
 
-  /**
-   * Load annual OHLC history.
-   */
   async function loadAnnualHistory(worldHex, sectorName, goodDie) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return []
+    if (!campaignId) return []
 
-    const { data, error: err } = await supabase
-      .from('market_annual')
-      .select('year, open_price, high_price, low_price, close_price, volume_tons')
-      .eq('campaign_id', campaignId)
-      .eq('world_hex', worldHex)
-      .eq('sector', sectorName)
-      .eq('trade_good_die', goodDie)
-      .order('year')
-
-    if (err) { error.value = err.message; return [] }
+    const { data, error: err } = await api.get(`/api/campaigns/${campaignId}/market/annual`, {
+      world_hex: worldHex, sector: sectorName, good_die: goodDie,
+    })
+    if (err) { error.value = err; return [] }
     return data ?? []
   }
 
@@ -321,29 +239,20 @@ export const useTickStore = defineStore('tick', () => {
 
   async function loadWorldEventHistory(worldHex, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || !supabase) return []
+    if (!campaignId) return []
 
-    const { data, error: err } = await supabase
-      .from('market_events')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .eq('sector', sectorName)
-      .or(`world_hex.eq.${worldHex},scope.eq.subsector`)
-      .order('tick', { ascending: false })
-      .limit(200)
-
-    if (err) { error.value = err.message; return [] }
+    const { data, error: err } = await api.get(`/api/campaigns/${campaignId}/events`, {
+      world_hex: worldHex, sector: sectorName,
+    })
+    if (err) { error.value = err; return [] }
     worldEventHistory.value = data ?? []
     return data ?? []
   }
 
   return {
-    // state
     currentTick, currentYear, currentDay, currentMonth,
     loading, error, activeEvents, worldSnapshots, worldEventHistory,
-    // computed
     imperialDate,
-    // actions
     loadCalendar,
     advanceTick,
     loadActiveEvents,

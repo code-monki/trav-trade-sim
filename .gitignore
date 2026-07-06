@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+worker/.dev.vars
 .env.local
 .env.*.local
 pdfs/

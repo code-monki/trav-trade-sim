@@ -118,6 +118,49 @@ decisions, security constraints, and restart instructions.
 
 ---
 
+## 2026-07-05 — Migrate from Supabase to Cloudflare D1 + Workers
+
+### Rationale
+
+Supabase free-tier projects are **automatically paused after seven consecutive days of inactivity**. Resuming requires the project owner to log in to the Supabase dashboard and click "Restore" — users cannot resume the database themselves, and the app is completely unavailable until it is done. For a campaign tool that may sit idle between gaming sessions, this is unacceptable.
+
+Cloudflare D1 has no inactivity pause. Free-tier D1 databases remain always-available and there is no manual intervention required after periods of no use.
+
+### What changed
+
+**Backend replaced entirely.** The Supabase project (PostgreSQL + PostgREST + SECURITY DEFINER RPCs) has been replaced by:
+- **Cloudflare D1** — SQLite at the edge; schema in `d1/schema.sql`; migrations numbered `002_`, `003_`, etc.
+- **Cloudflare Workers** — a Hono v4 API at `https://trav-trade-sim.codemonki.workers.dev`; source in `worker/src/`
+
+**Frontend API client replaced.** `@supabase/supabase-js` and `src/lib/supabase.js` have been removed. All stores now import `api` from `src/lib/api.js`, a thin fetch wrapper that reads the Bearer session token from localStorage and targets `VITE_API_URL`.
+
+**Authentication model changed.** Supabase's anon key + RLS model is replaced by session tokens (UUID) stored in the D1 `sessions` table. Login returns a token; all subsequent requests carry `Authorization: Bearer <token>`. PIN hashing uses PBKDF2-SHA256 (10,000 iterations) via the Web Crypto API — reduced from an initial 200,000 to stay within the Workers free-tier 10 ms CPU budget.
+
+**Atomic writes via `db.batch()`.** Every compound operation (buy cargo, sell cargo, book passengers, etc.) uses a D1 batch so credits/credits and inventory are updated atomically without database transactions.
+
+### New features shipped at the same time
+
+- **Stateroom occupancy accounts for crew.** Each active crew member occupies one stateroom by default. The referee can mark any crew member as "double-bunked" (`has_stateroom = 0`) to free that stateroom for passengers. `stateroomsAvailable` now reflects both crew and passenger occupancy.
+- **Fuel deducted on jump.** `updateLocation` now accepts a `fuelCost` parameter; fuel is atomically deducted from `ships.fuel_current` before the location update commits.
+- **Passengers and mail auto-deliver on arrival.** When `updateLocation` is called with `{ tick, campaignId, playerId }`, the store calls `autoDeliver`, which settles any manifests or mail contracts whose destination matches the new world.
+- **`qty_available` enforced server-side.** The Worker's `buy-cargo` route checks and atomically decrements `market_snapshots.qty_available`; the client can no longer over-purchase.
+
+### D1 migrations applied to production
+
+| File | Description |
+|------|-------------|
+| `d1/schema.sql` | Full initial schema (all tables, indexes, views) |
+| `d1/002_sessions.sql` | `sessions` table for Bearer token auth |
+| `d1/003_crew_stateroom.sql` | `has_stateroom INTEGER NOT NULL DEFAULT 1` on `crew` |
+
+### Deleted
+
+- `supabase/` directory (22 migration files + `ADMIN_NOTES.md`)
+- `src/lib/supabase.js`
+- `@supabase/supabase-js` npm dependency
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.
@@ -127,10 +170,10 @@ Suggested documents:
 | Document | Purpose |
 |---|---|
 | **Product Requirements Document (PRD)** | Goals, scope, non-goals, success criteria, non-commercial constraint |
-| **Architecture Overview** | Component map, data flow, Supabase schema diagram, state management |
-| **Data Dictionary** | All Supabase tables/views, columns, RLS policies, function signatures |
+| **Architecture Overview** | Component map, data flow, D1 schema diagram, state management |
+| **Data Dictionary** | All D1 tables/views, columns, Worker route signatures |
 | **Trade Rules Reference** | CT Book 2 and CT Book 7 mechanics implemented; deviation notes |
 | **Market Events Catalogue** | Full event table with severity tiers, effect ranges, trigger conditions |
 | **Theme Specification** | CSS token set, WCAG contrast ratios per theme, user theme format (JSON schema) |
 | **Accessibility Checklist** | WCAG 2.2 AA criteria mapped to implementation; known gaps |
-| **Deployment Runbook** | GitHub Pages deploy process, Supabase migration order, env var requirements |
+| **Deployment Runbook** | GitHub Pages + Cloudflare Workers deploy process, D1 migration order, env var requirements |

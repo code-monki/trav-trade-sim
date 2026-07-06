@@ -151,7 +151,22 @@ const maxProfit = computed(() =>
 function fmt(n) { return Math.abs(n ?? 0).toLocaleString() }
 
 async function selectWorld(w) {
-  await ship.updateLocation(w.hex, props.sectorName)
+  const hullTons = ship.ship?.hull_tons ?? 0
+  const fuelCost = hullTons > 0 ? Math.ceil(hullTons * w.dist * 0.1) : 0
+
+  const result = await ship.updateLocation(w.hex, props.sectorName, {
+    tick:       tick.currentTick,
+    campaignId: auth.campaign?.id,
+    playerId:   auth.player?.id,
+    fuelCost,
+  })
+
+  if (!result.ok) {
+    // Surface the error in the ship store so the MapView error banner picks it up
+    ship.$patch({ error: result.error })
+    return
+  }
+
   map.selectWorld(w.worldObj)
   emit('select-world')
 }

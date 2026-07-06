@@ -35,7 +35,7 @@ import { createChart, ColorType } from 'lightweight-charts'
 import { useTickStore }  from '../stores/tick.js'
 import { useThemeStore } from '../stores/theme.js'
 import { useAuthStore }  from '../stores/auth.js'
-import { supabase }      from '../lib/supabase.js'
+import { api }           from '../lib/api.js'
 import { formatImperialDate, tickToCalendar } from '../lib/market-tick.js'
 
 const props = defineProps({
@@ -186,15 +186,11 @@ async function loadSeriesData(series, goodDie) {
       series.setData(raw.map(r => ({ time: monthToTime(r.year, r.month), value: r.close_price })))
     }
   } else if (activeTab.value === 'realized') {
-    const { data: raw } = await supabase
-      .from('realized_ohlcv')
-      .select('year, month, open_price, high_price, low_price, close_price, volume_tons, trade_count')
-      .eq('campaign_id',    auth.campaign?.id)
-      .eq('world_hex',      props.worldHex)
-      .eq('sector',         props.sectorName)
-      .eq('trade_good_die', goodDie)
-      .order('year')
-      .order('month')
+    const { data: raw } = await api.get(`/api/campaigns/${auth.campaign?.id}/market/realized`, {
+      world_hex: props.worldHex,
+      sector:    props.sectorName,
+      good_die:  goodDie,
+    })
     if (!raw?.length) return false
     if (props.goods.length === 1) {
       series.setData(raw.map(r => ({

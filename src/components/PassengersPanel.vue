@@ -11,6 +11,9 @@
         <div class="cap-stat">
           <label>Staterooms</label>
           <span>{{ ship.stateroomsAvailable }} / {{ ship.stateroomsTotal }} available</span>
+          <span v-if="ship.crewStateroomsUsed > 0" class="cap-detail">
+            {{ ship.crewStateroomsUsed }} crew · {{ ship.stateroomsUsed - ship.crewStateroomsUsed }} passengers
+          </span>
         </div>
         <div class="cap-stat">
           <label>Low Berths</label>
@@ -229,6 +232,7 @@ function decCount() { if (form.value.count > 1) form.value.count-- }
 .cap-stat { display: flex; flex-direction: column; gap: 0.2rem; }
 .cap-stat label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
 .cap-stat span  { font-size: 0.85rem; font-weight: 500; color: var(--text); }
+.cap-detail     { font-size: 0.72rem !important; font-weight: 400 !important; color: var(--text-dim) !important; }
 
 .booking-section h3 { font-size: 0.85rem; margin-bottom: 0.75rem; color: var(--text-dim); }
 

@@ -239,6 +239,7 @@
                     <th>Character</th>
                     <th>Role</th>
                     <th class="center">Can Trade</th>
+                    <th class="center" title="Occupies a stateroom (uncheck to double-bunk)">Stateroom</th>
                     <th>Since Tick</th>
                     <th></th>
                   </tr>
@@ -257,6 +258,12 @@
                              :checked="c.can_trade"
                              class="trade-check"
                              @change="referee.setCrewCanTrade(c, $event.target.checked)" />
+                    </td>
+                    <td class="center">
+                      <input type="checkbox"
+                             :checked="c.has_stateroom !== false"
+                             class="trade-check"
+                             @change="referee.setCrewStateroomOccupancy(c, $event.target.checked)" />
                     </td>
                     <td>{{ c.joined_tick }}</td>
                     <td>
@@ -563,7 +570,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
 import { useRefereeStore } from '../stores/referee.js'
-import { supabase } from '../lib/supabase.js'
+import { api } from '../lib/api.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 
 const router = useRouter()
@@ -662,15 +669,11 @@ async function loadShipPassengers(shipId) {
   if (!shipId) { shipPassengers.value = []; return }
   refPassengerLoading.value = true
   refPassengerError.value   = ''
-  const { data, error: err } = await supabase
-    .from('passenger_manifests')
-    .select('*')
-    .eq('ship_id', shipId)
-    .eq('campaign_id', auth.campaign.id)
-    .eq('status', 'in_transit')
-    .order('created_at', { ascending: true })
+  const { data, error: err } = await api.get(`/api/ships/${shipId}/passengers`, {
+    campaign_id: auth.campaign.id,
+  })
   refPassengerLoading.value = false
-  if (err) { refPassengerError.value = err.message; return }
+  if (err) { refPassengerError.value = err; return }
   shipPassengers.value = data ?? []
 }
 
@@ -678,31 +681,14 @@ async function doRefundPassenger(manifest) {
   if (!confirm(`Refund ${manifest.count}× ${manifest.passage_type} passage (Cr${manifest.fare_total.toLocaleString()})?`)) return
   refPassengerError.value = ''
 
-  const { error: mErr } = await supabase
-    .from('passenger_manifests')
-    .update({ status: 'refunded', resolve_tick: tick.currentTick })
-    .eq('id', manifest.id)
-    .eq('campaign_id', auth.campaign.id)
-
-  if (mErr) { refPassengerError.value = mErr.message; return }
-
-  await supabase.from('transactions').insert({
+  const { error } = await api.post(`/api/referee/ships/${manifest.ship_id}/refund-passenger`, {
+    manifest_id: manifest.id,
+    tick:        tick.currentTick,
     campaign_id: auth.campaign.id,
     player_id:   manifest.player_id,
-    ship_id:     manifest.ship_id,
-    tick:        tick.currentTick,
-    type:        'passenger_refund',
-    total_cr:    -manifest.fare_total,
-    world_hex:   manifest.embark_world_hex,
-    sector:      manifest.embark_sector,
-    notes:       `Refund: ${manifest.count}× ${manifest.passage_type}`,
   })
 
-  // Reverse the fare in the ship's credit account
-  await supabase
-    .from('ships')
-    .update({ credits: (selectedShip.value?.credits ?? 0) - manifest.fare_total })
-    .eq('id', manifest.ship_id)
+  if (error) { refPassengerError.value = error; return }
 
   // Update referee store local state
   const s = referee.ships.find(sh => sh.id === manifest.ship_id)
@@ -796,65 +782,20 @@ async function submitEditShip() {
 }
 
 async function autoDeliverOnMove(shipId, worldHex, sector) {
-  // Mark matching in-transit passengers as delivered
-  const { data: delivered } = await supabase
-    .from('passenger_manifests')
-    .update({ status: 'delivered', resolve_tick: tick.currentTick })
-    .eq('ship_id', shipId)
-    .eq('campaign_id', auth.campaign.id)
-    .eq('status', 'in_transit')
-    .eq('dest_world_hex', worldHex)
-    .eq('dest_sector', sector)
-    .select()
+  const { data } = await api.post(`/api/referee/ships/${shipId}/auto-deliver`, {
+    world_hex:   worldHex,
+    sector,
+    tick:        tick.currentTick,
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+  })
 
-  // Write fare-collected transaction entries for delivered passengers
-  if (delivered?.length) {
-    for (const p of delivered) {
-      await supabase.from('transactions').insert({
-        campaign_id: auth.campaign.id,
-        player_id:   p.player_id,
-        ship_id:     shipId,
-        tick:        tick.currentTick,
-        type:        'passenger_fare',
-        total_cr:    0,   // fare was pre-collected at embarkation; this is a delivery record
-        world_hex:   worldHex,
-        sector,
-        notes:       `Delivered: ${p.count}× ${p.passage_type} from ${p.embark_world_name || p.embark_world_hex}`,
-      })
-    }
-  }
-
-  // Mark matching in-transit mail contracts as delivered and credit payment
-  const { data: deliveredMail } = await supabase
-    .from('mail_contracts')
-    .update({ status: 'delivered', resolve_tick: tick.currentTick })
-    .eq('ship_id', shipId)
-    .eq('campaign_id', auth.campaign.id)
-    .eq('status', 'in_transit')
-    .eq('dest_world_hex', worldHex)
-    .eq('dest_sector', sector)
-    .select()
-
-  if (deliveredMail?.length) {
-    for (const m of deliveredMail) {
-      await supabase.from('transactions').insert({
-        campaign_id: auth.campaign.id,
-        player_id:   m.player_id,
-        ship_id:     shipId,
-        tick:        tick.currentTick,
-        type:        'mail',
-        total_cr:    m.payment,
-        world_hex:   worldHex,
-        sector,
-        notes:       `Mail delivered from ${m.origin_world_name || m.origin_world_hex}`,
-      })
-
-      // Credit the ship
-      const s = referee.ships.find(sh => sh.id === shipId)
-      if (s) {
-        await supabase.from('ships').update({ credits: (s.credits ?? 0) + m.payment }).eq('id', shipId)
-        s.credits = (s.credits ?? 0) + m.payment
-      }
+  // Update referee store local state for mail payments
+  if (data?.mail_delivered > 0) {
+    const s = referee.ships.find(sh => sh.id === shipId)
+    if (s) {
+      // Reload ship to get accurate credits (auto-deliver batched the update)
+      await referee.loadShips(auth.campaign.id)
     }
   }
 }
@@ -878,12 +819,7 @@ async function submitAddCrew() {
 }
 
 async function changeCrewRole(crewRow, newRole) {
-  const updates = { role: newRole }
-  if (newRole === 'captain') updates.can_trade = true
-  const { supabase } = await import('../lib/supabase.js')
-  await supabase.from('crew').update(updates).eq('id', crewRow.id)
-  crewRow.role = newRole
-  if (updates.can_trade !== undefined) crewRow.can_trade = updates.can_trade
+  await referee.updateCrewRole(crewRow, newRole)
 }
 
 async function confirmRemoveCrew(c) {
@@ -1044,12 +980,9 @@ async function submitLabel() {
   if (!trimmed) return
   labelSaving.value = true
   labelError.value  = ''
-  const { error: err } = await supabase
-    .from('campaigns')
-    .update({ label: trimmed })
-    .eq('id', auth.campaign.id)
+  const { error: err } = await api.patch(`/api/campaigns/${auth.campaign.id}`, { label: trimmed })
   labelSaving.value = false
-  if (err) { labelError.value = err.message; return }
+  if (err) { labelError.value = err; return }
   auth.campaign = { ...auth.campaign, label: trimmed }
   editingLabel.value = false
 }

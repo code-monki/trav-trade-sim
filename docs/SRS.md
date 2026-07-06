@@ -12,11 +12,11 @@
 |----|-----------|
 | CON-1 | Non-commercial use only; no monetisation |
 | CON-2 | Must run in a modern web browser with no installation |
-| CON-3 | Backend is Supabase (PostgreSQL + PostgREST + pgcrypto); no custom server |
-| CON-4 | Supabase anon key is safe to ship in the bundle; all auth is application-layer PIN |
+| CON-3 | Backend is Cloudflare Workers (Hono v4) + Cloudflare D1 (SQLite); no Supabase dependency |
+| CON-4 | No secret is bundled in the frontend; `VITE_API_URL` is the Worker's public URL; auth uses Bearer session tokens |
 | CON-5 | No PII is collected or stored; identity is (campaign code, character name, PIN hash) |
 | CON-6 | Traveller IP requires fair use compliance; no copyrighted table data is redistributed verbatim |
-| CON-7 | All mutations go through SECURITY DEFINER RPCs; client never writes directly to sensitive rows |
+| CON-7 | All mutations go through Worker endpoints; compound operations use `db.batch()` for atomicity |
 
 ---
 

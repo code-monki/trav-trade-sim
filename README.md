@@ -28,48 +28,53 @@ The **Traveller game rules and trade mechanics** implemented here are based on C
 |---|---|
 | Frontend | Vue 3 (Composition API + SFC), Pinia, Vue Router |
 | Build | Vite |
-| Database | Supabase (PostgreSQL + RLS) |
+| API | Cloudflare Workers (Hono v4) |
+| Database | Cloudflare D1 (SQLite at the edge) |
 | Charts | lightweight-charts (TradingView OSS) |
-| Hosting | GitHub Pages (via GitHub Actions) |
+| Hosting | GitHub Pages (frontend) + Cloudflare Workers (API) |
 
 ## Setup
 
 ### Prerequisites
 
 - Node.js 20+
-- A [Supabase](https://supabase.com) project (free tier is sufficient)
+- A [Cloudflare](https://cloudflare.com) account (free tier is sufficient)
+- Wrangler CLI: `npm install -g wrangler`
 
 ### Local development
 
+Two terminals are required — one for the Worker API, one for the Vite dev server.
+
 ```bash
-# 1. Install dependencies
+# Terminal 1 — API (uses the remote D1 database)
+cd worker
+npx wrangler dev --remote
+
+# Terminal 2 — frontend
 npm install
-
-# 2. Copy env template and fill in your Supabase credentials
-cp .env.example .env
-# Edit .env with your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-
-# 3. Run the schema
-# Paste supabase/migrations/001_schema.sql into the Supabase SQL Editor and run it.
-
-# 4. Start dev server
 npm run dev
 ```
 
-### GitHub Pages deployment
+The frontend `.env` file points `VITE_API_URL` at `http://localhost:8787` by default.
 
-Push to `main`. The [GitHub Actions workflow](.github/workflows/deploy.yml) builds and deploys automatically.
+### Deploy
 
-Add these repository secrets before the first deploy:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+```bash
+# Deploy Worker
+cd worker && npx wrangler deploy
+
+# Deploy frontend (or push to master — GitHub Actions handles it)
+npm run build
+```
+
+Add `VITE_API_URL=https://<your-worker>.workers.dev` as a GitHub Actions repository secret before deploying the frontend.
 
 ## Project Structure
 
 ```
 src/
   lib/
-    supabase.js          # Supabase client
+    api.js               # HTTP client (replaces @supabase/supabase-js)
     traveller-data.js    # CT lookup tables, Book 2 goods, Book 7 price tables
     traveller-helpers.js # UWP decode, sector parsing, route parsing
     trade-engine-ct7.js  # CT Book 7 trade rules (pure functions)
@@ -79,7 +84,15 @@ src/
     style.css            # Dark space theme
   App.vue
   main.js
-supabase/
-  migrations/
-    001_schema.sql       # Full database schema with RLS
+worker/
+  src/
+    index.js             # Hono app entry point + CORS
+    routes/              # campaigns, ships, market, referee, auth, reports
+    middleware/auth.js   # Bearer token validation
+    lib/hash.js          # PBKDF2 PIN hashing (Web Crypto API)
+  wrangler.toml
+d1/
+  schema.sql             # Full D1 (SQLite) schema
+  002_sessions.sql       # Sessions table migration
+  003_crew_stateroom.sql # has_stateroom column on crew
 ```

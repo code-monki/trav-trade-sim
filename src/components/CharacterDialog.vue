@@ -69,7 +69,7 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
-import { supabase }     from '../lib/supabase.js'
+import { api }          from '../lib/api.js'
 import { useFocusTrap } from '../composables/useFocusTrap.js'
 
 const props = defineProps({ modelValue: { type: Boolean, required: true } })
@@ -100,28 +100,24 @@ watch(() => props.modelValue, async (open) => {
 async function loadSkills() {
   loading.value = true
   error.value   = ''
-  const { data, error: err } = await supabase
-    .from('player_skills')
-    .select('id, skill, level')
-    .eq('campaign_id', auth.campaign.id)
-    .eq('player_id', auth.player.id)
-    .order('skill')
+  const { data, error: err } = await api.get('/api/reports/skills', {
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+  })
   loading.value = false
-  if (err) { error.value = err.message; return }
+  if (err) { error.value = err; return }
   skills.value = data ?? []
 }
 
 async function saveSkill(skillName, level) {
   error.value = ''
-  const { data, error: err } = await supabase
-    .from('player_skills')
-    .upsert(
-      { campaign_id: auth.campaign.id, player_id: auth.player.id, skill: skillName, level },
-      { onConflict: 'player_id,skill' }
-    )
-    .select('id, skill, level')
-    .single()
-  if (err) { error.value = err.message; return }
+  const { data, error: err } = await api.post('/api/reports/skills', {
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+    skill:       skillName,
+    level,
+  })
+  if (err) { error.value = err; return }
   skills.value = skills.value.map(s => s.skill === skillName ? data : s)
 }
 
@@ -130,16 +126,14 @@ async function addSkill() {
   if (!name) return
   saving.value = true
   error.value  = ''
-  const { data, error: err } = await supabase
-    .from('player_skills')
-    .upsert(
-      { campaign_id: auth.campaign.id, player_id: auth.player.id, skill: name, level: newLevel.value ?? 0 },
-      { onConflict: 'player_id,skill' }
-    )
-    .select('id, skill, level')
-    .single()
+  const { data, error: err } = await api.post('/api/reports/skills', {
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+    skill:       name,
+    level:       newLevel.value ?? 0,
+  })
   saving.value = false
-  if (err) { error.value = err.message; return }
+  if (err) { error.value = err; return }
   const existing = skills.value.find(s => s.skill === name)
   skills.value = existing
     ? skills.value.map(s => s.skill === name ? data : s)
@@ -150,11 +144,8 @@ async function addSkill() {
 
 async function removeSkill(s) {
   error.value = ''
-  const { error: err } = await supabase
-    .from('player_skills')
-    .delete()
-    .eq('id', s.id)
-  if (err) { error.value = err.message; return }
+  const { error: err } = await api.delete(`/api/reports/skills/${s.id}`)
+  if (err) { error.value = err; return }
   skills.value = skills.value.filter(sk => sk.id !== s.id)
 }
 

@@ -1,0 +1,13 @@
+name = "trav-trade-sim"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "trav-trade-sim"
+database_id = "26b978eb-6a11-4365-a9c6-7a72fb508b10"
+
+# CORS_ORIGIN is set via `wrangler secret put CORS_ORIGIN` for production.
+# For local dev, create worker/.dev.vars with: CORS_ORIGIN=http://localhost:5173

@@ -164,9 +164,9 @@
 import { ref, computed, watch } from 'vue'
 import { useShipStore } from '../stores/ship.js'
 import { useTickStore } from '../stores/tick.js'
-import { supabase } from '../lib/supabase.js'
+import { api } from '../lib/api.js'
 import { formatImperialDate } from '../lib/market-tick.js'
-import { aggregateByType, yearToTickRange } from '../lib/reports.js'
+import { yearToTickRange } from '../lib/reports.js'
 
 const ship = useShipStore()
 const tick = useTickStore()
@@ -235,16 +235,11 @@ function txnDesc(t) {
 async function loadLedger() {
   if (!ship.ship?.id) return
   ledgerLoading.value = true
-  const lim = ledgerLimit.value
-  let q = supabase
-    .from('transactions')
-    .select('*')
-    .eq('ship_id', ship.ship.id)
-    .order('tick', { ascending: false })
-    .limit(lim + 1)
-  const tf = tickFilter()
-  if (tf) q = q.gte('tick', tf.gte).lt('tick', tf.lt)
-  const { data } = await q
+  const lim    = ledgerLimit.value
+  const tf     = tickFilter()
+  const params = { ship_id: ship.ship.id, limit: lim + 1 }
+  if (tf) { params.from_tick = tf.gte; params.to_tick = tf.lt }
+  const { data } = await api.get('/api/reports/ledger', params)
   if (data) {
     ledgerHasMore.value = data.length > lim
     ledgerRows.value    = data.slice(0, lim)
@@ -255,16 +250,11 @@ async function loadLedger() {
 async function loadTrades() {
   if (!ship.ship?.id) return
   tradesLoading.value = true
-  const lim = tradesLimit.value
-  let q = supabase
-    .from('trade_records')
-    .select('*')
-    .eq('ship_id', ship.ship.id)
-    .order('sell_tick', { ascending: false })
-    .limit(lim + 1)
-  const tf = tickFilter()
-  if (tf) q = q.gte('sell_tick', tf.gte).lt('sell_tick', tf.lt)
-  const { data } = await q
+  const lim    = tradesLimit.value
+  const tf     = tickFilter()
+  const params = { ship_id: ship.ship.id, limit: lim + 1 }
+  if (tf) { params.from_tick = tf.gte; params.to_tick = tf.lt }
+  const { data } = await api.get('/api/reports/trades', params)
   if (data) {
     tradesHasMore.value = data.length > lim
     tradesRows.value    = data.slice(0, lim)
@@ -275,14 +265,11 @@ async function loadTrades() {
 async function loadIncome() {
   if (!ship.ship?.id) return
   incomeLoading.value = true
-  let q = supabase
-    .from('transactions')
-    .select('type, total_cr')
-    .eq('ship_id', ship.ship.id)
-  const tf = tickFilter()
-  if (tf) q = q.gte('tick', tf.gte).lt('tick', tf.lt)
-  const { data } = await q
-  if (data) byType.value = aggregateByType(data)
+  const tf     = tickFilter()
+  const params = { ship_id: ship.ship.id }
+  if (tf) { params.from_tick = tf.gte; params.to_tick = tf.lt }
+  const { data } = await api.get('/api/reports/income', params)
+  if (data) byType.value = data   // Worker returns byType map directly
   incomeLoading.value = false
 }
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '../lib/supabase.js'
+import { api } from '../lib/api.js'
 import { useShipStore } from './ship.js'
 
 const SESSION_KEY = 'tts_session'
@@ -9,13 +9,11 @@ function loadSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
     return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-function saveSession(campaign, player) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ campaign, player }))
+function saveSession(campaign, player, token) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ campaign, player, token }))
 }
 
 function clearSession() {
@@ -35,32 +33,24 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearError() { error.value = null }
 
-  function requireSupabase() {
-    if (!supabase) throw new Error('Database not configured — check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
-  }
-
   // ── Create a new campaign (referee creates + joins in one step) ─────────────
   async function createCampaign({ label, code, milieu, tradeRules, startYear = 1105, startWeek = 1, characterName, pin }) {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
       const startTick = Math.max(0, (startYear - 1105) * 48 + (startWeek - 1))
-      const { data, error: rpcError } = await supabase.rpc('create_campaign', {
-        p_label:       label,
-        p_code:        code,
-        p_milieu:      milieu,
-        p_trade_rules: tradeRules,
-        p_char_name:   characterName,
-        p_pin:         pin,
-        p_start_tick:  startTick,
+      const { data, error: apiErr } = await api.post('/api/campaigns', {
+        label, code, milieu,
+        trade_rules: tradeRules,
+        char_name:   characterName,
+        pin,
+        start_tick:  startTick,
       })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
+      if (apiErr) throw new Error(apiErr)
 
       campaign.value = data.campaign
       player.value   = data.player
-      saveSession(data.campaign, data.player)
+      saveSession(data.campaign, data.player, data.token)
       return { ok: true, recoveryCode: data.recovery_code }
     } catch (e) {
       error.value = e.message
@@ -75,16 +65,11 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
-      const { data, error: rpcError } = await supabase.rpc('join_campaign', {
-        p_code:      code,
-        p_char_name: characterName,
-        p_pin:       pin,
+      const { error: apiErr } = await api.post('/api/campaigns/join', {
+        code, char_name: characterName, pin,
       })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
-
-      // After registering, immediately verify to load the full session
+      if (apiErr) throw new Error(apiErr)
+      // After registering, log in to get a session token
       return await login({ code, characterName, pin })
     } catch (e) {
       error.value = e.message
@@ -99,31 +84,24 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
-      const { data, error: rpcError } = await supabase.rpc('verify_pin', {
-        p_code:      code,
-        p_char_name: characterName,
-        p_pin:       pin,
+      const result = await api.post('/api/auth/login', {
+        code, char_name: characterName, pin,
       })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) {
-        if (data.locked_until) {
-          const until = new Date(data.locked_until)
-          throw new Error(`${data.error}. Try again after ${until.toLocaleTimeString()}.`)
+      if (result.error) {
+        if (result.locked_until) {
+          const until = new Date(result.locked_until)
+          throw new Error(`${result.error}. Try again after ${until.toLocaleTimeString()}.`)
         }
-        const remaining = data.attempts_remaining
+        const remaining = result.attempts_remaining
         const suffix = remaining != null ? ` (${remaining} attempt${remaining === 1 ? '' : 's'} remaining)` : ''
-        throw new Error(`${data.error}${suffix}`)
+        throw new Error(`${result.error}${suffix}`)
       }
 
-      campaign.value = data.campaign
-      player.value   = data.player
-      saveSession(data.campaign, data.player)
+      campaign.value = result.data.campaign
+      player.value   = result.data.player
+      saveSession(result.data.campaign, result.data.player, result.data.token)
 
-      // Load the ship assigned to this player (non-blocking — ship store
-      // handles the null case gracefully if no ship is assigned yet)
-      useShipStore().loadShip(data.player.id, data.campaign.id)
-
+      useShipStore().loadShip(result.data.player.id, result.data.campaign.id)
       return { ok: true }
     } catch (e) {
       error.value = e.message
@@ -139,12 +117,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
-      const { data, error: rpcError } = await supabase.rpc('regenerate_recovery_code', {
-        p_campaign_id: campaign.value.id,
-      })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
+      const { data, error: apiErr } = await api.post('/api/campaigns/recovery-code', {})
+      if (apiErr) throw new Error(apiErr)
       return { ok: true, recoveryCode: data.recovery_code }
     } catch (e) {
       error.value = e.message
@@ -159,15 +133,10 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
-      const { data, error: rpcError } = await supabase.rpc('reset_pin_with_recovery_code', {
-        p_code:      code,
-        p_char_name: characterName,
-        p_recovery:  recoveryCode,
-        p_new_pin:   newPin,
+      const { error: apiErr } = await api.post('/api/campaigns/reset-pin', {
+        code, char_name: characterName, recovery: recoveryCode, new_pin: newPin,
       })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
+      if (apiErr) throw new Error(apiErr)
       return { ok: true }
     } catch (e) {
       error.value = e.message
@@ -183,14 +152,9 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value   = null
     try {
-      requireSupabase()
-      const { data, error: rpcError } = await supabase.rpc('delete_campaign', {
-        p_campaign_id: campaign.value.id,
-        p_pin:         pin,
-      })
-      if (rpcError) throw new Error(rpcError.message)
-      if (data?.error) throw new Error(data.error)
-      logout()
+      const { error: apiErr } = await api.delete(`/api/campaigns/${campaign.value.id}`, { pin })
+      if (apiErr) throw new Error(apiErr)
+      await logout()
       return { ok: true }
     } catch (e) {
       error.value = e.message
@@ -201,7 +165,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ── Log out ─────────────────────────────────────────────────────────────────
-  function logout() {
+  async function logout() {
+    await api.post('/api/auth/logout', {}).catch(() => {})
     campaign.value = null
     player.value   = null
     clearSession()

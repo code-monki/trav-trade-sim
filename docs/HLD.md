@@ -7,7 +7,9 @@
 
 ## 1. Architecture Overview
 
-TTS is a single-page application (SPA) with a Backend-as-a-Service (BaaS) data layer. There is no custom server; all compute happens in the browser except for PIN hashing and atomic ledger writes, which execute inside Supabase SECURITY DEFINER RPCs.
+TTS is a single-page application (SPA) backed by a Cloudflare Worker API and a Cloudflare D1 database. All trade math happens in the browser (pure JS, deterministic); PIN hashing and atomic ledger writes happen in the Worker.
+
+The original backend was Supabase (PostgreSQL + PostgREST + SECURITY DEFINER RPCs). It was replaced in July 2026 because **Supabase free-tier projects are automatically paused after seven days of inactivity** and require a manual dashboard restore before users can log in again. Cloudflare D1 has no inactivity pause.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -26,22 +28,24 @@ TTS is a single-page application (SPA) with a Backend-as-a-Service (BaaS) data l
 │  │             Trade Engine / Market Tick / Events               │  │
 │  │    (pure JS — deterministic, no side effects)                 │  │
 │  └──────────────────────────┬────────────────────────────────────┘  │
-│                             │ @supabase/supabase-js                 │
+│                             │ src/lib/api.js (fetch + Bearer token) │
 └─────────────────────────────┼───────────────────────────────────────┘
-                              │ HTTPS + PostgREST
+                              │ HTTPS JSON API
 ┌─────────────────────────────▼───────────────────────────────────────┐
-│  Supabase                                                           │
+│  Cloudflare Worker (Hono v4)                                        │
 │                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  PostgREST   │  │  Auth (anon  │  │  SECURITY DEFINER RPCs   │  │
-│  │  (table API) │  │  key only)   │  │  create_campaign         │  │
-│  └──────┬───────┘  └──────────────┘  │  join_campaign           │  │
-│         │                            │  verify_pin              │  │
-│  ┌──────▼───────────────────────────┐│  advance_tick            │  │
-│  │  PostgreSQL                      ││  rollup_month/year       │  │
-│  │  (schema, RLS policies,          ││  reset_pin_with_recovery │  │
-│  │   pgcrypto extension)            ││  regenerate_recovery_code│  │
-│  └──────────────────────────────────┘└──────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Routes: /api/auth  /api/campaigns  /api/ships               │  │
+│  │          /api/market  /api/referee  /api/reports             │  │
+│  └────────────────────────────┬─────────────────────────────────┘  │
+│                               │ D1 binding                          │
+│  ┌────────────────────────────▼─────────────────────────────────┐  │
+│  │  Cloudflare D1 (SQLite)                                      │  │
+│  │  campaigns · players · sessions · ships · crew               │  │
+│  │  cargo · passenger_manifests · mail_contracts                │  │
+│  │  market_snapshots · market_events · trade_records            │  │
+│  │  market_monthly · market_annual · realized_ohlcv (view)      │  │
+│  └──────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
                               │ REST API
 ┌─────────────────────────────▼───────────────────────────────────────┐
@@ -58,8 +62,9 @@ TTS is a single-page application (SPA) with a Backend-as-a-Service (BaaS) data l
 | State management | Pinia | ^2.2 |
 | Router | Vue Router 4 (hash history) | ^4.4 |
 | Charts | lightweight-charts | ^4.1 |
-| Backend | Supabase (PostgreSQL 15, PostgREST) | managed |
-| Client SDK | @supabase/supabase-js | ^2.108 |
+| API runtime | Cloudflare Workers (Hono v4) | managed |
+| Database | Cloudflare D1 (SQLite) | managed |
+| API client | src/lib/api.js (fetch wrapper) | — |
 | Build tool | Vite | ^5.4 |
 | Unit tests | Vitest + @vue/test-utils + happy-dom | ^2.1 |
 | E2E tests | Playwright | ^1.60 |
@@ -118,7 +123,7 @@ src/
 │   ├── traveller-data.js     CT2 trade goods, CT7 lookup tables, milieu list
 │   ├── traveller-helpers.js  UWP decode, hex distance, subsector helpers
 │   ├── tutorials.js          In-app tutorial content (HTML strings)
-│   ├── supabase.js           Supabase client singleton
+│   ├── api.js                HTTP client (fetch + Bearer token; replaces @supabase/supabase-js)
 │   ├── theme-db.js           Theme persistence (IndexedDB)
 │   └── theme-tokens.js       CSS variable generation from theme config
 ├── composables/
@@ -133,14 +138,17 @@ src/
 
 ```
 User → LoginView
-  ├─► doCreate()  → auth.createCampaign() → supabase.rpc('create_campaign')
+  ├─► doCreate()  → auth.createCampaign() → POST /api/campaigns
   │     └─► RecoveryCodeDialog (blocks navigation until acknowledged)
   │           └─► router.push({ name: 'map' })
-  ├─► doJoin()   → auth.joinCampaign()    → supabase.rpc('join_campaign')
-  │     └─► auth.login() → supabase.rpc('verify_pin') → router.push({ name: 'map' })
-  └─► doLogin()  → auth.login()           → supabase.rpc('verify_pin')
-        └─► localStorage.setItem(session) → router.push({ name: 'map' })
+  ├─► doJoin()   → auth.joinCampaign()    → POST /api/campaigns/:code/join
+  │     └─► auth.login() → POST /api/auth/login → { token } → router.push({ name: 'map' })
+  └─► doLogin()  → auth.login()           → POST /api/auth/login
+        └─► localStorage.setItem('tts_session', { campaign, player, token })
+              └─► router.push({ name: 'map' })
 ```
+
+All subsequent API calls carry `Authorization: Bearer <token>`. The Worker validates the token against the `sessions` table.
 
 ### 4.2 Map Load Flow
 
@@ -148,9 +156,9 @@ User → LoginView
 MapView.onMounted()
   ├─► map.selectedMilieu ← auth.campaign.milieu
   ├─► map.loadSectors()  → Traveller Map API /api/universe?milieu=...
-  ├─► tick.loadCalendar() → supabase campaign_calendar
-  ├─► tick.loadActiveEvents() → supabase market_events
-  └─► ship.loadShip(playerId, campaignId) → supabase crew + ships + cargo
+  ├─► tick.loadCalendar() → GET /api/campaigns/:id/calendar
+  ├─► tick.loadActiveEvents() → GET /api/campaigns/:id/events?active=true
+  └─► ship.loadShip(playerId, campaignId) → GET /api/ships/current
 ```
 
 ### 4.3 Market Snapshot Flow
@@ -160,13 +168,14 @@ User selects world → MarketTable.loadSnapshots()
   └─► tick.ensureWorldSnapshot(world, sector)
         ├─► Check cache: (campaignId:worldHex:sector:tick) == snapshotWorldKey?
         │     └─► Yes: return worldSnapshots (no network call)
-        ├─► Check Supabase: market_snapshots WHERE tick=current_tick
-        │     └─► Rows exist: fetch + cache + return
+        ├─► GET /api/campaigns/:id/snapshots?world_hex=&sector=&tick=
+        │     └─► Rows exist: cache + return
         └─► No rows:
-              ├─► maybeGenerateEvent() — seeded RNG → maybe insert market_events
-              ├─► Check prior visits: if none, backfill yearStartTick..currentTick
+              ├─► maybeGenerateEvent() — seeded RNG → POST /api/campaigns/:id/events (check_duplicate)
+              ├─► Check prior visits: GET /api/campaigns/:id/snapshots/prior-count
+              │     └─► If none: backfill yearStartTick..currentTick
               ├─► generateWorldSnapshot() — pure JS, 36 rows
-              ├─► supabase.from('market_snapshots').insert(rows)
+              ├─► POST /api/campaigns/:id/snapshots (batch insert)
               └─► cache + return
 ```
 
@@ -175,15 +184,12 @@ User selects world → MarketTable.loadSnapshots()
 ```
 Referee clicks "Advance Tick"
   └─► tick.advanceTick()
-        └─► supabase.rpc('advance_tick', { p_campaign_id })
+        └─► POST /api/campaigns/:id/advance-tick
               ├─► UPDATE campaign_calendar SET current_tick = current_tick + 1
               ├─► UPDATE campaign_calendar SET year, day
-              ├─► IF tick % 4 = 0: rollup_month()
-              │     └─► INSERT market_monthly (OHLC aggregate of last 4 snapshots)
-              ├─► IF tick % 48 = 0: rollup_year()
-              │     └─► INSERT market_annual (OHLC aggregate of year's monthly rows)
-              │     └─► DELETE expired events older than 1 prior year
-              └─► Returns { tick, year, day, month }
+              ├─► IF tick % 4 = 0: INSERT market_monthly (OHLC of last 4 snapshots)
+              ├─► IF tick % 48 = 0: INSERT market_annual; DELETE expired events
+              └─► Returns { tick, year, day }
         └─► Invalidate worldSnapshots cache
         └─► tick.loadActiveEvents()
 ```
@@ -195,17 +201,20 @@ Buy:
   User clicks row Buy button
     └─► BuyDialog: enter tons → confirm
           └─► ship.buyCargo()
-                ├─► supabase INSERT cargo row
-                ├─► supabase INSERT transactions row (type='buy', total_cr=negative)
-                └─► supabase UPDATE ships SET credits = credits - totalCost
+                └─► POST /api/ships/:id/buy-cargo  (atomic db.batch())
+                      ├─► INSERT cargo row
+                      ├─► INSERT transactions row (type='buy')
+                      ├─► UPDATE ships SET credits = credits - totalCost
+                      └─► UPDATE market_snapshots SET qty_available = qty_available - tons
 
 Sell:
   User clicks Sell in CargoHold → confirm
     └─► ship.sellCargo()
-          ├─► supabase DELETE cargo row
-          ├─► supabase INSERT transactions row (type='sell', total_cr=positive)
-          ├─► supabase INSERT trade_records row (full buy→sell history)
-          └─► supabase UPDATE ships SET credits = credits + totalRevenue
+          └─► POST /api/ships/:id/sell-cargo  (atomic db.batch())
+                ├─► DELETE cargo row
+                ├─► INSERT transactions row (type='sell')
+                ├─► INSERT trade_records row (full buy→sell history)
+                └─► UPDATE ships SET credits = credits + totalRevenue
 ```
 
 ## 5. Component Interactions
@@ -268,23 +277,22 @@ referee ──reads──► auth (campaignId, isReferee)
 
 ## 6. Security Architecture
 
-All sensitive operations go through `SECURITY DEFINER` RPC functions which run as the Supabase `postgres` role, bypassing RLS for the specific rows they need to touch. The client uses only the anon key, which is safe to bundle.
+All API calls carry a Bearer token issued at login and stored server-side in the `sessions` table. The Worker's `requireAuth` middleware validates the token on every request. There is no client-side secret — `VITE_API_URL` points to the Worker URL, which is public.
 
 ```
-Client (anon key)
+Client (no embedded secret)
   │
-  ├── SELECT queries → PostgREST + RLS (public read on market, calendar, events, ships)
-  │
-  └── Mutations → SECURITY DEFINER RPCs only
-        ├── create_campaign  — creates campaign + calendar + player (referee)
-        ├── join_campaign    — creates player row
-        ├── verify_pin       — bcrypt compare, lockout management, returns session
-        ├── advance_tick     — atomic tick increment + rollups
-        ├── reset_pin_with_recovery_code — verifies recovery hash, resets PIN + lockout
-        └── regenerate_recovery_code — generates new code, hashes and stores it
+  └── All requests → Authorization: Bearer <session_token>
+        │
+        └── Worker middleware: SELECT sessions WHERE token=? AND expires_at > now()
+              ├── Valid   → c.var.session = { campaign_id, player_id, role }
+              └── Invalid → 401 Unauthorized
+
+Referee-only endpoints additionally check:
+  session.role === 'referee'  (set at campaign creation)
 ```
 
-PIN bcrypt parameters: `gen_salt('bf', 10)` — Blowfish, cost factor 10.
+PIN hashing: PBKDF2-SHA256, 10,000 iterations, 16-byte random salt, via the Web Crypto API. Format stored: `pbkdf2:10000:<saltHex>:<hashHex>`. Iterations are set low to fit within the Cloudflare Workers free-tier 10 ms CPU budget per request; 10k iterations is still ~100× harder to brute-force than a bare SHA-256.
 
 ## 7. Deterministic Price Engine
 
