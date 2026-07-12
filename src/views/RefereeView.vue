@@ -714,11 +714,33 @@
                   <input v-model.number="orgEditFields[o.id].duesRate" type="number" min="0" placeholder="None" />
                 </div>
               </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Dues Frequency (ticks)</label>
+                  <input v-model.number="orgEditFields[o.id].duesFrequencyTicks" type="number" min="1" />
+                </div>
+              </div>
               <div class="form-actions">
                 <button type="submit" class="btn-ghost btn-sm">Save</button>
                 <button type="button" class="btn-danger btn-sm" @click="removeOrg(o)">Delete Organization</button>
               </div>
             </form>
+
+            <h4>Dues</h4>
+            <p class="dues-status">
+              <template v-if="o.dues_rate">
+                Cr{{ o.dues_rate.toLocaleString() }} every {{ o.dues_frequency_ticks }} ticks —
+                <span :class="{ 'due-now': isOrgDuesDue(o) }">{{ isOrgDuesDue(o) ? 'due now' : `next due at tick ${orgNextDueTick(o)}` }}</span>
+              </template>
+              <template v-else>No dues configured</template>
+            </p>
+            <div class="form-actions">
+              <button class="btn-ghost btn-sm" :disabled="!o.dues_rate || orgDuesBusy[o.id]" @click="collectOrgDues(o)">
+                Collect Dues
+              </button>
+            </div>
+            <p v-if="orgDuesResult[o.id]" class="dues-result">{{ orgDuesResult[o.id] }}</p>
+            <p v-if="orgDuesError[o.id]" class="form-error">{{ orgDuesError[o.id] }}</p>
 
             <h4>Officers</h4>
             <table v-if="orgOfficers[o.id]?.length" class="skills-table">
@@ -747,7 +769,9 @@
               <tbody>
                 <tr v-for="m in orgMembers[o.id]" :key="m.id">
                   <td>{{ m.ship_name }}</td>
-                  <td class="center">{{ m.owns_ship ? 'Yes' : 'No' }}</td>
+                  <td class="center">
+                    <input type="checkbox" :checked="!!m.owns_ship" @change="toggleOrgMemberOwnsShip(o.id, m, $event.target.checked)" />
+                  </td>
                   <td><button class="btn-danger btn-xs" @click="removeOrgMember(o.id, m)">Remove</button></td>
                 </tr>
               </tbody>
@@ -765,6 +789,76 @@
               <button type="submit" class="btn-ghost btn-sm" :disabled="!newMemberShipId[o.id]">Add</button>
             </form>
             <p v-if="orgMemberError[o.id]" class="form-error">{{ orgMemberError[o.id] }}</p>
+
+            <h4>Disbursement</h4>
+            <form class="add-skill-form" @submit.prevent="submitOrgDisburse(o)">
+              <select v-model="orgDisburseShipId[o.id]">
+                <option value="">— Select ship —</option>
+                <option v-for="m in orgMembers[o.id] ?? []" :key="m.id" :value="m.ship_id">{{ m.ship_name }}</option>
+              </select>
+              <input v-model.number="orgDisburseAmount[o.id]" type="number" min="1" placeholder="Amount" class="amount-input" />
+              <button type="submit" class="btn-ghost btn-sm" :disabled="!orgDisburseShipId[o.id] || !orgDisburseAmount[o.id]">Disburse</button>
+            </form>
+            <p v-if="orgDisburseError[o.id]" class="form-error">{{ orgDisburseError[o.id] }}</p>
+
+            <h4>Equity</h4>
+            <table v-if="orgEquity[o.id]?.length" class="skills-table">
+              <thead><tr><th>Player</th><th class="center">%</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="eq in orgEquity[o.id]" :key="eq.id">
+                  <td>{{ eq.character_name }}</td>
+                  <td class="center">{{ eq.percentage }}%</td>
+                  <td><button class="btn-danger btn-xs" @click="removeOrgEquity(o.id, eq)">Remove</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="placeholder sm">No equity holders recorded</div>
+
+            <form class="add-skill-form" @submit.prevent="addOrgEquity(o.id)">
+              <select v-model="newEquityPlayerId[o.id]">
+                <option value="">— Select player —</option>
+                <option v-for="p in referee.players" :key="p.id" :value="p.id">{{ p.character_name }}</option>
+              </select>
+              <input v-model.number="newEquityPercentage[o.id]" type="number" min="1" max="100" placeholder="%" class="amount-input" />
+              <button type="submit" class="btn-ghost btn-sm" :disabled="!newEquityPlayerId[o.id] || !newEquityPercentage[o.id]">Add</button>
+            </form>
+            <p v-if="orgEquityError[o.id]" class="form-error">{{ orgEquityError[o.id] }}</p>
+
+            <h4>Fleet Report</h4>
+            <button class="btn-ghost btn-sm" @click="toggleOrgFleetReport(o.id)">
+              {{ orgFleetReportOpen[o.id] ? 'Hide Fleet Report' : 'Show Fleet Report' }}
+            </button>
+            <div v-if="orgFleetReportOpen[o.id]">
+              <div v-if="orgFleetReportLoading[o.id]" class="placeholder sm">Loading…</div>
+              <template v-else-if="orgFleetReport[o.id]">
+                <table class="skills-table">
+                  <thead>
+                    <tr><th>Ship</th><th class="right">Credits</th><th class="right">Value</th><th class="right">Cargo</th><th class="right">Debt</th><th class="right">Net</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="s in orgFleetReport[o.id].ships" :key="s.id">
+                      <td>{{ s.name }}</td>
+                      <td class="right mono">Cr{{ s.credits.toLocaleString() }}</td>
+                      <td class="right mono">Cr{{ s.market_value.toLocaleString() }}</td>
+                      <td class="right mono">Cr{{ s.cargo_value.toLocaleString() }}</td>
+                      <td class="right mono">Cr{{ s.debt.toLocaleString() }}</td>
+                      <td class="right mono">Cr{{ s.net_contribution.toLocaleString() }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="fleet-total">Org Treasury: Cr{{ orgFleetReport[o.id].organization_treasury.toLocaleString() }}</p>
+                <p class="fleet-total">Fleet Net Worth: Cr{{ orgFleetReport[o.id].fleet_net_worth.toLocaleString() }}</p>
+                <div class="income-breakdown">
+                  <div v-for="[type, label] in INCOME_ENTRIES" :key="type" class="breakdown-row">
+                    <span>{{ label }}</span><span class="mono pos">+Cr{{ (orgFleetReport[o.id].income_by_type[type] ?? 0).toLocaleString() }}</span>
+                  </div>
+                  <div v-for="[type, label] in EXPENSE_ENTRIES" :key="type" class="breakdown-row">
+                    <span>{{ label }}</span><span class="mono neg">-Cr{{ Math.abs(orgFleetReport[o.id].income_by_type[type] ?? 0).toLocaleString() }}</span>
+                  </div>
+                </div>
+              </template>
+              <p v-if="orgFleetReportError[o.id]" class="form-error">{{ orgFleetReportError[o.id] }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -975,11 +1069,15 @@ import { useTickStore } from '../stores/tick.js'
 import { useRefereeStore } from '../stores/referee.js'
 import { api } from '../lib/api.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
+import { INCOME_TYPES, EXPENSE_TYPES } from '../lib/reports.js'
 
 const router = useRouter()
 const auth   = useAuthStore()
 const tick   = useTickStore()
 const referee = useRefereeStore()
+
+const INCOME_ENTRIES  = Object.entries(INCOME_TYPES)
+const EXPENSE_ENTRIES = Object.entries(EXPENSE_TYPES)
 
 const TABS = [
   { key: 'ships',         label: 'Ships'         },
@@ -1586,7 +1684,7 @@ const NEW_ORG_DEFAULTS = { name: '', treasuryCredits: 0, duesRate: null, notes: 
 const newOrg = ref({ ...NEW_ORG_DEFAULTS })
 
 const expandedOrgId     = ref(null)
-const orgEditFields     = ref({})   // { [orgId]: { treasuryCredits, duesRate } }
+const orgEditFields     = ref({})   // { [orgId]: { treasuryCredits, duesRate, duesFrequencyTicks } }
 const orgMembers        = ref({})   // { [orgId]: [...] }
 const newMemberShipId   = ref({})   // { [orgId]: shipId }
 const newMemberOwnsShip = ref({})   // { [orgId]: bool }
@@ -1594,6 +1692,34 @@ const orgMemberError    = ref({})   // { [orgId]: string }
 const orgOfficers        = ref({})   // { [orgId]: [...] }
 const newOfficerPlayerId = ref({})   // { [orgId]: playerId }
 const orgOfficerError    = ref({})   // { [orgId]: string }
+
+const orgDuesBusy    = ref({})   // { [orgId]: bool }
+const orgDuesResult  = ref({})   // { [orgId]: string }
+const orgDuesError   = ref({})   // { [orgId]: string }
+
+const orgDisburseShipId = ref({})   // { [orgId]: shipId }
+const orgDisburseAmount = ref({})   // { [orgId]: number }
+const orgDisburseError  = ref({})   // { [orgId]: string }
+
+const orgEquity           = ref({})   // { [orgId]: [...] }
+const newEquityPlayerId   = ref({})   // { [orgId]: playerId }
+const newEquityPercentage = ref({})   // { [orgId]: number }
+const orgEquityError      = ref({})   // { [orgId]: string }
+
+const orgFleetReport        = ref({})   // { [orgId]: {...} }
+const orgFleetReportOpen    = ref({})   // { [orgId]: bool }
+const orgFleetReportLoading = ref({})   // { [orgId]: bool }
+const orgFleetReportError   = ref({})   // { [orgId]: string }
+
+function orgNextDueTick(o) {
+  if (o.last_dues_tick == null) return null
+  return o.last_dues_tick + o.dues_frequency_ticks
+}
+
+function isOrgDuesDue(o) {
+  const next = orgNextDueTick(o)
+  return next == null || tick.currentTick >= next
+}
 
 async function submitNewOrg() {
   orgError.value = ''
@@ -1610,8 +1736,11 @@ async function toggleOrg(orgId) {
   if (expandedOrgId.value === orgId) { expandedOrgId.value = null; return }
   expandedOrgId.value = orgId
   const org = referee.organizations.find(o => o.id === orgId)
-  orgEditFields.value[orgId] = { treasuryCredits: org.treasury_credits, duesRate: org.dues_rate }
-  await Promise.all([loadOrgMembers(orgId), loadOrgOfficers(orgId)])
+  orgEditFields.value[orgId] = {
+    treasuryCredits: org.treasury_credits, duesRate: org.dues_rate,
+    duesFrequencyTicks: org.dues_frequency_ticks,
+  }
+  await Promise.all([loadOrgMembers(orgId), loadOrgOfficers(orgId), loadOrgEquity(orgId)])
 }
 
 async function loadOrgMembers(orgId) {
@@ -1630,8 +1759,9 @@ async function submitEditOrg(o) {
   orgError.value = ''
   try {
     await referee.updateOrganization(o.id, {
-      treasury_credits: orgEditFields.value[o.id].treasuryCredits,
-      dues_rate:        orgEditFields.value[o.id].duesRate,
+      treasury_credits:     orgEditFields.value[o.id].treasuryCredits,
+      dues_rate:            orgEditFields.value[o.id].duesRate,
+      dues_frequency_ticks: orgEditFields.value[o.id].duesFrequencyTicks,
     })
   } catch (e) {
     orgError.value = e.message
@@ -1671,6 +1801,13 @@ async function removeOrgMember(orgId, m) {
   orgMembers.value[orgId] = orgMembers.value[orgId].filter(x => x.id !== m.id)
 }
 
+async function toggleOrgMemberOwnsShip(orgId, m, ownsShip) {
+  orgMemberError.value[orgId] = ''
+  const { data, error: err } = await api.patch(`/api/organizations/${orgId}/members/${m.id}`, { owns_ship: ownsShip })
+  if (err) { orgMemberError.value[orgId] = err; return }
+  orgMembers.value[orgId] = orgMembers.value[orgId].map(x => x.id === m.id ? data : x)
+}
+
 async function addOrgOfficer(orgId) {
   orgOfficerError.value[orgId] = ''
   try {
@@ -1690,6 +1827,68 @@ async function removeOrgOfficer(orgId, off) {
   const { error: err } = await api.delete(`/api/organizations/${orgId}/officers/${off.player_id}`)
   if (err) { orgOfficerError.value[orgId] = err; return }
   orgOfficers.value[orgId] = orgOfficers.value[orgId].filter(x => x.id !== off.id)
+}
+
+async function collectOrgDues(o) {
+  orgDuesError.value[o.id]  = ''
+  orgDuesResult.value[o.id] = ''
+  orgDuesBusy.value[o.id]   = true
+  const { data, error: err } = await api.post(`/api/organizations/${o.id}/collect-dues`, { tick: tick.currentTick })
+  orgDuesBusy.value[o.id] = false
+  if (err) { orgDuesError.value[o.id] = err; return }
+  referee.organizations = referee.organizations.map(x => x.id === o.id ? { ...x, ...data.organization } : x)
+  orgDuesResult.value[o.id] =
+    `Collected Cr${data.collected_total.toLocaleString()} from ${data.paid_ship_ids.length} ship(s)` +
+    (data.failed_ship_ids.length ? ` — ${data.failed_ship_ids.length} unable to pay` : '')
+}
+
+async function submitOrgDisburse(o) {
+  orgDisburseError.value[o.id] = ''
+  const { data, error: err } = await api.post(`/api/organizations/${o.id}/disburse`, {
+    ship_id: orgDisburseShipId.value[o.id],
+    amount:  orgDisburseAmount.value[o.id],
+    tick:    tick.currentTick,
+  })
+  if (err) { orgDisburseError.value[o.id] = err; return }
+  referee.organizations = referee.organizations.map(x => x.id === o.id ? { ...x, ...data.organization } : x)
+  orgDisburseShipId.value[o.id] = ''
+  orgDisburseAmount.value[o.id] = null
+}
+
+async function loadOrgEquity(orgId) {
+  const { data, error: err } = await api.get(`/api/organizations/${orgId}/ownership`)
+  if (err) { orgEquityError.value[orgId] = err; return }
+  orgEquity.value[orgId] = data ?? []
+}
+
+async function addOrgEquity(orgId) {
+  orgEquityError.value[orgId] = ''
+  const { data, error: err } = await api.post(`/api/organizations/${orgId}/ownership`, {
+    player_id:  newEquityPlayerId.value[orgId],
+    percentage: newEquityPercentage.value[orgId],
+  })
+  if (err) { orgEquityError.value[orgId] = err; return }
+  orgEquity.value[orgId] = [...(orgEquity.value[orgId] ?? []), data]
+  newEquityPlayerId.value[orgId]   = ''
+  newEquityPercentage.value[orgId] = null
+}
+
+async function removeOrgEquity(orgId, eq) {
+  if (!confirm(`Remove ${eq.character_name}'s equity stake?`)) return
+  const { error: err } = await api.delete(`/api/organizations/${orgId}/ownership/${eq.id}`)
+  if (err) { orgEquityError.value[orgId] = err; return }
+  orgEquity.value[orgId] = orgEquity.value[orgId].filter(x => x.id !== eq.id)
+}
+
+async function toggleOrgFleetReport(orgId) {
+  orgFleetReportOpen.value[orgId] = !orgFleetReportOpen.value[orgId]
+  if (orgFleetReportOpen.value[orgId] && !orgFleetReport.value[orgId]) {
+    orgFleetReportLoading.value[orgId] = true
+    const { data, error: err } = await api.get(`/api/organizations/${orgId}/fleet-report`)
+    orgFleetReportLoading.value[orgId] = false
+    if (err) { orgFleetReportError.value[orgId] = err; return }
+    orgFleetReport.value[orgId] = data
+  }
 }
 
 // ── Events tab state ─────────────────────────────────────────────────────────
@@ -2036,6 +2235,42 @@ onMounted(async () => {
 .right { text-align: right; }
 .total-label { color: var(--text-dim); font-size: 0.72rem; }
 .total-val   { font-weight: 600; color: var(--accent); }
+
+.mono { font-family: monospace; }
+.pos { color: var(--green, #34d399); }
+.neg { color: var(--red, #f87171); }
+
+.dues-status { font-size: 0.82rem; color: var(--text-dim); margin: 0; }
+.dues-status .due-now { color: var(--amber); font-weight: 600; }
+.dues-result { font-size: 0.78rem; color: var(--green, #34d399); margin: 0.2rem 0 0; }
+
+.amount-input {
+  width: 90px;
+  padding: 0.25rem 0.4rem;
+  background: var(--bg-input, var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.fleet-total {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0.3rem 0 0;
+}
+
+.income-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.3rem;
+}
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
 
 .trade-check {
   width: 1rem;

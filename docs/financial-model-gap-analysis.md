@@ -1,6 +1,6 @@
 # Financial Model — Gap Analysis
 
-*Generated 2026-06-15 — revised 2026-07-11 (Ship Templates, Asset Valuation, Debt Tracking, Net Worth, Ownership Tracking + Organizations Phase 1 implemented; Organizations authorization corrected same day — see below)*
+*Generated 2026-06-15 — revised 2026-07-11 (Ship Templates, Asset Valuation, Debt Tracking, Net Worth, Ownership Tracking + Organizations Phase 1 implemented; Organizations authorization corrected same day; Corporation/Fleet Phase 2 — dues, disbursement, fleet P&L, chained ownership — implemented same day, closing out this document)*
 
 ---
 
@@ -20,25 +20,8 @@
 | Debt Tracking           | **Full**    | `ship_debts` table (`d1/006_ship_debts.sql`) — type (mortgage/loan/obligation), principal, current_balance, due_tick, creditor_name, notes. `ship_id` nullable for future corporate-level debt. **No interest** (Referee manages the balance directly). Referee CRUD via Campaign Management → Ships → Debts; player pays down via Reports → Debts (atomic: decrements `ships.credits` + `ship_debts.current_balance`, validates against both insufficient credits and overpayment past the remaining balance). Payment history lives in a separate `debt_payments` table rather than the `transactions` ledger, since that table's `type` is a `CHECK` constraint SQLite can't `ALTER` in place. |
 | Net Worth Calculation   | **Full**    | "Net Worth" tab in Ship → Reports: `credits + ship market value + cargo value (at cost) − total debt`, then scaled by the player's ownership share (see Ownership Tracking below) into a "Your Share" figure. Cargo is valued at purchase price rather than live market price — this panel has no world context (unlike `CargoHold.vue`'s per-market "Est. Hold Value"), and net worth should be a stable snapshot, not swing with whichever world was last viewed. |
 | Ownership Tracking      | **Full** (Phase 1) | `ship_ownership` table (`d1/007_ownership.sql`) — multiple players jointly owning one ship, referee-managed via a new "Ownership" section on the ship detail view (100%-ceiling enforced server-side, `409` if a share would push the total over). Net Worth reads this via `GET /api/reports/ownership`: a player's share defaults to 100% minus whatever's explicitly recorded for others (not a flat 100%) when they have no row of their own — so a partner ship correctly shows the *other* owner's remainder, not an overstated full share. See Organizations below for the corporate-ownership half. |
-| Organizations (Phase 1) | **Full** (entity + membership only) | `organizations` + `organization_members` tables — the generic **Organization** entity (corporation/confederation/trade-union as configuration, not separate tables) from the Corporation/Fleet exploration below. Create an org (name, treasury, flat dues rate, notes — name uniqueness enforced, `409` on conflict), add/remove member ships with an `owns_ship` flag (org owns the ship's assets/debts outright vs. ship stays independently owned, just affiliated). **No financial mechanics yet** — dues collection, disbursement, and fleet-level P&L are explicitly Phase 2, below. **Authorization corrected same day (`organization_officers` table, `d1/008_org_officers.sql`):** the initial pass gated all of this behind Referee-only CRUD, copying the Debts/Templates pattern — wrong, since a corporation is something a *player* actively runs (like a ship), not a fact the referee arbitrates (like a debt). Any authenticated player can now found an organization (becoming its first officer automatically) via a new player-facing "Organizations" tab (`OrganizationsPanel.vue`, under Ship in `MapView.vue`); management (edit, officers, member ships) requires being one of the org's officers — a flat list, no role hierarchy — or the referee, who always retains override rights on every org regardless of officer status (same safety-net principle as editing any ship). A guard rejects removing an organization's last officer. Ship Ownership (the % split of one ship, above) deliberately stays Referee-only — it's closer to a debt/contract the referee adjudicates than a business a player runs. All CRUD now lives at `/api/organizations/*` (`worker/src/routes/organizations.js`), replacing the old `/api/referee/organizations*` routes. |
-
----
-
-## Not Implemented — with Effort Estimates
-
-Only Corporation/Fleet **Phase 2** remains — the financial mechanics layered on top of the Organization entity built in Phase 1 (above). Not designed in detail yet; each of these needs its own pass:
-
-### 1. Dues collection + disbursement actions
-
-Scheduled ship→org and org→ship treasury transfers. The mechanism itself is trivial (reuses the same credit-adjustment pattern as `POST /:id/pay-debt`), but needs a UI decision (where does a referee trigger a dues collection across all member ships at once?) and confirmation of the existing direction: flat-rate dues (not percentage-of-something), both dues and disbursement Referee-adjudicated rather than automatic — see Corporation/Fleet notes below.
-
-### 2. Fleet-level P&L / consolidated reporting
-
-Aggregate Net Worth/income across an org's member ships. Trivial query-wise (`organization_members` already links ships to orgs — per-ship is a `WHERE`, fleet total is `SUM(...) GROUP BY`), but needs a home in the UI (a referee-facing report, most likely, alongside or inside the Organizations tab).
-
-### 3. Chained ownership when an org owns a ship outright
-
-When `organization_members.owns_ship = 1`, whose personal Net Worth does that ship's value flow into? Presumably a player's stake *in the organization* — which needs a third ownership table (`organization_ownership`: player % of an org, mirroring `ship_ownership`) that doesn't exist yet. Until this is built, an org-owned ship's value doesn't attribute to any player's personal Net Worth — a real gap, flagged rather than silently decided.
+| Organizations (Phase 1) | **Full** (entity + membership only) | `organizations` + `organization_members` tables — the generic **Organization** entity (corporation/confederation/trade-union as configuration, not separate tables) from the Corporation/Fleet exploration below. Create an org (name, treasury, flat dues rate, notes — name uniqueness enforced, `409` on conflict), add/remove member ships with an `owns_ship` flag (org owns the ship's assets/debts outright vs. ship stays independently owned, just affiliated). **Authorization corrected same day (`organization_officers` table, `d1/008_org_officers.sql`):** the initial pass gated all of this behind Referee-only CRUD, copying the Debts/Templates pattern — wrong, since a corporation is something a *player* actively runs (like a ship), not a fact the referee arbitrates (like a debt). Any authenticated player can now found an organization (becoming its first officer automatically) via a new player-facing "Organizations" tab (`OrganizationsPanel.vue`, under Ship in `MapView.vue`); management (edit, officers, member ships) requires being one of the org's officers — a flat list, no role hierarchy — or the referee, who always retains override rights on every org regardless of officer status (same safety-net principle as editing any ship). A guard rejects removing an organization's last officer. Ship Ownership (the % split of one ship, above) deliberately stays Referee-only — it's closer to a debt/contract the referee adjudicates than a business a player runs. All CRUD now lives at `/api/organizations/*` (`worker/src/routes/organizations.js`), replacing the old `/api/referee/organizations*` routes. |
+| Corporation/Fleet (Phase 2) | **Full** | Dues, disbursement, fleet P&L, and chained ownership — see "Corporation / Fleet — Phase 2" below for the full design. |
 
 ---
 
@@ -51,20 +34,22 @@ When `organization_members.owns_ship = 1`, whose personal Net Worth does that sh
 | ~~3~~ | ~~Debt Tracking~~              | **Done**                                                                                   |
 | ~~4~~ | ~~Net Worth~~                  | **Done**                                                                                   |
 | ~~5~~ | ~~Ownership + Organizations (Phase 1)~~ | **Done**                                                                        |
-| 6     | Dues / disbursement (Phase 2) | Needs its own design pass on top of the Phase 1 entities                                    |
-| 7     | Fleet-level reporting (Phase 2) | Trivial query-wise; needs a UI home                                                       |
-| 8     | Chained org-ownership attribution (Phase 2) | Needs the `organization_ownership` question above resolved first             |
+| ~~6~~ | ~~Dues / disbursement (Phase 2)~~ | **Done**                                                                                |
+| ~~7~~ | ~~Fleet-level reporting (Phase 2)~~ | **Done**                                                                          |
+| ~~8~~ | ~~Chained org-ownership attribution (Phase 2)~~ | **Done**                                                              |
+
+Nothing remains outstanding on this document.
 
 ---
 
-## Future: Corporation / Fleet — Phase 2 (Deferred)
+## Corporation / Fleet — Phase 2 (Implemented 2026-07-12)
 
-Phase 1 (the generic **Organization** entity — corporation/confederation/trade-union as configuration, not separate tables — plus membership and plain player-partnership ship ownership) is done; see Already Implemented above. Phase 2 is the financial mechanics that build on it:
+Phase 1 (the generic **Organization** entity — corporation/confederation/trade-union as configuration, not separate tables — plus membership and plain player-partnership ship ownership) shipped 2026-07-11; see Already Implemented above. Phase 2 is the financial mechanics layered on top:
 
-- optional **dues** — a scheduled transfer from each member ship's treasury into the org's treasury (e.g. a trade-union membership fee)
-- optional **disbursement** — a transfer the other way, from the org's shared fund into a member ship in hardship (a "rainy day fund")
-- **fleet-level reporting** and **chained ownership attribution** (see Not Implemented above)
+- **Dues**: one flat rate per org (`organizations.dues_rate`), set by an officer, defaulting to zero — a corporation whose member ships it owns outright would typically set this to 0 in practice (no point taxing your own subsidiary), rather than the system special-casing owned vs. affiliated ships. `dues_frequency_ticks` (default 4 = one month) plus `last_dues_tick` drive a "due now" / "next due at tick N" indicator, but collection is always a manual **"Collect Dues"** click by an officer (`POST /:id/collect-dues`) — never automatic on Advance Tick, consistent with the project's standing rule against automatic financial actions. **Guarded against accidental re-collection**: the endpoint returns `409` if called again before the period has elapsed (first-ever collection is always allowed). Each member ship pays independently — a ship without enough credits is skipped and reported back (`failed_ship_ids`), not silently dropped, and doesn't block the rest of the fleet from paying or the schedule from advancing.
+- **Disbursement**: a fully separate, ad hoc officer action (`POST /:id/disburse`) — pick a member ship, an amount (capped at the org's treasury balance), an optional note.
+- **Org equity** (`organization_ownership`, new table, `d1/009_org_financials.sql`): mirrors `ship_ownership`'s 100%-ceiling validation exactly, but is **officer-manageable** (not referee-only like `ship_ownership`) — officers run the business day-to-day, equity included.
+- **Fleet P&L** (`GET /:id/fleet-report`): a per-ship breakdown (credits, market value, cargo value, debt, net contribution) plus fleet-wide totals and an income/expense breakdown, reusing the existing per-ship Net Worth/Income Breakdown formulas aggregated with `ship_id IN (...)` across an org's members. Lives under the Organizations tab in both `OrganizationsPanel.vue` and `RefereeView.vue`, gated to officers + referee only — unlike the rest of an org's public roster/membership data, this exposes every member ship's private financials.
+- **Chained ownership**: for a ship with `organization_members.owns_ship = 1`, `GET /api/reports/ownership` transparently reads `organization_ownership` (the player's equity % *in the org*) instead of that ship's own `ship_ownership` rows — same response shape either way, so `ReportsPanel.vue`'s existing Net Worth / "Your Share" logic needed zero changes. A ship can be owned outright by at most one org at a time (`PATCH /:id/members/:memberId` and `POST /:id/members` both 409 on conflict; a partial `UNIQUE` index is the DB-level backstop). Confederation-style ships (`owns_ship = 0`) are unaffected — they keep using `ship_ownership` exactly as before.
 
-Dues and disbursement both reuse the existing credit-adjustment mechanism — no new financial primitive needed. Dues-as-a-percentage raises the same kind of undefined-math question as debt interest (percentage *of what*? — flat rate, current credits, period income/profit are all plausible and Traveller defines none of them), so the current direction is a **flat rate set by whoever runs the organization** (the "union boss," who may just be the referee) rather than a formula, and both dues collection and disbursement should stay Referee-adjudicated rather than automated on tick advance — consistent with the no-interest decision on debt.
-
-**Do not implement now** — revisit once there's an actual campaign need for dues/disbursement/fleet reporting, rather than building it speculatively ahead of one.
+Dues/disbursement both reuse the existing credit-adjustment/`db.batch()` transfer pattern (same shape as `POST /:id/pay-debt`) — no new financial primitive needed.

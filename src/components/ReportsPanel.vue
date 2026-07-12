@@ -269,7 +269,7 @@ import { useTickStore } from '../stores/tick.js'
 import { useAuthStore } from '../stores/auth.js'
 import { api } from '../lib/api.js'
 import { formatImperialDate } from '../lib/market-tick.js'
-import { yearToTickRange } from '../lib/reports.js'
+import { yearToTickRange, TYPE_LABEL, INCOME_TYPES, EXPENSE_TYPES, DEBT_TYPE_LABEL } from '../lib/reports.js'
 
 const ship = useShipStore()
 const tick = useTickStore()
@@ -282,33 +282,6 @@ const REPORTS = [
   { key: 'debts',    label: 'Debts'     },
   { key: 'networth', label: 'Net Worth' },
 ]
-
-const DEBT_TYPE_LABEL = { mortgage: 'Mortgage', loan: 'Loan', obligation: 'Obligation' }
-
-const TYPE_LABEL = {
-  buy:              'Buy',
-  sell:             'Sell',
-  fuel:             'Fuel',
-  passenger_fare:   'Passage',
-  passenger_refund: 'Refund',
-  mail:             'Mail',
-  fee:              'Fee',
-  event:            'Event',
-}
-
-const INCOME_TYPES = {
-  sell:           'Cargo Sales',
-  passenger_fare: 'Passenger Fares',
-  mail:           'Mail Deliveries',
-}
-
-const EXPENSE_TYPES = {
-  buy:              'Cargo Purchases',
-  fuel:             'Fuel Purchases',
-  passenger_refund: 'Passenger Refunds',
-  fee:              'Fees',
-  event:            'Event Debits',
-}
 
 const report    = ref('ledger')
 const scopeMode = ref('all')

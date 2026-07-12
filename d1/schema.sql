@@ -167,24 +167,28 @@ CREATE INDEX IF NOT EXISTS idx_ship_ownership_ship
 -- ── Organizations ─────────────────────────────────────────────────────────────
 -- Generic entity — corporation, confederation, and trade union are all this,
 -- differentiated only by configuration (see docs/financial-model-gap-analysis.md
--- "Future: Corporation / Fleet"). Phase 1: entity + membership only, no dues/
--- disbursement actions yet.
+-- "Future: Corporation / Fleet"). dues_frequency_ticks/last_dues_tick drive a
+-- "dues due" indicator only — collection is always a manual officer action,
+-- never automatic on tick advance.
 
 CREATE TABLE IF NOT EXISTS organizations (
-  id               TEXT    PRIMARY KEY,
-  campaign_id      TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  name             TEXT    NOT NULL,
-  treasury_credits INTEGER NOT NULL DEFAULT 0,
-  dues_rate        INTEGER,
-  notes            TEXT,
-  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  id                   TEXT    PRIMARY KEY,
+  campaign_id          TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name                 TEXT    NOT NULL,
+  treasury_credits     INTEGER NOT NULL DEFAULT 0,
+  dues_rate            INTEGER,
+  dues_frequency_ticks INTEGER NOT NULL DEFAULT 4,
+  last_dues_tick       INTEGER,
+  notes                TEXT,
+  created_at           TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, name)
 );
 
 -- ── Organization Members ──────────────────────────────────────────────────────
 -- A ship's affiliation with an org. owns_ship=1 means the org owns this ship's
 -- assets/debts outright (corporation/fleet); owns_ship=0 means the ship stays
--- independently owned, just dues/reporting-affiliated (confederation).
+-- independently owned, just dues/reporting-affiliated (confederation). A ship
+-- can be owned outright by at most one org at a time.
 
 CREATE TABLE IF NOT EXISTS organization_members (
   id              TEXT    PRIMARY KEY,
@@ -199,6 +203,8 @@ CREATE INDEX IF NOT EXISTS idx_org_members_org
   ON organization_members (organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_ship
   ON organization_members (ship_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_members_single_owner
+  ON organization_members (ship_id) WHERE owns_ship = 1;
 
 -- ── Organization Officers ─────────────────────────────────────────────────────
 -- Players authorized to manage an organization. Flat list, no role hierarchy —
@@ -215,6 +221,59 @@ CREATE TABLE IF NOT EXISTS organization_officers (
 
 CREATE INDEX IF NOT EXISTS idx_org_officers_org
   ON organization_officers (organization_id);
+
+-- ── Organization Ownership ────────────────────────────────────────────────────
+-- Player equity in an org that owns ships outright — mirrors ship_ownership's
+-- 100%-ceiling validation, but officer-manageable (not referee-only), since
+-- officers run the business day-to-day, equity included.
+
+CREATE TABLE IF NOT EXISTS organization_ownership (
+  id              TEXT    PRIMARY KEY,
+  campaign_id     TEXT    NOT NULL REFERENCES campaigns(id)     ON DELETE CASCADE,
+  organization_id TEXT    NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  player_id       TEXT    NOT NULL REFERENCES players(id)       ON DELETE CASCADE,
+  percentage      INTEGER NOT NULL CHECK (percentage > 0 AND percentage <= 100),
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (organization_id, player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_ownership_org
+  ON organization_ownership (organization_id);
+
+-- ── Dues Payments ─────────────────────────────────────────────────────────────
+-- Audit trail for dues collection events, one row per ship per collection.
+-- Separate from transactions since that table's `type` CHECK can't be ALTERed
+-- in place (same reason debt_payments is its own table).
+
+CREATE TABLE IF NOT EXISTS dues_payments (
+  id              TEXT    PRIMARY KEY,
+  organization_id TEXT    NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  ship_id         TEXT    NOT NULL REFERENCES ships(id)         ON DELETE CASCADE,
+  campaign_id     TEXT    NOT NULL REFERENCES campaigns(id)     ON DELETE CASCADE,
+  tick            INTEGER NOT NULL,
+  amount          INTEGER NOT NULL,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dues_payments_org
+  ON dues_payments (organization_id, tick DESC);
+
+-- ── Disbursements ─────────────────────────────────────────────────────────────
+-- Ad hoc org treasury -> member ship transfers, officer-triggered.
+
+CREATE TABLE IF NOT EXISTS disbursements (
+  id              TEXT    PRIMARY KEY,
+  organization_id TEXT    NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  ship_id         TEXT    NOT NULL REFERENCES ships(id)         ON DELETE CASCADE,
+  campaign_id     TEXT    NOT NULL REFERENCES campaigns(id)     ON DELETE CASCADE,
+  tick            INTEGER NOT NULL,
+  amount          INTEGER NOT NULL,
+  notes           TEXT,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_disbursements_org
+  ON disbursements (organization_id, tick DESC);
 
 -- ── Crew Manifest ─────────────────────────────────────────────────────────────
 

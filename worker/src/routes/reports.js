@@ -37,11 +37,30 @@ app.get('/debts', requireAuth, async (c) => {
 
 // ── GET /api/reports/ownership — a ship's ownership shares (player-facing) ───
 // ?ship_id=X
+// If the ship is owned outright by an organization (organization_members.
+// owns_ship = 1), personal Net Worth attribution flows through that org's
+// equity (organization_ownership) instead of the ship's own ship_ownership
+// rows — same {id, player_id, character_name, percentage} shape either way,
+// so the frontend needs no changes to read whichever source applies.
 app.get('/ownership', requireAuth, async (c) => {
   const session = c.var.session
   const { ship_id } = c.req.query()
 
-  const { results } = await c.env.DB.prepare(
+  const db = c.env.DB
+  const owningOrg = await db.prepare(
+    `SELECT organization_id FROM organization_members WHERE ship_id = ? AND owns_ship = 1`
+  ).bind(ship_id).first()
+
+  if (owningOrg) {
+    const { results } = await db.prepare(
+      `SELECT oo.*, p.character_name FROM organization_ownership oo
+       JOIN players p ON p.id = oo.player_id
+       WHERE oo.organization_id = ? AND oo.campaign_id = ? ORDER BY oo.percentage DESC`
+    ).bind(owningOrg.organization_id, session.campaign_id).all()
+    return c.json({ data: results ?? [] })
+  }
+
+  const { results } = await db.prepare(
     `SELECT so.*, p.character_name FROM ship_ownership so
      JOIN players p ON p.id = so.player_id
      WHERE so.ship_id = ? AND so.campaign_id = ? ORDER BY so.percentage DESC`

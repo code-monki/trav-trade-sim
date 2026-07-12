@@ -283,6 +283,34 @@ Phase 1 (above) gated all Organization CRUD behind `requireReferee`, copying the
 
 ---
 
+## 2026-07-12 — Corporation/Fleet Phase 2: dues, disbursement, fleet P&L, chained ownership
+
+### Rationale
+
+Closes out `docs/financial-model-gap-analysis.md`'s last deferred section. User specified the shape directly: one flat dues rate per org (not per-ship) set by the org head, a configurable collection frequency driving a "due" indicator but never automatic collection, disbursement as a fully separate ad hoc action, org equity that officers (not just the referee) can manage, and fleet P&L restricted to officers + referee since it exposes every member ship's private financials. Mid-implementation, the user added one more requirement: a guard preventing an officer from accidentally collecting dues more than once within a single period.
+
+### What changed
+
+**Schema** (`d1/009_org_financials.sql`): `organizations` gains `dues_frequency_ticks` (default 4) and `last_dues_tick`. New tables `dues_payments` and `disbursements` (audit trails, kept separate from `transactions` for the same reason `debt_payments` is — that table's `type` `CHECK` constraint can't be `ALTER`ed in place). New `organization_ownership` table — a player's equity % in an org, mirroring `ship_ownership`'s 100%-ceiling validation exactly, but officer-manageable rather than referee-only. A partial `UNIQUE` index (`organization_members(ship_id) WHERE owns_ship = 1`) enforces that a ship can be owned outright by at most one org at a time.
+
+**Dues collection** (`POST /:id/collect-dues`, officer-or-referee): charges every member ship the org's flat rate independently — a ship without enough credits is skipped and reported back rather than blocking the rest of the fleet or the schedule. Guarded with a `409` against collecting again before `dues_frequency_ticks` have elapsed since `last_dues_tick` (first-ever collection always allowed, since `last_dues_tick` starts `NULL`).
+
+**Disbursement** (`POST /:id/disburse`, officer-or-referee): an ad hoc org-treasury-to-ship-treasury transfer, capped at the org's current balance.
+
+**Fleet P&L** (`GET /:id/fleet-report`, officer-or-referee only): per-ship credits/market value/cargo value/debt/net-contribution plus fleet-wide totals and an income/expense breakdown, reusing the same in-JS `byType` reduction pattern as the existing per-ship Income report, widened to `ship_id IN (...)` across an org's members. Surfaced in both `OrganizationsPanel.vue` (player-facing, gated to officers) and `RefereeView.vue`'s Organizations tab (referee always sees it).
+
+**Chained ownership**: `GET /api/reports/ownership` now checks whether the requested ship is owned outright by an org (`organization_members.owns_ship = 1`) and, if so, transparently returns that org's `organization_ownership` rows instead of the ship's own `ship_ownership` rows — identical response shape either way, so `ReportsPanel.vue`'s existing Net Worth / "Your Share" computation needed **zero changes**. Confederation-style ships (`owns_ship = 0`) are unaffected.
+
+**Shared label maps extracted**: `TYPE_LABEL`/`INCOME_TYPES`/`EXPENSE_TYPES`/`DEBT_TYPE_LABEL`, previously local consts in `ReportsPanel.vue`, moved to `src/lib/reports.js` so the new Fleet Report (in both `OrganizationsPanel.vue` and `RefereeView.vue`) could reuse them instead of triplicating the same maps.
+
+**Bug found and fixed while verifying this:** `POST /:id/members` (adding a ship to an org) had no app-level check for the new ship-exclusivity rule — only `PATCH /:id/members/:memberId` did. Trying to add a ship as `owns_ship: true` to a second org hit the raw SQLite partial-unique-index violation and returned a `500` instead of a clean `409`. Fixed by adding the same pre-check to `POST /:id/members`.
+
+### Verified
+
+`npx vitest run` (302 tests) and `npx vite build` both clean. Local D1 + curl exercised the full flow: dues collection at tick 16 succeeded, an immediate re-collection at tick 17 was correctly rejected (`409`, "next collection available at tick 20"), collection at tick 20 succeeded; disbursement succeeded and over-treasury disbursement was rejected (`400`); org equity 100%-ceiling rejected an over-limit share (`409`); a ship marked `owns_ship=1` in one org was correctly rejected when a second org tried to claim it the same way (`409`, after the fix above); `GET /api/reports/ownership` correctly switched from empty `ship_ownership` results to the org's `organization_ownership` rows the moment `owns_ship` was set. Playwright pass against the running dev server: founded an org with dues via the MapView Organizations tab, added the ship, collected dues, disbursed part of it back, added equity, marked the ship org-owned, confirmed the ship's own Net Worth tab immediately reflected the org-equity share instead of an empty ownership section, opened the Fleet Report and confirmed the totals matched the ship's actual credits, and confirmed RefereeView's Organizations tab showed identical state throughout — zero console errors. All test fixtures (temporary organizations, ship credit deltas) reverted afterward.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

@@ -100,4 +100,5 @@ d1/
   006_ship_debts.sql     # ship_debts + debt_payments tables
   007_ownership.sql      # ship_ownership + organizations + organization_members tables
   008_org_officers.sql   # organization_officers table (multi-officer authorization)
+  009_org_financials.sql # dues, disbursement, organization_ownership (Corp/Fleet Phase 2)
 ```
