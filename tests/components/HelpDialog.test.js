@@ -33,33 +33,42 @@ describe('HelpDialog', () => {
     expect(wrapper.find('.dialog-body').text()).toContain('Overview')
   })
 
-  it('has four tabs for non-referee users', () => {
+  it('has five tabs for non-referee users', () => {
     const wrapper = mountDialog()
     const tabs = wrapper.findAll('.htab')
-    expect(tabs).toHaveLength(4)
+    expect(tabs).toHaveLength(5)
     expect(tabs[0].text()).toContain('Getting Started')
-    expect(tabs[3].text()).toContain('Shortcuts')
+    expect(tabs[3].text()).toContain('Fleet & Finance')
+    expect(tabs[4].text()).toContain('Shortcuts')
   })
 
   it('Getting Started tab is active by default', () => {
     const wrapper = mountDialog()
     expect(wrapper.findAll('.htab')[0].classes()).toContain('active')
-    expect(wrapper.findAll('.htab')[3].classes()).not.toContain('active')
+    expect(wrapper.findAll('.htab')[4].classes()).not.toContain('active')
   })
 
   it('switching to Shortcuts tab shows the shortcuts table', async () => {
     const wrapper = mountDialog()
-    await wrapper.findAll('.htab')[3].trigger('click')
+    await wrapper.findAll('.htab')[4].trigger('click')
     expect(wrapper.find('.shortcuts-table').exists()).toBe(true)
     expect(wrapper.find('.dialog-body').text()).toContain('Esc')
   })
 
   it('switching back to Getting Started hides the shortcuts table', async () => {
     const wrapper = mountDialog()
-    await wrapper.findAll('.htab')[3].trigger('click')
+    await wrapper.findAll('.htab')[4].trigger('click')
     await wrapper.findAll('.htab')[0].trigger('click')
     expect(wrapper.find('.shortcuts-table').exists()).toBe(false)
     expect(wrapper.find('.dialog-body').text()).toContain('Overview')
+  })
+
+  it('switching to Fleet & Finance tab shows Net Worth content', async () => {
+    const wrapper = mountDialog()
+    await wrapper.findAll('.htab')[3].trigger('click')
+    const body = wrapper.find('.dialog-body').text()
+    expect(body).toContain('Ship Value & Net Worth')
+    expect(body).toContain('Organizations')
   })
 
   it('close button emits update:modelValue false', async () => {

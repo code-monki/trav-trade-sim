@@ -10,6 +10,7 @@ or **≡ Menu → Tutorials** while in a campaign.
 |---|---|
 | [Campaign Setup](./gm-campaign-setup.md) | Create a campaign, save the recovery code, invite players, create a ship and assign crew |
 | [Running a Session](./gm-running-session.md) | Advance ticks, manage passengers and fuel, use the events catalogue, manage players and PINs |
+| [Ship Templates, Debts & Ownership](./gm-ship-templates-debts-ownership.md) | Build a template catalogue, record per-ship debts, and set up joint ownership shares |
 
 ## Player Tutorials
 
@@ -19,13 +20,17 @@ or **≡ Menu → Tutorials** while in a campaign.
 | [Your First Trade](./player-first-trade.md) | Read the market, buy cargo, jump to a destination, and sell |
 | [Passengers, Fuel & Mail](./player-services.md) | Book passengers, purchase fuel, and accept Imperial mail contracts |
 | [Route Analysis](./player-route-analysis.md) | Use the Jump tab to find profitable trade routes |
+| [Fleet & Organizations](./player-fleet-organizations.md) | Check your Net Worth, pay down debts, and found or manage an Organization |
 
 ## Screenshots
 
 Screenshots referenced in these tutorials are stored in
 [`./screenshots/`](./screenshots/). Filenames match the callout labels in each
 tutorial file. Contribute screenshots by capturing the relevant screen at
-1280 × 800 or wider and saving as PNG with the exact filename shown.
+1280 × 800 or wider and saving as PNG with the exact filename shown. The two newest
+tutorials (Ship Templates/Debts/Ownership and Fleet & Organizations) don't have real
+screenshots yet — they use italic placeholder notes instead of `![]()` image embeds until
+some are captured.
 
 ---
 

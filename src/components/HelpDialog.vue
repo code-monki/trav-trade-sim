@@ -145,6 +145,45 @@
           </section>
 
           <section class="help-section">
+            <h3>Passengers</h3>
+            <p>
+              Book passengers at the <strong>Port &gt; Passengers</strong> tab —
+              choose High, Middle, or Low passage, a passenger count, and a
+              destination. The booking form checks that enough stateroom or low
+              berth capacity is free before accepting it.
+            </p>
+            <p>
+              Fares are collected up front: CT7 charges a flat rate per passenger
+              regardless of distance; T5 charges per parsec for High and Middle
+              passage, and a flat rate for Low. Passengers deliver themselves
+              automatically — and their fare is already paid — when the ship
+              arrives at their destination. The Ship &gt; Aboard tab shows current
+              occupancy and everyone still in transit. The Referee can issue a
+              refund for any in-transit passenger from the Referee panel.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Fuel &amp; Mail Contracts</h3>
+            <p>
+              The <strong>Port &gt; Services</strong> tab has two sections. Fuel
+              availability and price depend on the world's starport class:
+              refined fuel at Class A/B starports, unrefined at Class C/D, and no
+              commercial fuel at all at Class E/X. Purchases are capped at the
+              ship's remaining tank space; the <strong>Fill for jump</strong>
+              button computes the tons needed for one jump at your ship's jump
+              rating and purchases them immediately.
+            </p>
+            <p>
+              Mail contracts are accepted the same way — pick a destination (and,
+              for T5, a parsec count) and accept. There's no upfront payment;
+              like passengers, a mail contract pays out and clears itself
+              automatically the moment the ship arrives at its destination. The
+              Ship &gt; Aboard tab lists any contracts still in transit.
+            </p>
+          </section>
+
+          <section class="help-section">
             <h3>Jump Tab</h3>
             <p>
               The <strong>Jump</strong> tab (keyboard <kbd>J</kbd>) shows all
@@ -255,6 +294,121 @@
 
         </div>
 
+        <!-- ── Fleet & Finance ───────────────────────────────────────────── -->
+        <div v-if="activeTab === 'fleet'" class="dialog-body">
+
+          <section class="help-section">
+            <h3>Ship Value &amp; Net Worth</h3>
+            <p>
+              Ships carry a Referee-entered <strong>market value</strong>, set
+              either by picking a ship template or entering a number directly.
+              The Ship &gt; Reports &gt; Net Worth tab combines that value with
+              your ship's credits and its cargo (valued at what you paid for
+              it), then subtracts any outstanding debt to give a total Net Worth.
+            </p>
+            <p>
+              If the ship is jointly owned, or owned outright by an organization,
+              Net Worth also shows <strong>Your Share</strong> — the total
+              scaled by your recorded ownership percentage.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Debts</h3>
+            <p>
+              The Referee can record a debt against your ship — a mortgage,
+              loan, or other obligation with a principal, a current balance, and
+              an optional due date. Debts don't accrue interest; the Referee
+              adjusts the balance directly if needed.
+            </p>
+            <p>
+              Pay one down from the Ship &gt; Reports &gt; Debts tab: enter an
+              amount and confirm. A payment is rejected if it's more than your
+              ship's available credits, or more than the debt's remaining
+              balance — whichever is smaller.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Ownership Shares</h3>
+            <p>
+              The Referee can record multiple players as joint owners of one
+              ship, each with a percentage share. Recorded shares can never add
+              up to more than 100%.
+            </p>
+            <p>
+              If you don't have an explicit share recorded on a ship, you're
+              treated as owning whatever percentage is <em>left over</em> after
+              everyone else's recorded shares — not automatically 100% yourself.
+              A ship with no ownership records at all still behaves as if its
+              crew owns it outright.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Organizations</h3>
+            <p>
+              Any player can found an Organization from the Ship &gt;
+              Organizations tab — give it a name, a starting treasury, and
+              (optionally) a flat dues rate. You automatically become its first
+              <strong>officer</strong>.
+            </p>
+            <p>
+              An organization can have several officers; any one of them can
+              manage it fully, including adding or removing other officers (the
+              last officer can't be removed — the Referee can always delete the
+              organization outright instead). Officers add or remove member
+              ships and decide, per ship, whether the organization
+              <strong>owns it outright</strong> or the ship just stays
+              affiliated while remaining independently owned. A ship can be
+              owned outright by only one organization at a time.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Dues &amp; Disbursement</h3>
+            <p>
+              An organization's dues are a single flat rate an officer sets,
+              collected from every member ship at a configurable interval (in
+              ticks). The panel shows whether dues are currently due, but
+              nothing is collected automatically — an officer clicks
+              <strong>Collect Dues</strong> when ready. A member ship without
+              enough credits is simply skipped that round rather than blocking
+              everyone else.
+            </p>
+            <p>
+              <strong>Note:</strong> collecting again before the configured
+              interval has passed since the last collection is rejected — this
+              prevents accidentally double-collecting.
+            </p>
+            <p>
+              <strong>Disbursement</strong> is separate and ad hoc: an officer
+              can send funds from the organization's treasury to any member ship
+              at any time, capped at whatever the treasury currently holds.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Fleet Report &amp; Chained Ownership</h3>
+            <p>
+              The <strong>Fleet Report</strong> shows every member ship's
+              credits, value, cargo, and debt alongside fleet-wide totals and an
+              income/expense breakdown. It's visible only to the organization's
+              officers and the Referee, since it exposes financial detail for
+              ships you might not personally crew.
+            </p>
+            <p>
+              For a ship owned outright by an organization, your personal Net
+              Worth share of that ship comes from your recorded equity
+              percentage <em>in the organization</em> — not from any ownership
+              record on the ship itself. Organization equity is recorded the
+              same way as ship ownership shares, and is also capped at 100%
+              between all recorded stakeholders.
+            </p>
+          </section>
+
+        </div>
+
         <!-- ── Referee ───────────────────────────────────────────────────── -->
         <div v-if="activeTab === 'referee'" class="dialog-body">
 
@@ -282,6 +436,41 @@
               checkbox in the crew table. Promoting a crew member to captain
               auto-grants the flag; demoting does not remove it — adjust manually
               if needed.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Ship Templates</h3>
+            <p>
+              Manage a catalogue of reusable ship designs from Campaign
+              Management → Ships → Templates, tagged for the campaign's ruleset
+              (CT7 or T5). The New Ship form's Template dropdown pre-fills every
+              stat field (hull tons, cargo, staterooms, fuel, drives, market
+              value) from a selection — pick <strong>Custom Design</strong> to
+              fill the form blank instead. There's no ongoing link between a
+              ship and the template it was created from.
+            </p>
+            <p>
+              You can also capture an existing ship's current stats as a new
+              template via <strong>Save as Template</strong> on its detail view.
+              Template names must be unique within the campaign.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Debts &amp; Ownership</h3>
+            <p>
+              Record a ship debt or an ownership share from the ship's detail
+              view (Ships tab → Debts / Ownership sections). See the
+              <strong>Fleet &amp; Finance</strong> tab for what these mean from
+              a player's side — payment validation, the 100%-ceiling on shares,
+              and how an unrecorded share defaults to the remainder.
+            </p>
+            <p>
+              Ownership shares recorded here are independent of Organizations —
+              they're a straightforward partnership in one ship, arbitrated by
+              you the same way a debt is, rather than something players manage
+              themselves.
             </p>
           </section>
 
@@ -404,6 +593,7 @@ const ALL_TABS = [
   { key: 'start',     label: 'Getting Started' },
   { key: 'trading',   label: 'Trading'         },
   { key: 'market',    label: 'Market & Events' },
+  { key: 'fleet',     label: 'Fleet & Finance' },
   { key: 'referee',   label: 'Referee',  refOnly: true },
   { key: 'shortcuts', label: 'Shortcuts'        },
 ]

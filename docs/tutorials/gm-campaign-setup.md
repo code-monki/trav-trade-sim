@@ -51,9 +51,9 @@ only once and cannot be retrieved later.
 
 ⚠️ **Warning:** If this code is lost you will need to generate a new one from the Referee panel → Campaign tab. Generating a new code immediately invalidates the old one.
 
-The recovery code lets you (or any locked-out player) reset a character's PIN from the
+The recovery code lets you (or a locked-out player) reset any character's PIN from the
 **Reset PIN** tab on the login screen, without knowing the old PIN. See
-[Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin)
+[Running a Session → Reset a Player's PIN](./gm-running-session.md#9-reset-a-players-pin)
 for the full procedure.
 
 Dismiss the dialog to enter the main map. You are now signed in as Referee.
@@ -87,20 +87,23 @@ Click the **Ships** tab, then **New Ship**.
 | ---------------- | ------------------------------------------------------------------- |
 | Name             | Ship name, e.g. "Free Trader Beowulf"                               |
 | Hull Type        | Class designation, e.g. "Type-A Free Trader"                        |
-| Hull Tons        | Total displacement. Used to compute jump fuel (10% × parsecs).      |
+| Hull Tons        | Total displacement in tons. Used to compute jump fuel (10% per parsec). |
 | Cargo Tons       | Available hold — constrains how much players can buy                |
-| Jump Rating      | Maximum parsecs per jump; sets the default range in the Jump tab    |
-| Maneuver Drive   | Drive rating (1–9) — cosmetic / reference                           |
-| Staterooms       | High/Middle passenger berths available for booking                  |
-| Low Berths       | Low passage cryo-berths available for booking                       |
-| Fuel Capacity    | Total tank size in tons. Leave 0 if not tracking fuel.              |
-| Current Fuel     | Fuel already aboard at campaign start                               |
+| Jump Rating      | Maximum parsecs per jump; sets the default in the Jump tab           |
+| Staterooms       | Number of High/Middle passenger berths available                    |
+| Low Berths       | Number of Low passage cryo-berths                                    |
+| Fuel Capacity (t)| Total fuel tank size. Leave 0 if not tracking fuel.                  |
+| Current Fuel (t) | Fuel already aboard when the ship enters play                       |
 | Credits          | Starting ship's treasury                                            |
 
 Click **Create**. The ship appears in the ships list.
 
-> ℹ **Note:** All fields can be changed later via the ship edit form. Fuel is not consumed
-> automatically — reduce *Current Fuel* manually after each jump.
+> ℹ **Note:** All capacity fields can be changed later from the ship edit form. Fuel is not
+> consumed automatically — decrease *Current Fuel* manually after each jump.
+
+For a repeatable design you'll create again, or once you have a ship whose stats you want
+to reuse, see
+[Ship Templates, Debts & Ownership → Create a Ship Template](./gm-ship-templates-debts-ownership.md#1-create-a-ship-template).
 
 ---
 

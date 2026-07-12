@@ -43,8 +43,8 @@ What happens automatically on tick advance:
 - Monthly OHLC candlestick rollup triggers every 4 ticks
 - Annual rollup and event compaction triggers every 48 ticks
 
-> ℹ️ **Note:** Only the Referee character can advance the tick. All players see the current
-> date in the header but cannot change it.
+> ℹ️ **Note:** Only the Referee can advance the tick. All players see the current
+> date in the header but cannot advance it.
 
 ---
 
@@ -61,7 +61,7 @@ Open the Referee panel → **Events** tab → **New Event**.
 | Trade Good       | Specific good affected, or *All Goods*                                               |
 | Buy modifier %   | Adjusts the *purchase* price — positive makes buying more expensive, negative cheaper. Leave blank for no effect on buying. |
 | Sell modifier %  | Adjusts the *sale* price — positive means players receive more when selling, negative means less. Leave blank for no effect on selling. |
-| Severity         | Minor / Major / Crisis — controls the badge color on the Market tab                  |
+| Severity         | Minor / Major / Crisis — controls the badge color and icon on the Market tab         |
 | Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick.                   |
 | Description      | Narrative text shown in the Market tab banner and Events history                     |
 

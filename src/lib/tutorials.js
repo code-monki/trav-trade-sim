@@ -3,8 +3,8 @@
 // Screenshot callouts use: <div class="tut-shot">📸 description</div>
 
 export const TUTORIAL_GROUPS = [
-  { role: 'GM',     ids: ['gm-campaign-setup', 'gm-running-session'] },
-  { role: 'Player', ids: ['player-getting-started', 'player-first-trade', 'player-services', 'player-route-analysis'] },
+  { role: 'GM',     ids: ['gm-campaign-setup', 'gm-running-session', 'gm-ship-templates-debts-ownership'] },
+  { role: 'Player', ids: ['player-getting-started', 'player-first-trade', 'player-services', 'player-route-analysis', 'player-fleet-organizations'] },
 ]
 
 export const TUTORIALS = [
@@ -110,6 +110,9 @@ recovery code to reset their PIN. Full player instructions:
 <p>Click <strong>Create</strong>. The ship appears in the ships list.</p>
 <p class="tut-note">ℹ All capacity fields can be changed later from the ship edit form. Fuel is not
 consumed automatically — decrease <em>Current Fuel</em> manually after each jump.</p>
+<p>For a repeatable design you'll create again, or once you have a ship whose stats you want
+to reuse, see
+<a href="#" data-tut="gm-ship-templates-debts-ownership" data-sec="create-template">Ship Templates, Debts &amp; Ownership → Create a Ship Template</a>.</p>
 `
       },
       {
@@ -147,12 +150,15 @@ assigning them to another.</p>
         body: `
 <p>Each session generally follows this rhythm:</p>
 <ol>
-  <li>Players select worlds, open the Market tab, and buy cargo</li>
-  <li>Players use the Jump tab to pick a destination</li>
+  <li>Players select worlds, open Port → Market, and buy cargo or book passengers</li>
+  <li>Players purchase fuel at Port → Services if the tank is low</li>
+  <li>Players accept mail contracts at Port → Services for additional income</li>
+  <li>Players use the Jump tab to pick a profitable destination</li>
   <li>You advance the tick (<strong>Advance Tick ›</strong> in the header or press <kbd>T</kbd>)</li>
   <li>Prices shift; random events may fire on next world visits</li>
-  <li>Players navigate to the destination and sell their cargo</li>
-  <li>Repeat</li>
+  <li>Players navigate to the destination — passengers and mail auto-deliver on arrival</li>
+  <li>Players sell their cargo at the destination</li>
+  <li>Repeat from step 1</li>
 </ol>
 <p>You can create market events manually at any time to add narrative flavor. Random events
 also fire automatically on a world's first Market tab visit each tick.</p>
@@ -198,8 +204,22 @@ date in the header but cannot advance it.</p>
 `
       },
       {
+        id: 'events-catalogue',
+        title: '3. Use the Events Catalogue',
+        body: `
+<p>The Referee panel → <strong>Events</strong> tab includes a <strong>Catalogue</strong>
+section — 20 pre-built M.U.L.E.-style events ranging from shortages and surpluses to
+piracy and industrial accidents.</p>
+<p>Click any catalogue entry to pre-fill the <strong>New Event</strong> form below it.
+Review and adjust the fields (especially scope and which world), then click
+<strong>Create Event</strong> to activate it.</p>
+<p>You can also create events from scratch — the catalogue is just a time-saving shortcut
+for common scenarios.</p>
+`
+      },
+      {
         id: 'expire-events',
-        title: '3. Expire Events Early',
+        title: '4. Expire Events Early',
         body: `
 <p>In the Referee panel → Events tab, each active event has an <strong>Expire</strong> button.
 Click it to end the event immediately, regardless of its original duration.</p>
@@ -210,7 +230,7 @@ resolves ahead of schedule.</p>
       },
       {
         id: 'manage-passengers',
-        title: '4. Manage Passengers',
+        title: '5. Manage Passengers',
         body: `
 <p>When players book passengers, they appear in the Referee panel → <strong>Ships</strong>
 tab → expand ship → passenger manifest section. Each row shows the passenger type, count,
@@ -227,28 +247,18 @@ current credit balance.</p>
 `
       },
       {
-        id: 'events-catalogue',
-        title: '5. Use the Events Catalogue',
+        id: 'track-fuel',
+        title: '6. Track Fuel',
         body: `
-<p>The Referee panel → <strong>Events</strong> tab includes a <strong>Catalogue</strong>
-section — 20 pre-built M.U.L.E.-style events ranging from shortages and surpluses to
-piracy and industrial accidents.</p>
-<p>Click any catalogue entry to pre-fill the <strong>New Event</strong> form below it.
-Review and adjust the fields (especially scope and which world), then click
-<strong>Create Event</strong> to activate it.</p>
-<p>You can also create events from scratch — the catalogue is just a time-saving shortcut
-for common scenarios.</p>
-`
-      },
-      {
-        id: 'edit-campaign-label',
-        title: '6. Edit the Campaign Label',
-        body: `
-<p>The campaign display name can be changed at any time. Open the Referee panel →
-<strong>Campaign</strong> tab. Click the <strong>✎</strong> (edit) button next to the
-campaign name, type the new label, and press <strong>Save</strong> or hit Enter.</p>
-<p class="tut-note">ℹ Only the label changes — the campaign code, trade rules, and milieu
-are locked at creation and cannot be modified.</p>
+<p>Each ship has a <strong>Fuel Capacity</strong> (tank size) and <strong>Current Fuel</strong>
+(current level). Both are visible in the ship stat grid and editable in the ship edit form.</p>
+<p>Fuel is <strong>not consumed automatically</strong> — you must manually reduce
+<em>Current Fuel</em> in the ship edit form after each jump. The formula for jump fuel is:</p>
+<p class="tut-note">ℹ Fuel = hull tons × 10% × parsecs. Example: a J-2 jump in a 200-ton
+ship uses 40 tons of fuel.</p>
+<p>Players purchase fuel at starports via Port → Services. The purchase automatically
+increments <em>Current Fuel</em> (and is capped at remaining tank space, preventing
+over-filling).</p>
 `
       },
       {
@@ -265,8 +275,19 @@ a skill with the × button on the skill chip.</p>
 `
       },
       {
+        id: 'edit-campaign-label',
+        title: '8. Edit the Campaign Label',
+        body: `
+<p>The campaign display name can be changed at any time. Open the Referee panel →
+<strong>Campaign</strong> tab. Click the <strong>✎</strong> (edit) button next to the
+campaign name, type the new label, and press <strong>Save</strong> or hit Enter.</p>
+<p class="tut-note">ℹ Only the label changes — the campaign code, trade rules, and milieu
+are locked at creation and cannot be modified.</p>
+`
+      },
+      {
         id: 'reset-pin',
-        title: '8. Reset a Player\'s PIN',
+        title: '9. Reset a Player\'s PIN',
         body: `
 <p>If a player forgets their PIN:</p>
 <ol>
@@ -281,6 +302,131 @@ a skill with the × button on the skill chip.</p>
 <strong>Generate New Recovery Code</strong>. This immediately invalidates any previous code.
 The code used at campaign creation is at
 <a href="#" data-tut="gm-campaign-setup" data-sec="recovery-code">Campaign Setup → Save the Recovery Code</a>.</p>
+`
+      },
+      {
+        id: 'delete-campaign',
+        title: '10. Delete a Campaign',
+        body: `
+<p>The <strong>Danger Zone</strong> section at the bottom of the Referee panel →
+<strong>Campaign</strong> tab lets you permanently delete the campaign. This removes all
+associated data — ships, cargo, market history, players, events, and trade records —
+and <strong>cannot be undone</strong>.</p>
+<p>Click <strong>Delete Campaign…</strong> to reveal the confirmation form, enter your
+Referee PIN, and click <strong>Confirm Delete</strong>. You will be signed out and
+returned to the login screen. The campaign code is freed for reuse.</p>
+<p class="tut-warn">⚠ An incorrect PIN in the confirmation form shows an error and does
+not delete anything — there's no accidental-deletion risk from a mistyped PIN.</p>
+`
+      }
+    ]
+  },
+
+  // ── GM: Ship Templates, Debts & Ownership ───────────────────────────────────
+  {
+    id: 'gm-ship-templates-debts-ownership',
+    title: 'Ship Templates, Debts & Ownership',
+    role: 'GM',
+    sections: [
+      {
+        id: 'before-you-start',
+        title: 'Before You Start',
+        body: `
+<p>This tutorial covers four Referee-side tools that build on top of a ship's basic stats:
+reusable ship templates, per-ship debts, and joint ownership shares. All of it lives on or
+near the ship's detail view in the Referee panel.</p>
+<p>You'll need at least one ship already created — see
+<a href="#" data-tut="gm-campaign-setup" data-sec="create-ship">Campaign Setup → Create a Ship</a>
+if you haven't made one yet.</p>
+`
+      },
+      {
+        id: 'create-template',
+        title: '1. Create a Ship Template',
+        body: `
+<p>Open the Referee panel → <strong>Ships</strong> tab → <strong>Templates</strong>.</p>
+<div class="tut-shot">📸 Templates panel showing the template list and a New Template form</div>
+<table class="tut-table">
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td>Must be unique within the campaign.</td></tr>
+    <tr><td>Ruleset</td><td>CT7 or T5 — tags which edition's numbers this design uses.</td></tr>
+    <tr><td>Hull Tons / Cargo / Jump Rating / Maneuver Rating</td><td>Same fields as the ship edit form.</td></tr>
+    <tr><td>Staterooms / Low Berths / Fuel Capacity</td><td>Same fields as the ship edit form.</td></tr>
+    <tr><td>Market Value</td><td>Referee-assessed value — see
+        <a href="#" data-tut="player-fleet-organizations" data-sec="check-net-worth">Fleet &amp; Organizations → Check Your Net Worth</a>.</td></tr>
+    <tr><td>Notes</td><td>Free text — use it to flag numbers you haven't verified against the book.</td></tr>
+  </tbody>
+</table>
+<p class="tut-note">ℹ The first time a CT7 campaign's Templates panel is opened with none yet
+created, one starter template (a Type A Free Trader) is seeded automatically, flagged as
+unverified in its notes. T5 campaigns start with no seed.</p>
+`
+      },
+      {
+        id: 'use-template',
+        title: '2. Use a Template for a New Ship',
+        body: `
+<p>Open <strong>Ships</strong> tab → <strong>New Ship</strong>. A <strong>Template</strong>
+dropdown appears at the top of the form, defaulting to <strong>Custom Design</strong>.</p>
+<p>Selecting a template pre-fills hull tons, cargo capacity, stateroom/low berth capacity,
+fuel capacity, jump/maneuver rating, and market value. Every field stays editable afterward —
+adjust anything, then set a name and starting credits and click <strong>Create</strong>.</p>
+<p class="tut-note">ℹ There is no ongoing link between the ship and the template it came
+from — it's a one-time fill, not a live reference. Switching back to
+<strong>Custom Design</strong> clears the form to blank defaults.</p>
+`
+      },
+      {
+        id: 'save-as-template',
+        title: '3. Save an Existing Ship as a Template',
+        body: `
+<p>On any existing ship's detail view, click <strong>Save as Template</strong> and give it a
+name.</p>
+<p>This captures the ship's <em>current</em> stats as a new template — useful once you've
+tuned a design in play and want to reuse it for future ships.</p>
+<p class="tut-warn">⚠ Template names must be unique per campaign — saving with a name
+that's already taken is rejected.</p>
+`
+      },
+      {
+        id: 'record-debt',
+        title: '4. Record a Ship Debt',
+        body: `
+<p>Expand a ship's row in the <strong>Ships</strong> tab and open its <strong>Debts</strong>
+section.</p>
+<table class="tut-table">
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Type</td><td>Mortgage, Loan, or Obligation.</td></tr>
+    <tr><td>Creditor Name</td><td>Optional — who the ship owes.</td></tr>
+    <tr><td>Principal</td><td>The original amount borrowed.</td></tr>
+    <tr><td>Current Balance</td><td>What's still owed — this is what payments reduce.</td></tr>
+    <tr><td>Due Tick</td><td>Optional — a target tick for narrative pressure.</td></tr>
+    <tr><td>Notes</td><td>Free text.</td></tr>
+  </tbody>
+</table>
+<p class="tut-note">ℹ Debts don't accrue interest — Traveller doesn't define compounding
+mechanics, so you adjust the balance directly if the situation calls for it.</p>
+<p>Players pay debts down themselves from their ship's Reports tab — see
+<a href="#" data-tut="player-fleet-organizations" data-sec="pay-down-debt">Fleet &amp; Organizations → Pay Down a Debt</a>.</p>
+`
+      },
+      {
+        id: 'record-ownership',
+        title: '5. Record Ship Ownership Shares',
+        body: `
+<p>In the same ship's detail view, open the <strong>Ownership</strong> section. Add a
+player and a percentage share.</p>
+<p class="tut-warn">⚠ Recorded shares for one ship can never total more than 100% — the
+form rejects any addition that would push the total over.</p>
+<p>A player with no explicit share recorded is treated as owning whatever's <em>left
+over</em> after everyone else's recorded shares, not automatically 100% themselves — a ship
+with no ownership rows at all still behaves as fully owned by whoever crews it.</p>
+<p class="tut-note">ℹ This is deliberately separate from Organizations. Ship ownership here
+is a straightforward partnership you arbitrate directly, like a debt — whereas an
+Organization is something a player runs themselves. See
+<a href="#" data-tut="player-fleet-organizations" data-sec="found-organization">Fleet &amp; Organizations → Found an Organization</a>.</p>
 `
       }
     ]
@@ -521,6 +667,9 @@ and net profit, then click <strong>Confirm</strong>. Credits are added to the sh
 account and a trade record is logged automatically.</p>
 <p>A brief flash in the bottom-right corner confirms the profit or loss. Repeat for each
 cargo row you want to sell.</p>
+<p>Once you're trading regularly, check your ship's overall standing — including any debt
+or shared ownership — in
+<a href="#" data-tut="player-fleet-organizations" data-sec="check-net-worth">Fleet &amp; Organizations → Check Your Net Worth</a>.</p>
 `
       }
     ]
@@ -620,21 +769,39 @@ CT7 flat Cr25,000; T5 Cr25,000 × parsecs.</p>
 <p>Click <strong>Accept Mail Contract</strong>. The contract appears on
 <strong>Ship → Contracts</strong>. <strong>No credits are transferred yet</strong> —
 payment is on delivery only.</p>
-<p>When the ship arrives at the destination, the payment is credited automatically and
-the contract is marked delivered.</p>
+`
+      },
+      {
+        id: 'mail-delivery',
+        title: '5. Mail Delivery',
+        body: `
+<p>Mail is delivered automatically when the ship arrives at the destination world, the
+same way as passengers. Use <strong>Jump → Select</strong> or ask your Referee to move
+the ship.</p>
+<p>On delivery, the payment is credited to the ship account and the contract disappears
+from the Contracts tab.</p>
+<p>Mail contracts are an Imperial obligation — there is no cancellation mechanic.</p>
 `
       },
       {
         id: 'track-contracts',
-        title: '5. Track Contracts',
+        title: '6. Track Passengers and Mail',
         body: `
-<p>Open <strong>Ship → Contracts</strong> to see all mail contracts currently in transit
-and the total pending payment.</p>
+<p><strong>Ship → Manifest</strong> shows all passengers currently in transit:</p>
+<ul>
+  <li>Passage type and count</li>
+  <li>Destination world</li>
+  <li>Fare collected and when they boarded</li>
+</ul>
+<p><strong>Ship → Contracts</strong> shows all mail contracts currently in transit:</p>
+<ul>
+  <li>Origin and destination worlds</li>
+  <li>Jump distance (parsecs)</li>
+  <li>Payment due on delivery</li>
+  <li>Total pending payment footer</li>
+</ul>
 <div class="tut-shot">📸 Contracts sub-tab showing in-transit mail contracts table</div>
-<p>Each row shows origin, destination, parsecs, payment amount, and the tick the contract
-was accepted. Contracts disappear from this list once delivered.</p>
-<p>Similarly, <strong>Ship → Manifest</strong> shows in-transit passengers with their
-destination and booked fare.</p>
+<p>Both lists clear an entry automatically once it's delivered.</p>
 `
       }
     ]
@@ -732,6 +899,122 @@ and chart to resize both panels.</p>
 <p>If you navigated to the destination manually via the sidebar, use the
 <strong>Set Here</strong> button in the Cargo tab status bar instead — this updates your
 ship's recorded location without going through the Jump tab.</p>
+`
+      }
+    ]
+  },
+
+  // ── Player: Fleet & Organizations ───────────────────────────────────────────
+  {
+    id: 'player-fleet-organizations',
+    title: 'Fleet & Organizations',
+    role: 'Player',
+    sections: [
+      {
+        id: 'overview',
+        title: 'Overview',
+        body: `
+<p>Beyond buying and selling, your ship has an overall financial standing — value, debt,
+and (if it's shared) ownership shares — and you can found or join an
+<strong>Organization</strong>: a corporation, confederation, or trade union that pools ships
+together with a shared treasury, dues, and disbursement.</p>
+<p>You'll need a ship assigned first — see
+<a href="#" data-tut="player-getting-started" data-sec="find-your-ship">Getting Started → Find Your Ship</a>.</p>
+`
+      },
+      {
+        id: 'check-net-worth',
+        title: '1. Check Your Net Worth',
+        body: `
+<p>Open <strong>Ship → Reports → Net Worth</strong>.</p>
+<div class="tut-shot">📸 Net Worth tab showing Assets, Liabilities, Net Worth, and Your Share</div>
+<p>Net Worth combines your ship's credits, its Referee-assessed market value, and its cargo
+(valued at what you paid), minus any outstanding debt. If the ship is jointly owned — or
+owned outright by an Organization — a <strong>Your Share</strong> row scales the total by
+your recorded percentage.</p>
+`
+      },
+      {
+        id: 'pay-down-debt',
+        title: '2. Pay Down a Debt',
+        body: `
+<p>Open <strong>Ship → Reports → Debts</strong>. Any debts your Referee has recorded against
+the ship are listed with their current balance.</p>
+<p>Enter an amount and confirm to pay it down. Ship credits and the debt's balance both
+decrease by the amount paid.</p>
+<p class="tut-warn">⚠ A payment is rejected if it's more than your ship's available
+credits, or more than the debt's remaining balance — whichever is smaller.</p>
+`
+      },
+      {
+        id: 'found-organization',
+        title: '3. Found an Organization',
+        body: `
+<p>Open <strong>Ship → Organizations</strong> and click <strong>+ Found Organization</strong>.</p>
+<table class="tut-table">
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td>Must be unique within the campaign.</td></tr>
+    <tr><td>Treasury</td><td>Starting balance, in credits.</td></tr>
+    <tr><td>Dues Rate</td><td>Optional flat rate — leave 0 if you don't want to charge dues yet.</td></tr>
+    <tr><td>Notes</td><td>Free text.</td></tr>
+  </tbody>
+</table>
+<p>You become the organization's first <strong>officer</strong> automatically. Any player
+can found an organization — it isn't a Referee-only action.</p>
+`
+      },
+      {
+        id: 'manage-officers-members',
+        title: '4. Manage Officers and Member Ships',
+        body: `
+<p>Expand your organization and use the <strong>Officers</strong> and
+<strong>Member Ships</strong> sections. Any officer can add or remove other officers, and
+add or remove member ships — there's no rank among officers.</p>
+<p class="tut-warn">⚠ An organization's last officer can't be removed (the Referee can
+still delete the organization outright). This avoids leaving it unmanageable.</p>
+<p>When adding your own ship as a member, choose whether the organization
+<strong>owns it outright</strong>. A ship can be owned outright by only one organization at
+a time — marking it here when it's already claimed elsewhere is rejected.</p>
+`
+      },
+      {
+        id: 'collect-dues-disburse',
+        title: '5. Collect Dues and Disburse Funds',
+        body: `
+<p>With a dues rate and collection frequency set (in ticks), the organization panel shows
+whether dues are currently due. Nothing is collected automatically — click
+<strong>Collect Dues</strong> when you're ready. Every member ship is charged the flat rate
+independently; a ship without enough credits is skipped and reported, not blocked.</p>
+<p class="tut-note">ℹ Collecting again before the configured interval has passed since the
+last collection is rejected — this guards against accidentally double-collecting.</p>
+<p><strong>Disbursement</strong> is separate and ad hoc: send funds from the treasury to any
+member ship at any time, capped at the treasury's current balance.</p>
+`
+      },
+      {
+        id: 'record-equity',
+        title: '6. Record Organization Equity',
+        body: `
+<p>In the <strong>Equity</strong> section, record a player and a percentage stake in the
+organization — the same 100%-ceiling rule as ship ownership applies.</p>
+<p>This matters most for ships the organization owns outright: that ship's contribution to
+your personal Net Worth comes from your equity percentage <em>in the organization</em>,
+not from any ownership record on the ship itself. See
+<a href="#" data-tut="gm-ship-templates-debts-ownership" data-sec="record-ownership">GM: Ship Templates, Debts &amp; Ownership → Record Ship Ownership Shares</a>
+for how the two compare.</p>
+`
+      },
+      {
+        id: 'view-fleet-report',
+        title: '7. View the Fleet Report',
+        body: `
+<p>Click <strong>Show Fleet Report</strong> on the organization panel.</p>
+<div class="tut-shot">📸 Fleet Report showing a per-ship breakdown and fleet-wide totals</div>
+<p>This consolidates every member ship's credits, market value, cargo value, and debt into
+fleet-wide totals plus an income/expense breakdown. It's visible only to the organization's
+officers and the Referee, since it shows financial detail for ships you might not
+personally crew.</p>
 `
       }
     ]

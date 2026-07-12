@@ -23,7 +23,7 @@ You choose yourself:
 
 > ⚠ **Warning:** Your character name and PIN **cannot be changed after joining**.
 > If you forget your PIN, ask your Referee to reset it using the campaign's recovery code.
-> See [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#5-reset-a-players-pin).
+> See [GM: Running a Session → Reset a Player's PIN](./gm-running-session.md#9-reset-a-players-pin).
 
 ---
 

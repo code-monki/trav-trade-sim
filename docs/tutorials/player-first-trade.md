@@ -104,6 +104,10 @@ Review the total payout and net profit, then click **Confirm**. Credits are adde
 
 A brief flash in the bottom-right corner confirms the profit or loss. Repeat for each cargo row you want to sell.
 
+Once you're trading regularly, check your ship's overall standing — including any debt or
+shared ownership — in
+[Fleet & Organizations → Check Your Net Worth](./player-fleet-organizations.md#1-check-your-net-worth).
+
 ---
 
 *Previous: [Getting Started](./player-getting-started.md) · Next: [Route Analysis](./player-route-analysis.md)*
