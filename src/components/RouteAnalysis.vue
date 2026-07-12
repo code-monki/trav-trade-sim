@@ -10,11 +10,21 @@
       <p class="dim">Load a sector to see reachable worlds.</p>
     </div>
 
+    <div v-else-if="!ship.ship?.current_world" class="ra-state">
+      <p>Ship's location hasn't been set yet.</p>
+      <p class="dim">Ask your referee to set your starting world.</p>
+    </div>
+
+    <div v-else-if="ship.ship.current_sector !== props.sectorName" class="ra-state">
+      <p>Your ship is in <strong>{{ ship.ship.current_sector }}</strong>.</p>
+      <p class="dim">Switch to that sector to see jump options.</p>
+    </div>
+
     <template v-else>
 
       <div class="ra-header">
         <span class="ra-origin">
-          From <strong>{{ world?.Name || world?.Hex }}</strong>
+          From <strong>{{ originName }}</strong>
         </span>
         <div class="ra-controls">
           <label class="jump-label">Jump</label>
@@ -102,14 +112,21 @@ watch(() => ship.ship?.jump_rating, (val) => {
   if (val) localJump.value = val
 })
 
+// The ship's actual current world — jumps are always computed from here,
+// not from whatever world happens to be selected/viewed in the sidebar
+// (those can differ, e.g. when browsing a passenger's destination).
+const originHex  = computed(() => ship.ship?.current_world)
+const originName = computed(() =>
+  map.worlds.find(w => w.Hex === originHex.value)?.Name || originHex.value)
+
 const projections = computed(() => {
-  if (!props.world?.Hex || !localJump.value || !map.worlds.length) return []
+  if (!originHex.value || !localJump.value || !map.worlds.length) return []
 
   const hasCargo = ship.cargo.length > 0
   const results = []
 
   for (const w of map.worlds) {
-    const dist = hexDistance(props.world.Hex, w.Hex)
+    const dist = hexDistance(originHex.value, w.Hex)
     if (dist === 0 || dist > localJump.value) continue
 
     let totalProfit = 0

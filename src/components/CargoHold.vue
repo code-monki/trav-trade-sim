@@ -116,6 +116,14 @@
               </tr>
             </template>
           </tbody>
+          <tfoot>
+            <tr class="cargo-total-row">
+              <td colspan="4" class="total-label">Est. Hold Value (at this market)</td>
+              <td class="num mono total-val">Cr {{ fmt(totalCargoValue) }}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -188,6 +196,18 @@ function sellPriceFor(item) {
   const snap = tick.worldSnapshots[item.trade_good_die]
   return snap ? snap.sale_price : null
 }
+
+// ── Hold value (Asset Valuation — cargo sub-piece) ──────────────────────────
+// Sums each item at this market's live sell price where known, falling back
+// to purchase price (an estimate, not a guaranteed quote) for goods this
+// world hasn't been appraised for yet.
+
+const totalCargoValue = computed(() =>
+  ship.cargo.reduce((sum, item) => {
+    const sp = sellPriceFor(item)
+    return sum + (sp !== null ? sp : item.purchase_price) * item.tons
+  }, 0)
+)
 
 // ── Profit display ─────────────────────────────────────────────────────────
 
@@ -404,6 +424,13 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 }
 
 .cargo-table td.num { text-align: right; }
+
+.cargo-total-row td {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+.total-label { color: var(--text-dim); font-size: 0.72rem; text-align: right; }
+.total-val   { font-weight: 600; color: var(--accent); }
 
 .good-name    { font-weight: 500; }
 .source-world {

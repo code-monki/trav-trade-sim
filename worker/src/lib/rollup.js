@@ -1,8 +1,8 @@
 // JS equivalents of the PostgreSQL rollup_month, rollup_year, and
 // advance_tick stored procedures.  Called from the calendar route.
 
-function tickYear(tick)  { return 1105 + Math.floor(tick / 48) }
-function tickMonth(tick) { return Math.floor(tick / 4) % 12 + 1 }
+export function tickYear(tick)  { return 1105 + Math.floor(tick / 48) }
+export function tickMonth(tick) { return Math.floor(tick / 4) % 12 + 1 }
 function tickDay(tick)   { return (tick % 48) * 7 + 1 }
 
 async function doRollupMonth(db, campaignId, year, month) {
@@ -101,6 +101,15 @@ async function doRollupYear(db, campaignId, year) {
     `DELETE FROM market_events
      WHERE campaign_id = ? AND expires_tick IS NOT NULL AND expires_tick < ?`
   ).bind(campaignId, cutoff).run()
+}
+
+// Re-runs monthly/annual rollup for a boundary tick that was possibly rolled
+// up against incomplete data (e.g. a world's weekly snapshots were backfilled
+// after the boundary already passed). Safe to call repeatedly — the rollup
+// SQL is an upsert.
+export async function repairRollup(db, campaignId, tick) {
+  if (tick > 0 && tick % 4  === 0) await doRollupMonth(db, campaignId, tickYear(tick - 4), tickMonth(tick - 4))
+  if (tick > 0 && tick % 48 === 0) await doRollupYear(db, campaignId, tickYear(tick - 48))
 }
 
 export async function advanceTick(db, campaignId) {

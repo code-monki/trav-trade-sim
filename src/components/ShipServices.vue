@@ -67,7 +67,7 @@
                 <template v-if="fuelCapacity > 0"> · {{ tankSpace }}t space available</template>
               </span>
               <button type="button" class="btn-ghost btn-xs" @click="fillForJump"
-                      :disabled="tankSpace <= 0">
+                      :disabled="!canFillForJump || ship.loading">
                 Fill for jump
               </button>
             </div>
@@ -99,23 +99,15 @@
         <h3>Mail Contract</h3>
 
         <form class="mail-form" @submit.prevent="submitMail">
-          <div class="form-row two-col">
-            <div>
-              <label>Destination Hex</label>
-              <input v-model="mailForm.destWorldHex" placeholder="e.g. 1910" maxlength="4" />
-            </div>
-            <div>
-              <label>Sector</label>
-              <input v-model="mailForm.destSector" placeholder="Spinward Marches" />
-            </div>
-          </div>
           <div class="form-row">
-            <label>Destination Name (optional)</label>
-            <input v-model="mailForm.destWorldName" placeholder="World name" />
+            <label>Destination World</label>
+            <WorldPicker
+              v-model="mailDest"
+              :sector-name="props.sectorName" />
           </div>
           <div class="form-row" v-if="tradeRules === 'T5'">
             <label>Parsecs</label>
-            <input v-model.number="mailForm.parsecs" type="number" min="1" max="6" class="parsec-input" />
+            <input v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
           </div>
 
           <div class="fare-preview">
@@ -142,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
@@ -153,6 +145,8 @@ import {
   mailPayment,
 } from '../lib/passengers.js'
 import { starportFromUWP } from '../lib/trade-engine-ct7.js'
+import { hexDistance }     from '../utils/hexDistance.js'
+import WorldPicker         from './WorldPicker.vue'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -201,9 +195,23 @@ const canBuyFuel = computed(() =>
   (fuelCapacity.value === 0 || fuelForm.value.tons <= tankSpace.value)
 )
 
-function fillForJump() {
-  const needed = jumpNeeded.value
-  fuelForm.value.tons = fuelCapacity.value > 0 ? Math.min(needed, tankSpace.value) : needed
+// Amount "Fill for jump" would buy — needed tons, capped by remaining tank space.
+const fillForJumpTons = computed(() =>
+  fuelCapacity.value > 0 ? Math.min(jumpNeeded.value, tankSpace.value) : jumpNeeded.value
+)
+
+const canFillForJump = computed(() =>
+  tankSpace.value > 0 &&
+  pricePerTon.value > 0 &&
+  fillForJumpTons.value > 0 &&
+  (ship.ship?.credits ?? 0) >= fuelCost(fillForJumpTons.value, pricePerTon.value)
+)
+
+// One click: set tons to the jump-need amount and purchase immediately —
+// refills the tank and deducts credits in one action.
+async function fillForJump() {
+  fuelForm.value.tons = fillForJumpTons.value
+  await submitFuel()
 }
 
 async function submitFuel() {
@@ -237,22 +245,26 @@ function decFuelTons() { if (fuelForm.value.tons > 1) fuelForm.value.tons-- }
 
 // ── Mail form ─────────────────────────────────────────────────────────────────
 
-const mailForm = ref({
-  destWorldHex:  '',
-  destSector:    '',
-  destWorldName: '',
-  parsecs:        1,
-})
+const mailDest    = ref({ hex: '', name: '', sector: '' })
+const mailParsecs = ref(1)
 const mailError   = ref('')
 const mailSuccess = ref('')
 
+// Auto-compute parsecs when a world is picked (T5 fares are per-parsec)
+watch(() => mailDest.value.hex, (hex) => {
+  if (hex && props.world?.Hex) {
+    const d = hexDistance(props.world.Hex, hex)
+    if (d > 0) mailParsecs.value = d
+  }
+})
+
 const mailPay = computed(() =>
-  mailPayment(tradeRules.value, mailForm.value.parsecs)
+  mailPayment(tradeRules.value, mailParsecs.value)
 )
 
 const canAcceptMail = computed(() =>
-  mailForm.value.destWorldHex.trim().length > 0 &&
-  mailForm.value.destSector.trim().length > 0
+  mailDest.value.hex.trim().length > 0 &&
+  mailDest.value.sector.trim().length > 0
 )
 
 async function submitMail() {
@@ -267,10 +279,10 @@ async function submitMail() {
     originWorldHex:   props.world.Hex,
     originSector:     props.sectorName,
     originWorldName:  props.world.Name ?? '',
-    destWorldHex:     mailForm.value.destWorldHex.trim(),
-    destSector:       mailForm.value.destSector.trim(),
-    destWorldName:    mailForm.value.destWorldName.trim(),
-    parsecs:          mailForm.value.parsecs,
+    destWorldHex:     mailDest.value.hex,
+    destSector:       mailDest.value.sector,
+    destWorldName:    mailDest.value.name,
+    parsecs:          mailParsecs.value,
     payment:          mailPay.value,
     tick:             tick.currentTick,
   })
@@ -278,7 +290,8 @@ async function submitMail() {
   if (!result.ok) { mailError.value = result.error; return }
 
   mailSuccess.value = `Mail contract accepted — Cr${mailPay.value.toLocaleString()} on delivery`
-  mailForm.value = { destWorldHex: '', destSector: '', destWorldName: '', parsecs: 1 }
+  mailDest.value    = { hex: '', name: '', sector: '' }
+  mailParsecs.value = 1
   setTimeout(() => { mailSuccess.value = '' }, 3500)
 }
 </script>

@@ -35,7 +35,10 @@
         <div class="ship-list-col">
           <div class="col-header">
             <h2>Ships</h2>
-            <button class="btn-primary btn-sm" @click="openNewShip">+ New Ship</button>
+            <div class="col-header-actions">
+              <button class="btn-ghost btn-sm" @click="openManageTemplates">Templates</button>
+              <button class="btn-primary btn-sm" @click="openNewShip">+ New Ship</button>
+            </div>
           </div>
 
           <div v-if="referee.loading" class="placeholder">Loading…</div>
@@ -59,6 +62,13 @@
             <h2>New Ship</h2>
             <form class="detail-form" @submit.prevent="submitNewShip">
               <div class="form-row">
+                <label>Template</label>
+                <select v-model="selectedTemplateId" @change="applyTemplate(selectedTemplateId)">
+                  <option value="">Custom Design</option>
+                  <option v-for="t in referee.templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                </select>
+              </div>
+              <div class="form-row">
                 <label>Name <span class="req">*</span></label>
                 <input v-model="newShip.name" required placeholder="Free Trader Beowulf" />
               </div>
@@ -81,6 +91,10 @@
                   <label>Starting Credits (Cr)</label>
                   <input v-model.number="newShip.credits" type="number" min="0" />
                 </div>
+                <div>
+                  <label>Market Value (Cr)</label>
+                  <input v-model.number="newShip.marketValue" type="number" min="0" />
+                </div>
               </div>
               <div class="form-row two-col">
                 <div>
@@ -90,6 +104,16 @@
                 <div>
                   <label>Maneuver Drive (1–9)</label>
                   <input v-model.number="newShip.maneuverRating" type="number" min="1" max="9" placeholder="—" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Staterooms</label>
+                  <input v-model.number="newShip.staterooms" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Low Berths</label>
+                  <input v-model.number="newShip.lowBerths" type="number" min="0" placeholder="0" />
                 </div>
               </div>
               <div class="form-row two-col">
@@ -110,14 +134,129 @@
             </form>
           </template>
 
+          <!-- Manage Templates panel -->
+          <template v-if="showManageTemplates">
+            <div class="detail-header-row">
+              <h2>Ship Templates</h2>
+              <button class="btn-ghost btn-sm" @click="closeManageTemplates">Close</button>
+            </div>
+
+            <div v-if="!referee.templates.length" class="placeholder sm">No templates yet</div>
+            <table v-else class="crew-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Hull</th>
+                  <th class="right">Value</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in referee.templates" :key="t.id">
+                  <td>{{ t.name }}</td>
+                  <td>{{ t.hull_tons }}t</td>
+                  <td class="right">Cr{{ t.market_value.toLocaleString() }}</td>
+                  <td>
+                    <button class="btn-ghost btn-xs" @click="startEditTemplate(t)">Edit</button>
+                    <button class="btn-danger btn-xs" @click="removeTemplate(t)">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="referee.templates.some(t => t.notes)" class="hint-note">
+              Starter templates are reference designs — verify against your own rulebook before relying on them.
+            </p>
+
+            <h3 class="template-form-heading">{{ editingTemplateId ? 'Edit Template' : 'New Template' }}</h3>
+            <form class="detail-form" @submit.prevent="submitTemplateForm">
+              <div class="form-row">
+                <label>Name <span class="req">*</span></label>
+                <input v-model="templateForm.name" required placeholder="Type A Free Trader" />
+              </div>
+              <div class="form-row">
+                <label>Hull Type</label>
+                <input v-model="templateForm.hullType" placeholder="Free Trader, Scout/Courier…" />
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Hull Tons</label>
+                  <input v-model.number="templateForm.hullTons" type="number" min="1" />
+                </div>
+                <div>
+                  <label>Cargo Capacity (t)</label>
+                  <input v-model.number="templateForm.cargoCapacity" type="number" min="0" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Jump Rating (J-1–J-6)</label>
+                  <input v-model.number="templateForm.jumpRating" type="number" min="1" max="6" placeholder="—" />
+                </div>
+                <div>
+                  <label>Maneuver Drive (1–9)</label>
+                  <input v-model.number="templateForm.maneuverRating" type="number" min="1" max="9" placeholder="—" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Staterooms</label>
+                  <input v-model.number="templateForm.staterooms" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Low Berths</label>
+                  <input v-model.number="templateForm.lowBerths" type="number" min="0" placeholder="0" />
+                </div>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label>Fuel Capacity (t)</label>
+                  <input v-model.number="templateForm.fuelCapacity" type="number" min="0" placeholder="0" />
+                </div>
+                <div>
+                  <label>Market Value (Cr)</label>
+                  <input v-model.number="templateForm.marketValue" type="number" min="0" />
+                </div>
+              </div>
+              <div class="form-row">
+                <label>Notes</label>
+                <input v-model="templateForm.notes" placeholder="Optional" />
+              </div>
+              <div class="form-actions">
+                <button v-if="editingTemplateId" type="button" class="btn-ghost" @click="cancelEditTemplate">Cancel</button>
+                <button type="submit" class="btn-primary" :disabled="!templateForm.name.trim()">
+                  {{ editingTemplateId ? 'Save' : 'Add Template' }}
+                </button>
+              </div>
+              <p v-if="templateError" class="form-error">{{ templateError }}</p>
+            </form>
+          </template>
+
           <!-- Ship detail + crew -->
-          <template v-else-if="selectedShip">
+          <template v-if="!showNewShipForm && !showManageTemplates && selectedShip">
             <div class="detail-header-row">
               <h2>{{ selectedShip.name }}</h2>
-              <button class="btn-ghost btn-sm" @click="editingShip = !editingShip">
-                {{ editingShip ? 'Cancel' : 'Edit' }}
-              </button>
+              <div class="col-header-actions">
+                <button v-if="!editingShip" class="btn-ghost btn-sm" @click="showSaveTemplate = !showSaveTemplate">
+                  {{ showSaveTemplate ? 'Cancel' : 'Save as Template' }}
+                </button>
+                <button class="btn-ghost btn-sm" @click="editingShip = !editingShip">
+                  {{ editingShip ? 'Cancel' : 'Edit' }}
+                </button>
+              </div>
             </div>
+
+            <!-- Save as Template inline form -->
+            <form v-if="showSaveTemplate" class="detail-form" @submit.prevent="submitSaveAsTemplate">
+              <div class="form-row">
+                <label>Template Name <span class="req">*</span></label>
+                <input v-model="saveTemplateName" required placeholder="e.g. Modified Free Trader" />
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary" :disabled="!saveTemplateName.trim()">Save Template</button>
+              </div>
+              <p v-if="saveTemplateError" class="form-error">{{ saveTemplateError }}</p>
+              <p v-if="saveTemplateSuccess" class="form-success">{{ saveTemplateSuccess }}</p>
+            </form>
 
             <!-- Inline edit form -->
             <form v-if="editingShip" class="detail-form" @submit.prevent="submitEditShip">
@@ -135,9 +274,15 @@
                   <input v-model.number="editShipFields.cargoCapacity" type="number" min="0" />
                 </div>
               </div>
-              <div class="form-row">
-                <label>Credits (Cr)</label>
-                <input v-model.number="editShipFields.credits" type="number" />
+              <div class="form-row two-col">
+                <div>
+                  <label>Credits (Cr)</label>
+                  <input v-model.number="editShipFields.credits" type="number" />
+                </div>
+                <div>
+                  <label>Market Value (Cr)</label>
+                  <input v-model.number="editShipFields.marketValue" type="number" min="0" />
+                </div>
               </div>
               <div class="form-row two-col">
                 <div>
@@ -190,6 +335,7 @@
               <div class="stat"><label>Hull Tons</label><span>{{ selectedShip.hull_tons }}t</span></div>
               <div class="stat"><label>Cargo Capacity</label><span>{{ selectedShip.cargo_capacity }}t</span></div>
               <div class="stat"><label>Credits</label><span>Cr{{ selectedShip.credits.toLocaleString() }}</span></div>
+              <div class="stat"><label>Market Value</label><span>Cr{{ (selectedShip.market_value ?? 0).toLocaleString() }}</span></div>
               <div class="stat"><label>Jump Rating</label><span>{{ selectedShip.jump_rating ? 'J-' + selectedShip.jump_rating : '—' }}</span></div>
               <div class="stat"><label>Maneuver</label><span>{{ selectedShip.maneuver_drive_rating ? selectedShip.maneuver_drive_rating + 'G' : '—' }}</span></div>
               <div class="stat"><label>Location</label>
@@ -308,6 +454,145 @@
               <p v-if="refPassengerError" class="form-error">{{ refPassengerError }}</p>
             </div>
 
+            <!-- Debts -->
+            <div v-if="!editingShip" class="crew-section">
+              <div class="col-header">
+                <h3>Debts</h3>
+                <button class="btn-ghost btn-sm" @click="showAddDebt ? cancelDebtForm() : openAddDebt()">
+                  {{ showAddDebt ? 'Cancel' : '+ Add Debt' }}
+                </button>
+              </div>
+
+              <form v-if="showAddDebt" class="detail-form" @submit.prevent="submitDebtForm">
+                <div class="form-row two-col">
+                  <div>
+                    <label>Type</label>
+                    <select v-model="debtForm.type">
+                      <option value="mortgage">Mortgage</option>
+                      <option value="loan">Loan</option>
+                      <option value="obligation">Obligation</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Creditor</label>
+                    <input v-model="debtForm.creditorName" placeholder="Bank of Regina" />
+                  </div>
+                </div>
+                <div class="form-row two-col">
+                  <div>
+                    <label>Principal (Cr)</label>
+                    <input v-model.number="debtForm.principal" type="number" min="0" />
+                  </div>
+                  <div>
+                    <label>Current Balance (Cr)</label>
+                    <input v-model.number="debtForm.currentBalance" type="number" min="0" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <label>Due Tick</label>
+                  <input v-model.number="debtForm.dueTick" type="number" min="0" placeholder="Optional" />
+                </div>
+                <div class="form-row">
+                  <label>Notes</label>
+                  <input v-model="debtForm.notes" placeholder="Optional" />
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn-primary">{{ editingDebtId ? 'Save' : 'Add Debt' }}</button>
+                </div>
+              </form>
+
+              <div v-if="debtsLoading" class="placeholder sm">Loading…</div>
+              <div v-else-if="!shipDebts.length" class="placeholder sm">No debts recorded</div>
+              <table v-else class="crew-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Creditor</th>
+                    <th class="right">Principal</th>
+                    <th class="right">Balance</th>
+                    <th>Due</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="d in shipDebts" :key="d.id">
+                    <td>{{ d.type }}</td>
+                    <td>{{ d.creditor_name || '—' }}</td>
+                    <td class="right">Cr{{ d.principal.toLocaleString() }}</td>
+                    <td class="right">Cr{{ d.current_balance.toLocaleString() }}</td>
+                    <td>{{ d.due_tick ?? '—' }}</td>
+                    <td>
+                      <button class="btn-ghost btn-xs" @click="startEditDebt(d)">Edit</button>
+                      <button class="btn-danger btn-xs" @click="removeDebt(d)">Delete</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="debtsError" class="form-error">{{ debtsError }}</p>
+            </div>
+
+            <!-- Ownership -->
+            <div v-if="!editingShip" class="crew-section">
+              <div class="col-header">
+                <h3>Ownership</h3>
+                <button class="btn-ghost btn-sm" @click="showAddOwnership ? cancelOwnershipForm() : openAddOwnership()">
+                  {{ showAddOwnership ? 'Cancel' : '+ Add Owner' }}
+                </button>
+              </div>
+
+              <form v-if="showAddOwnership" class="detail-form" @submit.prevent="submitOwnershipForm">
+                <div class="form-row two-col">
+                  <div>
+                    <label>Player</label>
+                    <select v-if="!editingOwnershipId" v-model="ownershipForm.playerId" required>
+                      <option value="">— Select player —</option>
+                      <option v-for="p in referee.players" :key="p.id" :value="p.id">{{ p.character_name }}</option>
+                    </select>
+                    <input v-else :value="shipOwnership.find(o => o.id === editingOwnershipId)?.character_name" disabled />
+                  </div>
+                  <div>
+                    <label>Percentage</label>
+                    <input v-model.number="ownershipForm.percentage" type="number" min="1" max="100" />
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn-primary" :disabled="!editingOwnershipId && !ownershipForm.playerId">
+                    {{ editingOwnershipId ? 'Save' : 'Add Owner' }}
+                  </button>
+                </div>
+              </form>
+
+              <div v-if="ownershipLoading" class="placeholder sm">Loading…</div>
+              <div v-else-if="!shipOwnership.length" class="placeholder sm">100% owned by the assigned crew — no shares recorded</div>
+              <table v-else class="crew-table">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th class="right">Share</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in shipOwnership" :key="o.id">
+                    <td>{{ o.character_name }}</td>
+                    <td class="right">{{ o.percentage }}%</td>
+                    <td>
+                      <button class="btn-ghost btn-xs" @click="startEditOwnership(o)">Edit</button>
+                      <button class="btn-danger btn-xs" @click="removeOwnership(o)">Delete</button>
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td class="total-label">Total</td>
+                    <td class="right total-val">{{ ownershipTotal }}%</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+              <p v-if="ownershipError" class="form-error">{{ ownershipError }}</p>
+            </div>
+
           </template>
 
           <div v-else class="placeholder">Select a ship or create a new one</div>
@@ -362,6 +647,124 @@
                       :disabled="!newSkillName[p.id]?.trim()">Add</button>
             </form>
             <p v-if="skillError[p.id]" class="form-error">{{ skillError[p.id] }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <!-- ORGANIZATIONS TAB                                                    -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <section v-if="activeTab === 'organizations'" class="tab-pane">
+      <div class="col-header">
+        <h2>Organizations</h2>
+        <button class="btn-primary btn-sm" @click="showNewOrg = !showNewOrg">
+          {{ showNewOrg ? 'Cancel' : '+ New Organization' }}
+        </button>
+      </div>
+
+      <form v-if="showNewOrg" class="detail-form" @submit.prevent="submitNewOrg">
+        <div class="form-row">
+          <label>Name <span class="req">*</span></label>
+          <input v-model="newOrg.name" required placeholder="Spinward Traders' Guild" />
+        </div>
+        <div class="form-row two-col">
+          <div>
+            <label>Treasury (Cr)</label>
+            <input v-model.number="newOrg.treasuryCredits" type="number" min="0" />
+          </div>
+          <div>
+            <label>Dues Rate (Cr, flat)</label>
+            <input v-model.number="newOrg.duesRate" type="number" min="0" placeholder="Optional" />
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Notes</label>
+          <input v-model="newOrg.notes" placeholder="Optional" />
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary" :disabled="!newOrg.name.trim()">Create</button>
+        </div>
+        <p v-if="orgError" class="form-error">{{ orgError }}</p>
+      </form>
+
+      <div v-if="referee.loading" class="placeholder">Loading…</div>
+      <div v-else-if="!referee.organizations.length" class="placeholder">No organizations yet</div>
+
+      <div v-else class="player-list">
+        <div v-for="o in referee.organizations" :key="o.id" class="player-card">
+          <div class="player-card-header" @click="toggleOrg(o.id)">
+            <div class="player-identity">
+              <span class="player-name">{{ o.name }}</span>
+              <span class="ship-badge">Cr{{ o.treasury_credits.toLocaleString() }}</span>
+              <span v-if="o.dues_rate" class="ship-badge">Dues Cr{{ o.dues_rate.toLocaleString() }}</span>
+            </div>
+            <span class="expand-icon">{{ expandedOrgId === o.id ? '▲' : '▼' }}</span>
+          </div>
+
+          <div v-if="expandedOrgId === o.id" class="player-skills">
+            <form class="detail-form" @submit.prevent="submitEditOrg(o)">
+              <div class="form-row two-col">
+                <div>
+                  <label>Treasury (Cr)</label>
+                  <input v-model.number="orgEditFields[o.id].treasuryCredits" type="number" min="0" />
+                </div>
+                <div>
+                  <label>Dues Rate (Cr, flat)</label>
+                  <input v-model.number="orgEditFields[o.id].duesRate" type="number" min="0" placeholder="None" />
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-ghost btn-sm">Save</button>
+                <button type="button" class="btn-danger btn-sm" @click="removeOrg(o)">Delete Organization</button>
+              </div>
+            </form>
+
+            <h4>Officers</h4>
+            <table v-if="orgOfficers[o.id]?.length" class="skills-table">
+              <thead><tr><th>Player</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="off in orgOfficers[o.id]" :key="off.id">
+                  <td>{{ off.character_name }}</td>
+                  <td><button class="btn-danger btn-xs" @click="removeOrgOfficer(o.id, off)">Remove</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="placeholder sm">No officers</div>
+
+            <form class="add-skill-form" @submit.prevent="addOrgOfficer(o.id)">
+              <select v-model="newOfficerPlayerId[o.id]">
+                <option value="">— Select player —</option>
+                <option v-for="p in referee.players" :key="p.id" :value="p.id">{{ p.character_name }}</option>
+              </select>
+              <button type="submit" class="btn-ghost btn-sm" :disabled="!newOfficerPlayerId[o.id]">Add</button>
+            </form>
+            <p v-if="orgOfficerError[o.id]" class="form-error">{{ orgOfficerError[o.id] }}</p>
+
+            <h4>Member Ships</h4>
+            <table v-if="orgMembers[o.id]?.length" class="skills-table">
+              <thead><tr><th>Ship</th><th class="center">Owns Assets</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="m in orgMembers[o.id]" :key="m.id">
+                  <td>{{ m.ship_name }}</td>
+                  <td class="center">{{ m.owns_ship ? 'Yes' : 'No' }}</td>
+                  <td><button class="btn-danger btn-xs" @click="removeOrgMember(o.id, m)">Remove</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="placeholder sm">No ships in this organization</div>
+
+            <form class="add-skill-form" @submit.prevent="addOrgMember(o.id)">
+              <select v-model="newMemberShipId[o.id]">
+                <option value="">— Select ship —</option>
+                <option v-for="s in referee.ships" :key="s.id" :value="s.id">{{ s.name }}</option>
+              </select>
+              <label class="owns-check-label">
+                <input type="checkbox" v-model="newMemberOwnsShip[o.id]" /> Owns
+              </label>
+              <button type="submit" class="btn-ghost btn-sm" :disabled="!newMemberShipId[o.id]">Add</button>
+            </form>
+            <p v-if="orgMemberError[o.id]" class="form-error">{{ orgMemberError[o.id] }}</p>
           </div>
         </div>
       </div>
@@ -579,10 +982,11 @@ const tick   = useTickStore()
 const referee = useRefereeStore()
 
 const TABS = [
-  { key: 'ships',    label: 'Ships'    },
-  { key: 'players',  label: 'Players'  },
-  { key: 'events',   label: 'Events'   },
-  { key: 'campaign', label: 'Campaign' },
+  { key: 'ships',         label: 'Ships'         },
+  { key: 'players',       label: 'Players'       },
+  { key: 'organizations', label: 'Organizations' },
+  { key: 'events',        label: 'Events'        },
+  { key: 'campaign',      label: 'Campaign'      },
 ]
 
 const CREW_ROLES = ['captain', 'pilot', 'navigator', 'engineer', 'medic', 'steward', 'gunner', 'cargo-master', 'crew']
@@ -648,11 +1052,118 @@ const showAddCrew     = ref(false)
 const shipError       = ref('')
 const crewError       = ref('')
 
+const showSaveTemplate   = ref(false)
+const saveTemplateName   = ref('')
+const saveTemplateError  = ref('')
+const saveTemplateSuccess = ref('')
+
 const newCrewPlayerId = ref('')
 const newCrewRole     = ref('crew')
 
-const newShip = ref({ name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null, fuelCapacity: 0, fuelCurrent: 0 })
+const NEW_SHIP_DEFAULTS = {
+  name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0,
+  jumpRating: null, maneuverRating: null, staterooms: 0, lowBerths: 0,
+  fuelCapacity: 0, fuelCurrent: 0, marketValue: 0,
+}
+const newShip = ref({ ...NEW_SHIP_DEFAULTS })
 const editShipFields = ref({})
+
+const selectedTemplateId = ref('')   // '' = Custom Design
+
+function applyTemplate(templateId) {
+  if (!templateId) { newShip.value = { ...NEW_SHIP_DEFAULTS }; return }
+  const t = referee.templates.find(t => t.id === templateId)
+  if (!t) return
+  newShip.value = {
+    ...newShip.value,
+    hullType:      t.hull_type ?? '',
+    hullTons:      t.hull_tons,
+    cargoCapacity: t.cargo_capacity,
+    jumpRating:    t.jump_rating,
+    maneuverRating: t.maneuver_drive_rating,
+    staterooms:    t.stateroom_capacity,
+    lowBerths:     t.low_berth_capacity,
+    fuelCapacity:  t.fuel_capacity,
+    marketValue:   t.market_value,
+  }
+}
+
+// ── Manage Templates panel ────────────────────────────────────────────────
+const showManageTemplates = ref(false)
+const templateError       = ref('')
+const editingTemplateId   = ref(null)
+
+const TEMPLATE_DEFAULTS = {
+  name: '', hullType: '', hullTons: 200, cargoCapacity: 80,
+  jumpRating: null, maneuverRating: null, staterooms: 0, lowBerths: 0,
+  fuelCapacity: 0, marketValue: 0, notes: '',
+}
+const templateForm = ref({ ...TEMPLATE_DEFAULTS })
+
+function openManageTemplates() {
+  showManageTemplates.value = true
+  showNewShipForm.value     = false
+  selectedShipId.value      = null
+  templateError.value       = ''
+  editingTemplateId.value   = null
+  templateForm.value        = { ...TEMPLATE_DEFAULTS }
+}
+
+function closeManageTemplates() {
+  showManageTemplates.value = false
+}
+
+function startEditTemplate(t) {
+  editingTemplateId.value = t.id
+  templateForm.value = {
+    name: t.name, hullType: t.hull_type ?? '', hullTons: t.hull_tons,
+    cargoCapacity: t.cargo_capacity, jumpRating: t.jump_rating,
+    maneuverRating: t.maneuver_drive_rating, staterooms: t.stateroom_capacity,
+    lowBerths: t.low_berth_capacity, fuelCapacity: t.fuel_capacity,
+    marketValue: t.market_value, notes: t.notes ?? '',
+  }
+}
+
+function cancelEditTemplate() {
+  editingTemplateId.value = null
+  templateForm.value      = { ...TEMPLATE_DEFAULTS }
+}
+
+async function submitTemplateForm() {
+  templateError.value = ''
+  const f = templateForm.value
+  const payload = {
+    name: f.name, hullType: f.hullType, hullTons: f.hullTons, cargoCapacity: f.cargoCapacity,
+    jumpRating: f.jumpRating, maneuverRating: f.maneuverRating, staterooms: f.staterooms,
+    lowBerths: f.lowBerths, fuelCapacity: f.fuelCapacity, marketValue: f.marketValue, notes: f.notes,
+  }
+  try {
+    if (editingTemplateId.value) {
+      await referee.updateShipTemplate(editingTemplateId.value, {
+        name: f.name.trim(), hull_type: f.hullType || null, hull_tons: f.hullTons,
+        cargo_capacity: f.cargoCapacity, jump_rating: f.jumpRating || null,
+        maneuver_drive_rating: f.maneuverRating || null, stateroom_capacity: f.staterooms,
+        low_berth_capacity: f.lowBerths, fuel_capacity: f.fuelCapacity,
+        market_value: f.marketValue, notes: f.notes || null,
+      })
+    } else {
+      await referee.createShipTemplate(payload)
+    }
+    cancelEditTemplate()
+  } catch (e) {
+    templateError.value = e.message
+  }
+}
+
+async function removeTemplate(t) {
+  if (!confirm(`Delete template "${t.name}"?`)) return
+  templateError.value = ''
+  try {
+    await referee.deleteShipTemplate(t.id)
+  } catch (e) {
+    templateError.value = e.message
+  }
+}
 
 const selectedShip = computed(() => referee.ships.find(s => s.id === selectedShipId.value) ?? null)
 
@@ -697,14 +1208,165 @@ async function doRefundPassenger(manifest) {
   shipPassengers.value = shipPassengers.value.filter(p => p.id !== manifest.id)
 }
 
+const shipDebts     = ref([])
+const debtsLoading  = ref(false)
+const debtsError    = ref('')
+const showAddDebt   = ref(false)
+const editingDebtId = ref(null)
+
+const DEBT_DEFAULTS = { type: 'loan', creditorName: '', principal: 0, currentBalance: 0, dueTick: null, notes: '' }
+const debtForm       = ref({ ...DEBT_DEFAULTS })
+
+async function loadShipDebts(shipId) {
+  if (!shipId) { shipDebts.value = []; return }
+  debtsLoading.value = true
+  debtsError.value   = ''
+  const { data, error: err } = await api.get('/api/referee/ship-debts', { ship_id: shipId })
+  debtsLoading.value = false
+  if (err) { debtsError.value = err; return }
+  shipDebts.value = data ?? []
+}
+
+function openAddDebt() {
+  showAddDebt.value   = true
+  editingDebtId.value = null
+  debtForm.value      = { ...DEBT_DEFAULTS }
+}
+
+function startEditDebt(d) {
+  showAddDebt.value   = true
+  editingDebtId.value = d.id
+  debtForm.value = {
+    type: d.type, creditorName: d.creditor_name ?? '', principal: d.principal,
+    currentBalance: d.current_balance, dueTick: d.due_tick, notes: d.notes ?? '',
+  }
+}
+
+function cancelDebtForm() {
+  showAddDebt.value   = false
+  editingDebtId.value = null
+  debtForm.value      = { ...DEBT_DEFAULTS }
+}
+
+async function submitDebtForm() {
+  debtsError.value = ''
+  const f = debtForm.value
+  const payload = {
+    type: f.type, creditor_name: f.creditorName || null, principal: f.principal,
+    current_balance: f.currentBalance, due_tick: f.dueTick, notes: f.notes || null,
+  }
+  try {
+    if (editingDebtId.value) {
+      const { error: err } = await api.patch(`/api/referee/ship-debts/${editingDebtId.value}`, payload)
+      if (err) throw new Error(err)
+    } else {
+      const { error: err } = await api.post('/api/referee/ship-debts', {
+        ship_id: selectedShipId.value, ...payload,
+      })
+      if (err) throw new Error(err)
+    }
+    cancelDebtForm()
+    await loadShipDebts(selectedShipId.value)
+  } catch (e) {
+    debtsError.value = e.message
+  }
+}
+
+async function removeDebt(d) {
+  if (!confirm(`Delete debt "${d.creditor_name || d.type}"?`)) return
+  debtsError.value = ''
+  const { error: err } = await api.delete(`/api/referee/ship-debts/${d.id}`)
+  if (err) { debtsError.value = err; return }
+  shipDebts.value = shipDebts.value.filter(x => x.id !== d.id)
+}
+
+const shipOwnership      = ref([])
+const ownershipLoading   = ref(false)
+const ownershipError     = ref('')
+const showAddOwnership   = ref(false)
+const editingOwnershipId = ref(null)
+
+const OWNERSHIP_DEFAULTS = { playerId: '', percentage: 100 }
+const ownershipForm      = ref({ ...OWNERSHIP_DEFAULTS })
+
+const ownershipTotal = computed(() => shipOwnership.value.reduce((s, o) => s + o.percentage, 0))
+
+async function loadShipOwnership(shipId) {
+  if (!shipId) { shipOwnership.value = []; return }
+  ownershipLoading.value = true
+  ownershipError.value   = ''
+  const { data, error: err } = await api.get('/api/referee/ship-ownership', { ship_id: shipId })
+  ownershipLoading.value = false
+  if (err) { ownershipError.value = err; return }
+  shipOwnership.value = data ?? []
+}
+
+function openAddOwnership() {
+  showAddOwnership.value   = true
+  editingOwnershipId.value = null
+  ownershipForm.value      = { ...OWNERSHIP_DEFAULTS }
+}
+
+function cancelOwnershipForm() {
+  showAddOwnership.value   = false
+  editingOwnershipId.value = null
+  ownershipForm.value      = { ...OWNERSHIP_DEFAULTS }
+}
+
+function startEditOwnership(o) {
+  showAddOwnership.value   = true
+  editingOwnershipId.value = o.id
+  ownershipForm.value      = { playerId: o.player_id, percentage: o.percentage }
+}
+
+async function submitOwnershipForm() {
+  ownershipError.value = ''
+  try {
+    if (editingOwnershipId.value) {
+      const { error: err } = await api.patch(`/api/referee/ship-ownership/${editingOwnershipId.value}`, {
+        percentage: ownershipForm.value.percentage,
+      })
+      if (err) throw new Error(err)
+    } else {
+      const { error: err } = await api.post('/api/referee/ship-ownership', {
+        ship_id:    selectedShipId.value,
+        player_id:  ownershipForm.value.playerId,
+        percentage: ownershipForm.value.percentage,
+      })
+      if (err) throw new Error(err)
+    }
+    cancelOwnershipForm()
+    await loadShipOwnership(selectedShipId.value)
+  } catch (e) {
+    ownershipError.value = e.message
+  }
+}
+
+async function removeOwnership(o) {
+  if (!confirm(`Remove ${o.character_name}'s ${o.percentage}% share?`)) return
+  ownershipError.value = ''
+  const { error: err } = await api.delete(`/api/referee/ship-ownership/${o.id}`)
+  if (err) { ownershipError.value = err; return }
+  shipOwnership.value = shipOwnership.value.filter(x => x.id !== o.id)
+}
+
 function selectShip(id) {
   selectedShipId.value = id
   showNewShipForm.value = false
+  showManageTemplates.value = false
   editingShip.value     = false
   showAddCrew.value     = false
   shipError.value       = ''
   crewError.value       = ''
   shipPassengers.value  = []
+  showAddDebt.value      = false
+  editingDebtId.value    = null
+  showSaveTemplate.value    = false
+  saveTemplateName.value    = ''
+  saveTemplateError.value   = ''
+  saveTemplateSuccess.value = ''
+  showAddOwnership.value    = false
+  editingOwnershipId.value  = null
   if (selectedShip.value) {
     const s = selectedShip.value
     editShipFields.value = {
@@ -718,18 +1380,23 @@ function selectShip(id) {
       credits:           s.credits               ?? 0,
       jumpRating:        s.jump_rating           ?? null,
       maneuverRating:    s.maneuver_drive_rating ?? null,
+      marketValue:       s.market_value          ?? 0,
       currentWorld:      s.current_world         ?? '',
       currentSector:     s.current_sector        ?? '',
     }
   }
   loadShipPassengers(id)
+  loadShipDebts(id)
+  loadShipOwnership(id)
 }
 
 function openNewShip() {
-  showNewShipForm.value = true
-  selectedShipId.value  = null
-  shipError.value       = ''
-  newShip.value = { name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0, jumpRating: null, maneuverRating: null, fuelCapacity: 0, fuelCurrent: 0 }
+  showNewShipForm.value      = true
+  showManageTemplates.value  = false
+  selectedShipId.value       = null
+  shipError.value            = ''
+  selectedTemplateId.value   = ''
+  newShip.value = { ...NEW_SHIP_DEFAULTS }
 }
 
 function cancelNewShip() {
@@ -766,6 +1433,7 @@ async function submitEditShip() {
       credits:               editShipFields.value.credits,
       jump_rating:           editShipFields.value.jumpRating          || null,
       maneuver_drive_rating: editShipFields.value.maneuverRating      || null,
+      market_value:          editShipFields.value.marketValue         ?? 0,
       current_world:         newWorld,
       current_sector:        newSector,
     })
@@ -778,6 +1446,37 @@ async function submitEditShip() {
     }
   } catch (e) {
     shipError.value = e.message
+  }
+}
+
+async function submitSaveAsTemplate() {
+  saveTemplateError.value   = ''
+  saveTemplateSuccess.value = ''
+  const s = selectedShip.value
+  if (!s) return
+
+  try {
+    await referee.createShipTemplate({
+      name:           saveTemplateName.value,
+      hullType:       s.hull_type,
+      hullTons:       s.hull_tons,
+      cargoCapacity:  s.cargo_capacity,
+      jumpRating:     s.jump_rating,
+      maneuverRating: s.maneuver_drive_rating,
+      staterooms:     s.stateroom_capacity,
+      lowBerths:      s.low_berth_capacity,
+      fuelCapacity:   s.fuel_capacity,
+      marketValue:    s.market_value,
+      notes:          `Saved from ship "${s.name}"`,
+    })
+    saveTemplateSuccess.value = `Saved as template "${saveTemplateName.value.trim()}"`
+    saveTemplateName.value    = ''
+    setTimeout(() => {
+      showSaveTemplate.value    = false
+      saveTemplateSuccess.value = ''
+    }, 2000)
+  } catch (e) {
+    saveTemplateError.value = e.message
   }
 }
 
@@ -877,6 +1576,120 @@ async function deleteSkill(player, skillId) {
   } catch (e) {
     skillError.value[player.id] = e.message
   }
+}
+
+// ── Organizations tab state ──────────────────────────────────────────────────
+
+const showNewOrg = ref(false)
+const orgError   = ref('')
+const NEW_ORG_DEFAULTS = { name: '', treasuryCredits: 0, duesRate: null, notes: '' }
+const newOrg = ref({ ...NEW_ORG_DEFAULTS })
+
+const expandedOrgId     = ref(null)
+const orgEditFields     = ref({})   // { [orgId]: { treasuryCredits, duesRate } }
+const orgMembers        = ref({})   // { [orgId]: [...] }
+const newMemberShipId   = ref({})   // { [orgId]: shipId }
+const newMemberOwnsShip = ref({})   // { [orgId]: bool }
+const orgMemberError    = ref({})   // { [orgId]: string }
+const orgOfficers        = ref({})   // { [orgId]: [...] }
+const newOfficerPlayerId = ref({})   // { [orgId]: playerId }
+const orgOfficerError    = ref({})   // { [orgId]: string }
+
+async function submitNewOrg() {
+  orgError.value = ''
+  try {
+    await referee.createOrganization(newOrg.value)
+    showNewOrg.value = false
+    newOrg.value = { ...NEW_ORG_DEFAULTS }
+  } catch (e) {
+    orgError.value = e.message
+  }
+}
+
+async function toggleOrg(orgId) {
+  if (expandedOrgId.value === orgId) { expandedOrgId.value = null; return }
+  expandedOrgId.value = orgId
+  const org = referee.organizations.find(o => o.id === orgId)
+  orgEditFields.value[orgId] = { treasuryCredits: org.treasury_credits, duesRate: org.dues_rate }
+  await Promise.all([loadOrgMembers(orgId), loadOrgOfficers(orgId)])
+}
+
+async function loadOrgMembers(orgId) {
+  const { data, error: err } = await api.get(`/api/organizations/${orgId}/members`)
+  if (err) { orgMemberError.value[orgId] = err; return }
+  orgMembers.value[orgId] = data ?? []
+}
+
+async function loadOrgOfficers(orgId) {
+  const { data, error: err } = await api.get(`/api/organizations/${orgId}/officers`)
+  if (err) { orgOfficerError.value[orgId] = err; return }
+  orgOfficers.value[orgId] = data ?? []
+}
+
+async function submitEditOrg(o) {
+  orgError.value = ''
+  try {
+    await referee.updateOrganization(o.id, {
+      treasury_credits: orgEditFields.value[o.id].treasuryCredits,
+      dues_rate:        orgEditFields.value[o.id].duesRate,
+    })
+  } catch (e) {
+    orgError.value = e.message
+  }
+}
+
+async function removeOrg(o) {
+  if (!confirm(`Delete organization "${o.name}"?`)) return
+  try {
+    await referee.deleteOrganization(o.id)
+    if (expandedOrgId.value === o.id) expandedOrgId.value = null
+  } catch (e) {
+    orgError.value = e.message
+  }
+}
+
+async function addOrgMember(orgId) {
+  orgMemberError.value[orgId] = ''
+  try {
+    const { data, error: err } = await api.post(`/api/organizations/${orgId}/members`, {
+      ship_id:   newMemberShipId.value[orgId],
+      owns_ship: !!newMemberOwnsShip.value[orgId],
+    })
+    if (err) throw new Error(err)
+    orgMembers.value[orgId] = [...(orgMembers.value[orgId] ?? []), data]
+    newMemberShipId.value[orgId]   = ''
+    newMemberOwnsShip.value[orgId] = false
+  } catch (e) {
+    orgMemberError.value[orgId] = e.message
+  }
+}
+
+async function removeOrgMember(orgId, m) {
+  if (!confirm(`Remove ${m.ship_name} from this organization?`)) return
+  const { error: err } = await api.delete(`/api/organizations/${orgId}/members/${m.id}`)
+  if (err) { orgMemberError.value[orgId] = err; return }
+  orgMembers.value[orgId] = orgMembers.value[orgId].filter(x => x.id !== m.id)
+}
+
+async function addOrgOfficer(orgId) {
+  orgOfficerError.value[orgId] = ''
+  try {
+    const { data, error: err } = await api.post(`/api/organizations/${orgId}/officers`, {
+      player_id: newOfficerPlayerId.value[orgId],
+    })
+    if (err) throw new Error(err)
+    orgOfficers.value[orgId] = [...(orgOfficers.value[orgId] ?? []), data]
+    newOfficerPlayerId.value[orgId] = ''
+  } catch (e) {
+    orgOfficerError.value[orgId] = e.message
+  }
+}
+
+async function removeOrgOfficer(orgId, off) {
+  if (!confirm(`Remove ${off.character_name} as an officer of this organization?`)) return
+  const { error: err } = await api.delete(`/api/organizations/${orgId}/officers/${off.player_id}`)
+  if (err) { orgOfficerError.value[orgId] = err; return }
+  orgOfficers.value[orgId] = orgOfficers.value[orgId].filter(x => x.id !== off.id)
 }
 
 // ── Events tab state ─────────────────────────────────────────────────────────
@@ -998,6 +1811,8 @@ onMounted(async () => {
   if (!auth.isReferee) { router.push({ name: 'map' }); return }
   await referee.loadShips(auth.campaign.id)
   await referee.loadPlayers(auth.campaign.id)
+  await referee.loadShipTemplates()
+  await referee.loadOrganizations()
 })
 </script>
 
@@ -1085,6 +1900,21 @@ onMounted(async () => {
   margin-bottom: 0.75rem;
 }
 .col-header h2, .col-header h3 { margin: 0; font-size: 0.95rem; }
+
+.col-header-actions { display: flex; gap: 0.5rem; }
+
+.template-form-heading {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.hint-note {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0.5rem 0 0;
+}
 
 .ship-list { list-style: none; margin: 0; padding: 0; }
 .ship-item {
@@ -1203,6 +2033,9 @@ onMounted(async () => {
 }
 
 .crew-table .center { text-align: center; }
+.right { text-align: right; }
+.total-label { color: var(--text-dim); font-size: 0.72rem; }
+.total-val   { font-weight: 600; color: var(--accent); }
 
 .trade-check {
   width: 1rem;
@@ -1298,6 +2131,16 @@ onMounted(async () => {
   padding: 0.3rem 0.5rem;
 }
 .add-skill-form input:first-child { flex: 1; }
+.add-skill-form select { flex: 1; }
+
+.owns-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 
 /* ── Events tab ──────────────────────────────────────────────────────────── */
 

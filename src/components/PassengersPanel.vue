@@ -63,17 +63,9 @@
 
           <div class="form-row">
             <label>Destination World</label>
-            <input v-model="form.destWorldName" placeholder="World name (optional)" class="dest-input" />
-          </div>
-          <div class="form-row two-col">
-            <div>
-              <label>Hex</label>
-              <input v-model="form.destWorldHex" placeholder="e.g. 1910" maxlength="4" />
-            </div>
-            <div>
-              <label>Sector</label>
-              <input v-model="form.destSector" placeholder="Spinward Marches" />
-            </div>
+            <WorldPicker
+              v-model="destWorld"
+              :sector-name="props.sectorName" />
           </div>
 
           <!-- Fare preview -->
@@ -103,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
@@ -113,6 +105,8 @@ import {
   passengerFare,
   passageCapacityNeeded,
 } from '../lib/passengers.js'
+import { hexDistance }   from '../utils/hexDistance.js'
+import WorldPicker       from './WorldPicker.vue'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -126,12 +120,19 @@ const tick = useTickStore()
 const tradeRules = computed(() => auth.campaign?.trade_rules ?? 'CT7')
 
 const form = ref({
-  passageType:  'high',
-  count:         1,
-  parsecs:       1,
-  destWorldName: '',
-  destWorldHex:  '',
-  destSector:    '',
+  passageType: 'high',
+  count:        1,
+  parsecs:      1,
+})
+
+const destWorld = ref({ hex: '', name: '', sector: '' })
+
+// Auto-compute parsecs from hex distance when a world is picked (used for T5 fares)
+watch(() => destWorld.value.hex, (hex) => {
+  if (hex && props.world?.Hex) {
+    const d = hexDistance(props.world.Hex, hex)
+    if (d > 0) form.value.parsecs = d
+  }
 })
 
 const formError  = ref('')
@@ -151,8 +152,8 @@ const maxCount = computed(() => {
 const canBook = computed(() => {
   if (!ship.hasShip) return false
   if (form.value.count < 1) return false
-  if (!form.value.destWorldHex.trim()) return false
-  if (!form.value.destSector.trim()) return false
+  if (!destWorld.value.hex.trim()) return false
+  if (!destWorld.value.sector.trim()) return false
   const { stateroomsNeeded, lowBerthsNeeded } = passageCapacityNeeded(form.value.passageType, form.value.count)
   if (stateroomsNeeded > ship.stateroomsAvailable) return false
   if (lowBerthsNeeded  > ship.lowBerthsAvailable)  return false
@@ -185,9 +186,9 @@ async function submitBooking() {
     embarkWorldHex:   props.world?.Hex ?? '',
     embarkSector:     props.sectorName,
     embarkWorldName:  props.world?.Name ?? '',
-    destWorldHex:     form.value.destWorldHex.trim(),
-    destSector:       form.value.destSector.trim(),
-    destWorldName:    form.value.destWorldName.trim(),
+    destWorldHex:     destWorld.value.hex,
+    destSector:       destWorld.value.sector,
+    destWorldName:    destWorld.value.name,
     farePerHead,
     fareTotal,
     tick:             tick.currentTick,
@@ -199,10 +200,9 @@ async function submitBooking() {
   }
 
   successMsg.value = `Booked ${form.value.count}× ${PASSAGE_TYPE_LABELS[form.value.passageType]} — Cr${fareTotal.toLocaleString()} collected`
-  form.value.count        = 1
-  form.value.destWorldName = ''
-  form.value.destWorldHex  = ''
-  form.value.destSector    = ''
+  form.value.count   = 1
+  form.value.parsecs = 1
+  destWorld.value    = { hex: '', name: '', sector: '' }
   setTimeout(() => { successMsg.value = '' }, 3500)
 }
 
@@ -280,7 +280,6 @@ function decCount() { if (form.value.count > 1) form.value.count-- }
 .stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
 .count-input  { width: 52px; text-align: center; }
 .parsec-input { width: 60px; }
-.dest-input   { width: 100%; }
 
 .fare-preview {
   display: flex;

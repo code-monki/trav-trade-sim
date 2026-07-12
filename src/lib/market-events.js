@@ -373,6 +373,7 @@ export function maybeGenerateEvent({ world, sectorName, campaignId, tick }) {
  */
 export function activeEventsForWorld(allEvents, worldHex, tick, worldSector) {
   return allEvents.filter(ev => {
+    if (ev.tick > tick) return false
     if (ev.expires_tick !== null && ev.expires_tick <= tick) return false
     if (ev.scope === 'subsector') return !ev.sector || ev.sector === worldSector
     return ev.world_hex === worldHex

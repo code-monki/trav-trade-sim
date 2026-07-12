@@ -163,6 +163,15 @@ MapView.onMounted()
 
 ### 4.3 Market Snapshot Flow
 
+Event and price generation are lazy — deterministic seeding (campaign + world
++ tick) means it doesn't matter *when* a tick's data is computed, only that it
+eventually is, so a world's data is only generated the first time someone
+actually looks at it for a given tick. To keep that cheap for a whole sector
+of mostly-unvisited worlds, `ensureWorldSnapshot` also gap-fills — not just a
+world's very first visit, but *any* gap since it was last snapshotted,
+replaying skipped ticks in order so events with multi-tick durations are
+correctly still "active" for the ticks that follow them.
+
 ```
 User selects world → MarketTable.loadSnapshots()
   └─► tick.ensureWorldSnapshot(world, sector)
@@ -170,11 +179,20 @@ User selects world → MarketTable.loadSnapshots()
         │     └─► Yes: return worldSnapshots (no network call)
         ├─► GET /api/campaigns/:id/snapshots?world_hex=&sector=&tick=
         │     └─► Rows exist: cache + return
-        └─► No rows:
-              ├─► maybeGenerateEvent() — seeded RNG → POST /api/campaigns/:id/events (check_duplicate)
-              ├─► Check prior visits: GET /api/campaigns/:id/snapshots/prior-count
-              │     └─► If none: backfill yearStartTick..currentTick
-              ├─► generateWorldSnapshot() — pure JS, 36 rows
+        └─► No rows for the current tick:
+              ├─► maybeInsertEvent(world, sector, currentTick) — seeded RNG →
+              │     POST /api/campaigns/:id/events (check_duplicate)
+              ├─► loadActiveEvents() — refresh so this tick's own price gen sees it
+              ├─► GET /api/campaigns/:id/snapshots/last-tick?world_hex=&sector=
+              │     └─► backfillStart = max(yearStartTick, lastTick + 1)
+              ├─► If backfillStart < currentTick — gap-fill loop, ascending tick:
+              │     ├─► GET /api/campaigns/:id/events?world_hex=&sector= (seed event pool, once)
+              │     ├─► per tick t: maybeInsertEvent(t) → append to pool if fired
+              │     ├─► activeEventsForWorld(pool, ..., t, ...) → generateWorldSnapshot(t)
+              │     ├─► POST /api/campaigns/:id/snapshots (batch insert, once at the end)
+              │     └─► for each t crossing a month/year boundary:
+              │           POST /api/campaigns/:id/rollup-repair { tick: t }
+              ├─► generateWorldSnapshot() — pure JS, 36 rows, for the current tick
               ├─► POST /api/campaigns/:id/snapshots (batch insert)
               └─► cache + return
 ```
@@ -192,7 +210,17 @@ Referee clicks "Advance Tick"
               └─► Returns { tick, year, day }
         └─► Invalidate worldSnapshots cache
         └─► tick.loadActiveEvents()
+  └─► MapView.doAdvanceTick() also calls tick.ensureWorldSnapshot() for the
+        currently-selected world, so its event (if any) fires immediately
+        rather than waiting for a separate visit.
 ```
+
+Rollup here runs immediately against whatever `market_snapshots` rows exist
+*right now* — if a world's data for the just-completed month hasn't been
+lazily generated yet, the rollup finds nothing and doesn't retry. This is
+repaired later, if that world is eventually visited, by the
+`POST /rollup-repair` step in §4.3 (the rollup SQL is `ON CONFLICT DO UPDATE`,
+so re-running it against now-complete data is safe).
 
 ### 4.5 Buy/Sell Flow
 

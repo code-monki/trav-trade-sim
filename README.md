@@ -95,4 +95,9 @@ d1/
   schema.sql             # Full D1 (SQLite) schema
   002_sessions.sql       # Sessions table migration
   003_crew_stateroom.sql # has_stateroom column on crew
+  004_obligations.sql    # Unifies mail_contracts + passenger_manifests into obligations
+  005_ship_templates.sql # ship_templates table + ships.market_value
+  006_ship_debts.sql     # ship_debts + debt_payments tables
+  007_ownership.sql      # ship_ownership + organizations + organization_members tables
+  008_org_officers.sql   # organization_officers table (multi-officer authorization)
 ```

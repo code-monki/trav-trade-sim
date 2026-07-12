@@ -15,8 +15,8 @@
         >{{ r.label }}</button>
       </div>
 
-      <!-- ── Time scope filter ─────────────────────────────────────── -->
-      <div class="scope-row">
+      <!-- ── Time scope filter (not applicable to Debts/Net Worth — live snapshots) ── -->
+      <div v-if="report !== 'debts' && report !== 'networth'" class="scope-row">
         <button :class="['scope-btn', { active: scopeMode === 'all' }]" @click="setAllTime">All Time</button>
         <button :class="['scope-btn', { active: scopeMode === 'year' }]" @click="setYearRange">Year Range</button>
         <template v-if="scopeMode === 'year'">
@@ -156,6 +156,108 @@
           </div>
         </div>
       </template>
+
+      <!-- ── Debts ─────────────────────────────────────────────────── -->
+      <template v-if="report === 'debts'">
+        <div v-if="debtsLoading" class="placeholder">Loading…</div>
+        <div v-else-if="!debtsRows.length" class="placeholder">No debts recorded</div>
+        <template v-else>
+          <div v-if="!ship.canTrade" class="trade-auth-notice">
+            You are not authorized to make payments. Ask your referee to grant trading rights.
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Creditor</th>
+                <th class="right">Principal</th>
+                <th class="right">Balance</th>
+                <th>Due</th>
+                <th class="right">Pay</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="d in debtsRows" :key="d.id">
+                <td>{{ DEBT_TYPE_LABEL[d.type] ?? d.type }}</td>
+                <td>{{ d.creditor_name || '—' }}</td>
+                <td class="right mono">Cr{{ d.principal.toLocaleString() }}</td>
+                <td class="right mono">Cr{{ d.current_balance.toLocaleString() }}</td>
+                <td>{{ d.due_tick != null ? formatImperialDate(d.due_tick) : '—' }}</td>
+                <td class="right">
+                  <div v-if="d.current_balance > 0" class="pay-row">
+                    <input v-model.number="payAmount[d.id]" type="number" min="1" :max="d.current_balance"
+                           class="pay-input" placeholder="0" :disabled="!ship.canTrade" />
+                    <button class="pay-btn" :disabled="!ship.canTrade || ship.loading || !payAmount[d.id]"
+                            @click="submitPayment(d)">Pay</button>
+                  </div>
+                  <span v-else class="paid-off">Paid off</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="payError" class="form-error">{{ payError }}</p>
+        </template>
+      </template>
+
+      <!-- ── Net Worth ─────────────────────────────────────────────── -->
+      <template v-if="report === 'networth'">
+        <div v-if="debtsLoading" class="placeholder">Loading…</div>
+        <div v-else class="income-breakdown">
+          <div class="breakdown-section">
+            <div class="breakdown-heading">Assets</div>
+            <div class="breakdown-row">
+              <span class="breakdown-label">Credits</span>
+              <span class="breakdown-val pos mono">Cr{{ shipCredits.toLocaleString() }}</span>
+            </div>
+            <div class="breakdown-row">
+              <span class="breakdown-label">Ship Value</span>
+              <span class="breakdown-val pos mono">Cr{{ shipMarketValue.toLocaleString() }}</span>
+            </div>
+            <div class="breakdown-row">
+              <span class="breakdown-label">Cargo Value (at cost)</span>
+              <span class="breakdown-val pos mono">Cr{{ cargoValue.toLocaleString() }}</span>
+            </div>
+          </div>
+
+          <div class="breakdown-section">
+            <div class="breakdown-heading">Liabilities</div>
+            <div v-if="!debtsRows.length" class="breakdown-row muted">
+              <span class="breakdown-label">—</span>
+              <span class="breakdown-val mono">Cr0</span>
+            </div>
+            <div v-for="d in debtsRows" :key="d.id" class="breakdown-row">
+              <span class="breakdown-label">{{ DEBT_TYPE_LABEL[d.type] ?? d.type }} — {{ d.creditor_name || 'Unnamed' }}</span>
+              <span class="breakdown-val neg mono">-Cr{{ d.current_balance.toLocaleString() }}</span>
+            </div>
+            <div class="breakdown-row subtotal">
+              <span class="breakdown-label">Total Debt</span>
+              <span class="breakdown-val neg mono">-Cr{{ totalDebt.toLocaleString() }}</span>
+            </div>
+          </div>
+
+          <div v-if="ownershipRows.length" class="breakdown-section">
+            <div class="breakdown-heading">Ownership</div>
+            <div v-for="o in ownershipRows" :key="o.id" class="breakdown-row">
+              <span class="breakdown-label">{{ o.character_name }}</span>
+              <span class="breakdown-val mono">{{ o.percentage }}%</span>
+            </div>
+          </div>
+
+          <div class="breakdown-net">
+            <span class="breakdown-label">Net Worth</span>
+            <span :class="['breakdown-val', 'mono', 'net', netWorth >= 0 ? 'pos' : 'neg']">
+              {{ netWorth >= 0 ? '' : '-' }}Cr{{ Math.abs(netWorth).toLocaleString() }}
+            </span>
+          </div>
+
+          <div v-if="ownershipRows.length" class="breakdown-net">
+            <span class="breakdown-label">Your Share ({{ myPercentage }}%)</span>
+            <span :class="['breakdown-val', 'mono', 'net', myShare >= 0 ? 'pos' : 'neg']">
+              {{ myShare >= 0 ? '' : '-' }}Cr{{ Math.abs(myShare).toLocaleString() }}
+            </span>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -164,18 +266,24 @@
 import { ref, computed, watch } from 'vue'
 import { useShipStore } from '../stores/ship.js'
 import { useTickStore } from '../stores/tick.js'
+import { useAuthStore } from '../stores/auth.js'
 import { api } from '../lib/api.js'
 import { formatImperialDate } from '../lib/market-tick.js'
 import { yearToTickRange } from '../lib/reports.js'
 
 const ship = useShipStore()
 const tick = useTickStore()
+const auth = useAuthStore()
 
 const REPORTS = [
-  { key: 'ledger', label: 'Ledger' },
-  { key: 'trades', label: 'Trades' },
-  { key: 'income', label: 'Income' },
+  { key: 'ledger',   label: 'Ledger'    },
+  { key: 'trades',   label: 'Trades'    },
+  { key: 'income',   label: 'Income'    },
+  { key: 'debts',    label: 'Debts'     },
+  { key: 'networth', label: 'Net Worth' },
 ]
+
+const DEBT_TYPE_LABEL = { mortgage: 'Mortgage', loan: 'Loan', obligation: 'Obligation' }
 
 const TYPE_LABEL = {
   buy:              'Buy',
@@ -219,6 +327,13 @@ const tradesLoading = ref(false)
 
 const incomeLoading = ref(false)
 const byType        = ref({})
+
+const debtsRows     = ref([])
+const debtsLoading  = ref(false)
+const payAmount     = ref({})
+const payError      = ref('')
+
+const ownershipRows = ref([])
 
 function tickFilter() {
   if (scopeMode.value === 'all') return null
@@ -276,7 +391,34 @@ async function loadIncome() {
 async function reload() {
   if (report.value === 'ledger') await loadLedger()
   else if (report.value === 'trades') await loadTrades()
-  else await loadIncome()
+  else if (report.value === 'income') await loadIncome()
+  else if (report.value === 'networth') { await loadDebts(); await loadOwnership() }
+  else await loadDebts()   // 'debts'
+}
+
+async function loadDebts() {
+  if (!ship.ship?.id) return
+  debtsLoading.value = true
+  const { data } = await api.get('/api/reports/debts', { ship_id: ship.ship.id })
+  debtsRows.value = data ?? []
+  debtsLoading.value = false
+}
+
+async function loadOwnership() {
+  if (!ship.ship?.id) return
+  const { data } = await api.get('/api/reports/ownership', { ship_id: ship.ship.id })
+  ownershipRows.value = data ?? []
+}
+
+async function submitPayment(debt) {
+  payError.value = ''
+  const amount = payAmount.value[debt.id]
+  const result = await ship.payDebt({
+    campaignId: auth.campaign.id, debtId: debt.id, amount, tick: tick.currentTick,
+  })
+  if (!result.ok) { payError.value = result.error; return }
+  debtsRows.value = debtsRows.value.map(d => d.id === debt.id ? result.debt : d)
+  payAmount.value[debt.id] = null
 }
 
 async function loadMoreLedger() {
@@ -325,6 +467,36 @@ const expenseRows = computed(() =>
 const totalIncome   = computed(() => incomeRows.value.reduce((s, r) => s + r.amount, 0))
 const totalExpenses = computed(() => expenseRows.value.reduce((s, r) => s + r.amount, 0))
 const netPosition   = computed(() => totalIncome.value + totalExpenses.value)
+
+// ── Net Worth ──────────────────────────────────────────────────────────────────
+// Cargo is valued at cost (purchase price), not live market price — this panel
+// has no world context (unlike CargoHold.vue's per-market "Est. Hold Value"),
+// and net worth should be a stable snapshot rather than swing with whatever
+// world was last viewed.
+
+const shipCredits     = computed(() => ship.ship?.credits      ?? 0)
+const shipMarketValue = computed(() => ship.ship?.market_value ?? 0)
+const cargoValue      = computed(() => ship.cargo.reduce((sum, item) => sum + item.purchase_price * item.tons, 0))
+const totalDebt       = computed(() => debtsRows.value.reduce((sum, d) => sum + d.current_balance, 0))
+const netWorth        = computed(() =>
+  shipCredits.value + shipMarketValue.value + cargoValue.value - totalDebt.value)
+
+// If the current player has their own explicit ship_ownership row, use it.
+// Otherwise they're the implicit/default owner of whatever isn't explicitly
+// carved out — 100% minus other players' recorded shares (not a flat 100%
+// regardless of other rows, which would silently overstate a partner-owned
+// ship's "your share" for whoever happens to be crewing it). A ship with no
+// ownership rows at all behaves exactly as before the feature existed: 100%.
+// Every component of net worth scales together for a partner's personal
+// share — none of it is "theirs" any more than any other part, unlike the
+// gap-analysis doc's original draft formula which only scaled ship value.
+const myPercentage = computed(() => {
+  const mine = ownershipRows.value.find(o => o.player_id === auth.player?.id)
+  if (mine) return mine.percentage
+  const othersTotal = ownershipRows.value.reduce((s, o) => s + o.percentage, 0)
+  return Math.max(0, 100 - othersTotal)
+})
+const myShare = computed(() => Math.round(netWorth.value * myPercentage.value / 100))
 </script>
 
 <style scoped>
@@ -534,5 +706,60 @@ const netPosition   = computed(() => totalIncome.value + totalExpenses.value)
   font-style: italic;
   padding: 1.5rem 0;
   text-align: center;
+}
+
+/* ── Debts ────────────────────────────────────────────────────────────────── */
+
+.trade-auth-notice {
+  font-size: 0.8rem;
+  color: var(--amber);
+  background: rgba(232, 160, 32, 0.07);
+  border: 1px solid rgba(232, 160, 32, 0.3);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-error {
+  font-size: 0.78rem;
+  color: var(--red, #f87171);
+  margin: 0.5rem 0 0;
+}
+
+.pay-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.pay-input {
+  width: 90px;
+  background: var(--bg-input, var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.pay-btn {
+  background: var(--accent-dim);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pay-btn:hover:not(:disabled) { background: var(--accent); }
+.pay-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.paid-off {
+  color: var(--green, #34d399);
+  font-size: 0.78rem;
+  font-style: italic;
 }
 </style>

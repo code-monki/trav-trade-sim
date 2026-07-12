@@ -2,7 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../lib/api.js'
 import { useAuthStore } from './auth.js'
-import { generateWorldSnapshot, tickToCalendar, formatImperialDate, TICKS_PER_YEAR } from '../lib/market-tick.js'
+import {
+  generateWorldSnapshot, tickToCalendar, formatImperialDate,
+  TICKS_PER_YEAR, shouldRollupMonth, shouldRollupYear,
+} from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
 
 export const useTickStore = defineStore('tick', () => {
@@ -90,21 +93,24 @@ export const useTickStore = defineStore('tick', () => {
     activeEvents.value = data ?? []
   }
 
-  async function maybeInsertEvent(world, sectorName) {
+  // Rolls (and inserts, if not already present) the deterministic event for
+  // one world at one specific tick — current or historical (backfill).
+  // Returns the event row if one fired, else null.
+  async function maybeInsertEvent(world, sectorName, tick) {
     const campaignId = auth.campaign?.id
-    if (!campaignId) return
+    if (!campaignId) return null
 
-    const ev = maybeGenerateEvent({ world, sectorName, campaignId, tick: currentTick.value })
-    if (!ev) return
+    const ev = maybeGenerateEvent({ world, sectorName, campaignId, tick })
+    if (!ev) return null
 
     // Check for an existing event at the same (campaign, tick, world_hex) first
     const { data: dupCheck } = await api.post(`/api/campaigns/${campaignId}/events`, {
       ...ev, check_duplicate: true,
     })
-    if (dupCheck?.count > 0) return
+    if (dupCheck?.count > 0) return ev
 
-    await api.post(`/api/campaigns/${campaignId}/events`, ev)
-    await loadActiveEvents()
+    const { data: inserted } = await api.post(`/api/campaigns/${campaignId}/events`, ev)
+    return inserted ?? ev
   }
 
   // ── World snapshot ─────────────────────────────────────────────────────────
@@ -130,26 +136,57 @@ export const useTickStore = defineStore('tick', () => {
       })
 
       if (!(countData?.count > 0)) {
-        // Maybe fire a market event first (affects prices below)
-        await maybeInsertEvent(world, sectorName)
+        // Maybe fire a market event first (affects prices below), then
+        // refresh the cached active-events list so this tick's own price
+        // generation sees it.
+        await maybeInsertEvent(world, sectorName, currentTick.value)
+        await loadActiveEvents()
 
-        // Check if any prior snapshots exist for backfill decision
-        const { data: priorData } = await api.get(`/api/campaigns/${campaignId}/snapshots/prior-count`, {
+        // Fill any gap since this world was last snapshotted — not just its
+        // very first visit. Deterministic seeding means replaying skipped
+        // ticks (events + prices) reproduces exactly what would have
+        // happened, however long ago the gap started.
+        const { data: lastTickData } = await api.get(`/api/campaigns/${campaignId}/snapshots/last-tick`, {
           world_hex: world.Hex,
           sector:    sectorName,
         })
 
         const yearStartTick = Math.floor(currentTick.value / TICKS_PER_YEAR) * TICKS_PER_YEAR
+        const lastTick       = lastTickData?.lastTick
+        const backfillStart  = Math.max(yearStartTick, lastTick == null ? yearStartTick : lastTick + 1)
 
-        if (!(priorData?.count > 0) && currentTick.value > yearStartTick) {
-          const backfillRows = []
-          for (let t = yearStartTick; t < currentTick.value; t++) {
+        if (backfillStart < currentTick.value) {
+          // Seed the local event pool with this world's known history
+          // (local + subsector events) so backfilled ticks correctly see
+          // events that started before the gap.
+          const { data: knownEvents } = await api.get(`/api/campaigns/${campaignId}/events`, {
+            world_hex: world.Hex,
+            sector:    sectorName,
+          })
+          let eventPool = knownEvents ?? []
+
+          const backfillRows      = []
+          const boundariesToRepair = []
+
+          for (let t = backfillStart; t < currentTick.value; t++) {
+            const newEvent = await maybeInsertEvent(world, sectorName, t)
+            if (newEvent && !eventPool.some(e => e.tick === newEvent.tick && e.world_hex === newEvent.world_hex && e.description === newEvent.description)) {
+              eventPool = [...eventPool, newEvent]
+            }
+
+            const activeAtT = activeEventsForWorld(eventPool, world.Hex, t, sectorName)
             backfillRows.push(...generateWorldSnapshot({
-              world, sectorName, campaignId, tick: t, activeEvents: [],
+              world, sectorName, campaignId, tick: t, activeEvents: activeAtT,
             }))
+
+            if (shouldRollupMonth(t) || shouldRollupYear(t)) boundariesToRepair.push(t)
           }
+
           if (backfillRows.length) {
             await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows: backfillRows })
+          }
+          for (const t of boundariesToRepair) {
+            await api.post(`/api/campaigns/${campaignId}/rollup-repair`, { tick: t })
           }
         }
 

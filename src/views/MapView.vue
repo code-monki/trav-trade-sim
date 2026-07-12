@@ -347,6 +347,13 @@
           </div>
         </template>
 
+        <!-- ── Ship: Organizations tab ───────────────────────────────────── -->
+        <template v-if="topTab === 'ship' && shipTab === 'organizations'">
+          <div class="subtab-wrap">
+            <OrganizationsPanel />
+          </div>
+        </template>
+
         <!-- ── Events tab ────────────────────────────────────────────────── -->
         <template v-if="topTab === 'events'">
           <div class="events-tab-wrap">
@@ -407,6 +414,7 @@ import PassengersPanel  from '../components/PassengersPanel.vue'
 import ShipServices     from '../components/ShipServices.vue'
 import AboardPanel  from '../components/AboardPanel.vue'
 import ReportsPanel from '../components/ReportsPanel.vue'
+import OrganizationsPanel from '../components/OrganizationsPanel.vue'
 import { useShipStore } from '../stores/ship.js'
 
 const map    = useMapStore()
@@ -449,9 +457,10 @@ const PORT_TABS = [
 ]
 
 const SHIP_TABS = [
-  { key: 'cargo',   label: 'Cargo'   },
-  { key: 'aboard',  label: 'Aboard'  },
-  { key: 'reports', label: 'Reports' },
+  { key: 'cargo',         label: 'Cargo'         },
+  { key: 'aboard',        label: 'Aboard'        },
+  { key: 'reports',       label: 'Reports'       },
+  { key: 'organizations', label: 'Organizations' },
 ]
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
@@ -627,6 +636,22 @@ async function onBuyConfirm({ tons }) {
 
 async function doAdvanceTick() {
   await tick.advanceTick()
+
+  // Event generation is lazy (tied to fetching a world's market snapshot) so
+  // deterministic rolls stay cheap for a whole sector of mostly-unvisited
+  // worlds. Force it for the world currently on screen so its event (if any)
+  // fired for the new tick is visible immediately, without an extra manual
+  // trip through the Port tab first.
+  if (map.selectedWorld) {
+    await tick.ensureWorldSnapshot(map.selectedWorld, map.selectedSectorName)
+
+    // Explicit refresh, in this exact order, rather than a reactive watcher
+    // on tick.currentTick in EventsHistory itself — a watcher there would
+    // fire as soon as advanceTick() bumps currentTick, racing ahead of the
+    // ensureWorldSnapshot call above and reading the DB before this tick's
+    // event has actually been generated/inserted.
+    await tick.loadWorldEventHistory(map.selectedWorld.Hex, map.selectedSectorName)
+  }
 }
 
 function doLogout() {

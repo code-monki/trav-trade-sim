@@ -103,19 +103,20 @@ app.get('/:id/snapshots', requireAuth, async (c) => {
   return c.json({ data: results ?? [] })
 })
 
-// ── GET /api/campaigns/:id/snapshots/prior-count ──────────────────────────────
-// Checks if any snapshots exist for a world across all ticks (first-visit backfill)
-app.get('/:id/snapshots/prior-count', requireAuth, async (c) => {
+// ── GET /api/campaigns/:id/snapshots/last-tick ────────────────────────────────
+// Last recorded snapshot tick for a world, or null if never visited — used to
+// determine how far back a gap-fill backfill needs to run.
+app.get('/:id/snapshots/last-tick', requireAuth, async (c) => {
   const session             = c.var.session
   const { id }              = c.req.param()
   const { world_hex, sector } = c.req.query()
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const row = await c.env.DB.prepare(
-    `SELECT COUNT(*) as cnt FROM market_snapshots WHERE campaign_id = ? AND world_hex = ? AND sector = ?`
+    `SELECT MAX(tick) as lastTick FROM market_snapshots WHERE campaign_id = ? AND world_hex = ? AND sector = ?`
   ).bind(id, world_hex, sector).first()
 
-  return c.json({ data: { count: row?.cnt ?? 0 } })
+  return c.json({ data: { lastTick: row?.lastTick ?? null } })
 })
 
 // ── POST /api/campaigns/:id/snapshots — batch insert ─────────────────────────

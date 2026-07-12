@@ -22,6 +22,34 @@ app.get('/ledger', requireAuth, async (c) => {
   return c.json({ data: results ?? [] })
 })
 
+// ── GET /api/reports/debts — a ship's debts (player-facing) ───────────────────
+// ?ship_id=X
+app.get('/debts', requireAuth, async (c) => {
+  const session = c.var.session
+  const { ship_id } = c.req.query()
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM ship_debts WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`
+  ).bind(ship_id, session.campaign_id).all()
+
+  return c.json({ data: results ?? [] })
+})
+
+// ── GET /api/reports/ownership — a ship's ownership shares (player-facing) ───
+// ?ship_id=X
+app.get('/ownership', requireAuth, async (c) => {
+  const session = c.var.session
+  const { ship_id } = c.req.query()
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT so.*, p.character_name FROM ship_ownership so
+     JOIN players p ON p.id = so.player_id
+     WHERE so.ship_id = ? AND so.campaign_id = ? ORDER BY so.percentage DESC`
+  ).bind(ship_id, session.campaign_id).all()
+
+  return c.json({ data: results ?? [] })
+})
+
 // ── GET /api/reports/trades — paginated trade record history ──────────────────
 // ?ship_id=X&limit=N&from_tick=A&to_tick=B
 app.get('/trades', requireAuth, async (c) => {

@@ -13,6 +13,7 @@ export const useMapStore = defineStore('map', () => {
   const worlds           = ref([])
   const worldHeaders     = ref([])
   const sectorRoutes     = ref([])
+  const subsectorNames   = ref({})   // { A: 'Cronor', B: 'Jewell', C: 'Regina', ... }
   const selectedWorld    = ref(null)
   const loading          = ref(false)
   const error            = ref(null)
@@ -127,12 +128,13 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function onSectorChange() {
-    worlds.value       = []
-    worldHeaders.value = []
-    sectorRoutes.value = []
+    worlds.value        = []
+    worldHeaders.value  = []
+    sectorRoutes.value  = []
+    subsectorNames.value = {}
     selectedWorld.value = null
-    searchQuery.value  = ''
-    showRaw.value      = false
+    searchQuery.value   = ''
+    showRaw.value       = false
 
     if (!selectedSectorName.value) return
 
@@ -141,7 +143,7 @@ export const useMapStore = defineStore('map', () => {
     try {
       const enc = encodeURIComponent(selectedSectorName.value)
       const mil = selectedMilieu.value
-      const [worldRes, routeRes] = await Promise.all([
+      const [worldRes, metaRes] = await Promise.all([
         fetch(`${API}/api/sec?sector=${enc}&type=TabDelimited&milieu=${mil}`),
         fetch(`${API}/api/metadata?sector=${enc}&milieu=${mil}`),
       ])
@@ -152,9 +154,30 @@ export const useMapStore = defineStore('map', () => {
       worldHeaders.value = headers
       worlds.value       = parsed
 
-      if (routeRes.ok) {
-        const xml = await routeRes.text()
-        sectorRoutes.value = parseSectorRoutes(xml)
+      if (metaRes.ok) {
+        const metaText = await metaRes.text()
+        try {
+          // API returns JSON; extract subsector names and routes from it
+          const meta = JSON.parse(metaText)
+          subsectorNames.value = Object.fromEntries(
+            (meta.Subsectors || []).map(s => [s.Index, s.Name])
+          )
+          sectorRoutes.value = (meta.Routes || []).map(r => ({
+            start:        r.Start        || '',
+            end:          r.End          || '',
+            allegiance:   r.Allegiance   || '',
+            type:         r.Type         || '',
+            style:        r.Style        || '',
+            color:        r.Color        || '',
+            startOffsetX: r.StartOffsetX || 0,
+            startOffsetY: r.StartOffsetY || 0,
+            endOffsetX:   r.EndOffsetX   || 0,
+            endOffsetY:   r.EndOffsetY   || 0,
+          }))
+        } catch {
+          // Fallback: try legacy XML format
+          sectorRoutes.value = parseSectorRoutes(metaText)
+        }
       }
     } catch (e) {
       error.value = `Failed to load sector data: ${e.message}`
@@ -164,14 +187,15 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function onMilieuChange() {
-    sectors.value          = []
-    worlds.value           = []
-    worldHeaders.value     = []
-    sectorRoutes.value     = []
+    sectors.value            = []
+    worlds.value             = []
+    worldHeaders.value       = []
+    sectorRoutes.value       = []
+    subsectorNames.value     = {}
     selectedSectorName.value = ''
-    selectedWorld.value    = null
-    searchQuery.value      = ''
-    showRaw.value          = false
+    selectedWorld.value      = null
+    searchQuery.value        = ''
+    showRaw.value            = false
     await loadSectors()
   }
 
@@ -185,7 +209,7 @@ export const useMapStore = defineStore('map', () => {
     MILIEUS,
     // state
     sectors, selectedMilieu, selectedSectorName,
-    worlds, worldHeaders, sectorRoutes,
+    worlds, worldHeaders, sectorRoutes, subsectorNames,
     selectedWorld, loading, error, searchQuery, showRaw,
     // computed
     selectedSectorInfo, filteredWorlds, decodedUWP,

@@ -347,6 +347,33 @@ export const useShipStore = defineStore('ship', () => {
     }
   }
 
+  // ── payDebt ────────────────────────────────────────────────────────────────
+
+  async function payDebt({ campaignId, debtId, amount, tick }) {
+    if (!ship.value) return { ok: false, error: 'No active ship' }
+    if (!(amount > 0)) return { ok: false, error: 'Enter a payment amount' }
+    if (amount > (ship.value.credits ?? 0)) return { ok: false, error: 'Insufficient credits' }
+
+    loading.value = true
+    error.value   = null
+    try {
+      const { data, error: apiErr } = await api.post(`/api/ships/${ship.value.id}/pay-debt`, {
+        campaign_id: campaignId,
+        debt_id:     debtId,
+        amount, tick,
+      })
+      if (apiErr) throw new Error(apiErr)
+
+      ship.value = { ...ship.value, credits: data.credits }
+      return { ok: true, debt: data.debt }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ── acceptMailContract ────────────────────────────────────────────────────
 
   async function acceptMailContract({
@@ -401,6 +428,7 @@ export const useShipStore = defineStore('ship', () => {
     buyCargo, sellCargo,
     bookPassengers, refundPassenger,
     purchaseFuel,
+    payDebt,
     acceptMailContract,
     clear,
   }

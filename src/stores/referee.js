@@ -3,10 +3,12 @@ import { ref } from 'vue'
 import { api } from '../lib/api.js'
 
 export const useRefereeStore = defineStore('referee', () => {
-  const ships   = ref([])   // ships with active crew embedded
-  const players = ref([])   // all players with skills + current ship name
-  const loading = ref(false)
-  const error   = ref(null)
+  const ships       = ref([])   // ships with active crew embedded
+  const players     = ref([])   // all players with skills + current ship name
+  const templates   = ref([])   // ship templates for this campaign's ruleset
+  const organizations = ref([]) // campaign-wide list of Organizations
+  const loading     = ref(false)
+  const error       = ref(null)
 
   function clearError() { error.value = null }
 
@@ -26,7 +28,10 @@ export const useRefereeStore = defineStore('referee', () => {
     }
   }
 
-  async function createShip(campaignId, { name, hullType, hullTons, cargoCapacity, credits, jumpRating, maneuverRating, fuelCapacity, fuelCurrent }) {
+  async function createShip(campaignId, {
+    name, hullType, hullTons, cargoCapacity, credits, jumpRating, maneuverRating,
+    staterooms, lowBerths, fuelCapacity, fuelCurrent, marketValue,
+  }) {
     const { data, error: apiErr } = await api.post('/api/referee/ships', {
       campaign_id:           campaignId,
       name:                  name.trim(),
@@ -36,8 +41,11 @@ export const useRefereeStore = defineStore('referee', () => {
       credits:               credits       ?? 0,
       jump_rating:           jumpRating    || null,
       maneuver_drive_rating: maneuverRating || null,
+      stateroom_capacity:    staterooms    ?? 0,
+      low_berth_capacity:    lowBerths     ?? 0,
       fuel_capacity:         fuelCapacity  ?? 0,
       fuel_current:          fuelCurrent   ?? 0,
+      market_value:          marketValue   ?? 0,
     })
     if (apiErr) throw new Error(apiErr)
     ships.value = [...ships.value, { ...data, crew: [] }].sort((a, b) => a.name.localeCompare(b.name))
@@ -49,6 +57,82 @@ export const useRefereeStore = defineStore('referee', () => {
     if (apiErr) throw new Error(apiErr)
     ships.value = ships.value.map(s => s.id === shipId ? { ...s, ...data } : s)
     return data
+  }
+
+  // ── Ship Templates ─────────────────────────────────────────────────────────
+
+  async function loadShipTemplates() {
+    const { data, error: apiErr } = await api.get('/api/referee/ship-templates')
+    if (apiErr) throw new Error(apiErr)
+    templates.value = data ?? []
+  }
+
+  async function createShipTemplate({
+    name, hullType, hullTons, cargoCapacity, jumpRating, maneuverRating,
+    staterooms, lowBerths, fuelCapacity, marketValue, notes,
+  }) {
+    const { data, error: apiErr } = await api.post('/api/referee/ship-templates', {
+      name:                  name.trim(),
+      hull_type:             hullType      || null,
+      hull_tons:             hullTons      ?? 200,
+      cargo_capacity:        cargoCapacity ?? 80,
+      jump_rating:           jumpRating    || null,
+      maneuver_drive_rating: maneuverRating || null,
+      stateroom_capacity:    staterooms    ?? 0,
+      low_berth_capacity:    lowBerths     ?? 0,
+      fuel_capacity:         fuelCapacity  ?? 0,
+      market_value:          marketValue   ?? 0,
+      notes:                 notes         || null,
+    })
+    if (apiErr) throw new Error(apiErr)
+    templates.value = [...templates.value, data].sort((a, b) => a.name.localeCompare(b.name))
+    return data
+  }
+
+  async function updateShipTemplate(templateId, fields) {
+    const { data, error: apiErr } = await api.patch(`/api/referee/ship-templates/${templateId}`, fields)
+    if (apiErr) throw new Error(apiErr)
+    templates.value = templates.value.map(t => t.id === templateId ? { ...t, ...data } : t)
+    return data
+  }
+
+  async function deleteShipTemplate(templateId) {
+    const { error: apiErr } = await api.delete(`/api/referee/ship-templates/${templateId}`)
+    if (apiErr) throw new Error(apiErr)
+    templates.value = templates.value.filter(t => t.id !== templateId)
+  }
+
+  // ── Organizations ───────────────────────────────────────────────────────────
+
+  async function loadOrganizations() {
+    const { data, error: apiErr } = await api.get('/api/organizations')
+    if (apiErr) throw new Error(apiErr)
+    organizations.value = data ?? []
+  }
+
+  async function createOrganization({ name, treasuryCredits, duesRate, notes }) {
+    const { data, error: apiErr } = await api.post('/api/organizations', {
+      name:             name.trim(),
+      treasury_credits: treasuryCredits ?? 0,
+      dues_rate:        duesRate ?? null,
+      notes:            notes || null,
+    })
+    if (apiErr) throw new Error(apiErr)
+    organizations.value = [...organizations.value, data].sort((a, b) => a.name.localeCompare(b.name))
+    return data
+  }
+
+  async function updateOrganization(orgId, fields) {
+    const { data, error: apiErr } = await api.patch(`/api/organizations/${orgId}`, fields)
+    if (apiErr) throw new Error(apiErr)
+    organizations.value = organizations.value.map(o => o.id === orgId ? { ...o, ...data } : o)
+    return data
+  }
+
+  async function deleteOrganization(orgId) {
+    const { error: apiErr } = await api.delete(`/api/organizations/${orgId}`)
+    if (apiErr) throw new Error(apiErr)
+    organizations.value = organizations.value.filter(o => o.id !== orgId)
   }
 
   // ── Crew ───────────────────────────────────────────────────────────────────
@@ -173,15 +257,19 @@ export const useRefereeStore = defineStore('referee', () => {
   }
 
   function clear() {
-    ships.value   = []
-    players.value = []
-    error.value   = null
+    ships.value         = []
+    players.value       = []
+    templates.value     = []
+    organizations.value = []
+    error.value         = null
   }
 
   return {
-    ships, players, loading, error,
+    ships, players, templates, organizations, loading, error,
     clearError, clear,
     loadShips, createShip, updateShip,
+    loadShipTemplates, createShipTemplate, updateShipTemplate, deleteShipTemplate,
+    loadOrganizations, createOrganization, updateOrganization, deleteOrganization,
     assignCrew, removeCrew, setCrewCanTrade, setCrewStateroomOccupancy, updateCrewRole,
     loadPlayers, upsertSkill, removeSkill,
     createEvent, expireEvent,

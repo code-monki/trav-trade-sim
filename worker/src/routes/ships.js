@@ -3,6 +3,25 @@ import { requireAuth } from '../middleware/auth.js'
 
 const app = new Hono()
 
+// obligations rows aliased back to the passenger_manifests / mail_contracts
+// shapes the frontend already expects (see docs/financial-model-gap-analysis.md
+// — "Commercial obligations" — for why both kinds share one table).
+const PASSENGER_SELECT = `
+  SELECT id, campaign_id, ship_id, player_id, passage_type,
+         passenger_count AS count,
+         origin_world_hex AS embark_world_hex, origin_sector AS embark_sector,
+         origin_world_name AS embark_world_name, accept_tick AS embark_tick,
+         dest_world_hex, dest_sector, dest_world_name,
+         fare_per_head, amount AS fare_total, status, resolve_tick, created_at
+  FROM obligations`
+
+const MAIL_SELECT = `
+  SELECT id, campaign_id, ship_id, player_id,
+         origin_world_hex, origin_sector, origin_world_name, accept_tick,
+         dest_world_hex, dest_sector, dest_world_name,
+         parsecs, amount AS payment, status, resolve_tick, created_at
+  FROM obligations`
+
 // ── GET /api/ships/current — player's active ship ─────────────────────────────
 app.get('/current', requireAuth, async (c) => {
   const session                = c.var.session
@@ -19,7 +38,7 @@ app.get('/current', requireAuth, async (c) => {
             s.current_world, s.current_sector, s.credits,
             s.jump_rating, s.maneuver_drive_rating,
             s.stateroom_capacity, s.low_berth_capacity,
-            s.fuel_capacity, s.fuel_current
+            s.fuel_capacity, s.fuel_current, s.market_value
      FROM crew c
      JOIN ships s ON s.id = c.ship_id
      WHERE c.player_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL
@@ -37,13 +56,14 @@ app.get('/current', requireAuth, async (c) => {
     stateroom_capacity: crew.stateroom_capacity,
     low_berth_capacity: crew.low_berth_capacity,
     fuel_capacity: crew.fuel_capacity, fuel_current: crew.fuel_current,
+    market_value: crew.market_value,
     crew_role: crew.role, can_trade: crew.can_trade === 1,
   }
 
   const [{ results: cargoRows }, { results: passengerRows }, { results: mailRows }, crewStateRow] = await Promise.all([
     db.prepare(`SELECT * FROM cargo WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
-    db.prepare(`SELECT * FROM passenger_manifests WHERE ship_id = ? AND campaign_id = ? AND status = 'in_transit' ORDER BY created_at`).bind(ship.id, campaign_id).all(),
-    db.prepare(`SELECT * FROM mail_contracts WHERE ship_id = ? AND campaign_id = ? AND status = 'in_transit' ORDER BY created_at`).bind(ship.id, campaign_id).all(),
+    db.prepare(PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
+    db.prepare(MAIL_SELECT + ` WHERE kind = 'mail' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(`SELECT COUNT(*) as cnt FROM crew WHERE ship_id = ? AND campaign_id = ? AND left_tick IS NULL AND has_stateroom = 1`).bind(ship.id, campaign_id).first(),
   ])
 
@@ -200,9 +220,9 @@ app.post('/:id/book-passengers', requireAuth, async (c) => {
 
   const manifestId = crypto.randomUUID()
   await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO passenger_manifests (id, campaign_id, ship_id, player_id, passage_type, count, embark_world_hex, embark_sector, embark_world_name, embark_tick, dest_world_hex, dest_sector, dest_world_name, fare_per_head, fare_total)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(manifestId, campaign_id, id, player_id, passage_type, count, embark_world_hex, embark_sector, embark_world_name ?? '', tick, dest_world_hex, dest_sector, dest_world_name ?? '', fare_per_head, fare_total),
+    c.env.DB.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, passage_type, passenger_count, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, fare_per_head)
+                      VALUES (?, ?, ?, ?, 'passenger', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(manifestId, campaign_id, id, player_id, fare_total, passage_type, count, embark_world_hex, embark_sector, embark_world_name ?? '', tick, dest_world_hex, dest_sector, dest_world_name ?? '', fare_per_head),
     c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
                       VALUES (?, ?, ?, ?, ?, 'passenger_fare', ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, fare_total, embark_world_hex, embark_sector,
@@ -210,7 +230,7 @@ app.post('/:id/book-passengers', requireAuth, async (c) => {
     c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(fare_total, id),
   ])
 
-  const manifest = await c.env.DB.prepare(`SELECT * FROM passenger_manifests WHERE id = ?`).bind(manifestId).first()
+  const manifest = await c.env.DB.prepare(PASSENGER_SELECT + ` WHERE id = ?`).bind(manifestId).first()
   return c.json({ data: manifest }, 201)
 })
 
@@ -224,7 +244,7 @@ app.post('/:id/deliver-passengers', requireAuth, async (c) => {
   if (!ids?.length) return c.json({ data: { ok: true } })
 
   const stmts = ids.map(pid =>
-    c.env.DB.prepare(`UPDATE passenger_manifests SET status = 'delivered', resolve_tick = ? WHERE id = ? AND campaign_id = ?`)
+    c.env.DB.prepare(`UPDATE obligations SET status = 'fulfilled', resolve_tick = ? WHERE id = ? AND campaign_id = ? AND kind = 'passenger'`)
       .bind(tick, pid, campaign_id)
   )
   await c.env.DB.batch(stmts)
@@ -240,11 +260,11 @@ app.post('/:id/refund-passenger', requireAuth, async (c) => {
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
   const db       = c.env.DB
-  const manifest = await db.prepare(`SELECT * FROM passenger_manifests WHERE id = ? AND campaign_id = ?`).bind(manifest_id, campaign_id).first()
+  const manifest = await db.prepare(PASSENGER_SELECT + ` WHERE id = ? AND campaign_id = ?`).bind(manifest_id, campaign_id).first()
   if (!manifest) return c.json({ error: 'Manifest not found' }, 404)
 
   await db.batch([
-    db.prepare(`UPDATE passenger_manifests SET status = 'refunded', resolve_tick = ? WHERE id = ?`).bind(tick, manifest_id),
+    db.prepare(`UPDATE obligations SET status = 'cancelled', resolve_tick = ? WHERE id = ?`).bind(tick, manifest_id),
     db.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
                 VALUES (?, ?, ?, ?, ?, 'passenger_refund', ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, -manifest.fare_total,
@@ -288,12 +308,12 @@ app.post('/:id/accept-mail', requireAuth, async (c) => {
 
   const contractId = crypto.randomUUID()
   await c.env.DB.prepare(
-    `INSERT INTO mail_contracts (id, campaign_id, ship_id, player_id, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, payment)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(contractId, campaign_id, id, player_id, origin_world_hex, origin_sector, origin_world_name ?? '',
-         tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs, payment).run()
+    `INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs)
+     VALUES (?, ?, ?, ?, 'mail', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(contractId, campaign_id, id, player_id, payment, origin_world_hex, origin_sector, origin_world_name ?? '',
+         tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs).run()
 
-  const contract = await c.env.DB.prepare(`SELECT * FROM mail_contracts WHERE id = ?`).bind(contractId).first()
+  const contract = await c.env.DB.prepare(MAIL_SELECT + ` WHERE id = ?`).bind(contractId).first()
   return c.json({ data: contract }, 201)
 })
 
@@ -309,7 +329,7 @@ app.post('/:id/deliver-mail', requireAuth, async (c) => {
   const totalPayment = contracts.reduce((s, m) => s + m.payment, 0)
   const stmts = [
     ...contracts.map(m => c.env.DB.prepare(
-      `UPDATE mail_contracts SET status = 'delivered', resolve_tick = ? WHERE id = ? AND campaign_id = ?`
+      `UPDATE obligations SET status = 'fulfilled', resolve_tick = ? WHERE id = ? AND campaign_id = ? AND kind = 'mail'`
     ).bind(tick, m.id, campaign_id)),
     ...contracts.map(m => c.env.DB.prepare(
       `INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
@@ -332,10 +352,41 @@ app.get('/:id/passengers', requireAuth, async (c) => {
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM passenger_manifests WHERE ship_id = ? AND campaign_id = ? AND status = 'in_transit' ORDER BY created_at`
+    PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`
   ).bind(id, campaign_id).all()
 
   return c.json({ data: results ?? [] })
+})
+
+// ── POST /api/ships/:id/pay-debt — atomic: credits + debt balance + payment row ─
+app.post('/:id/pay-debt', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { debt_id, amount, tick, campaign_id } = await c.req.json()
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+  if (!(amount > 0)) return c.json({ error: 'Payment amount must be positive' }, 400)
+
+  const db   = c.env.DB
+  const ship = await db.prepare(`SELECT credits FROM ships WHERE id = ? AND campaign_id = ?`).bind(id, campaign_id).first()
+  if (!ship) return c.json({ error: 'Ship not found' }, 404)
+
+  const debt = await db.prepare(`SELECT current_balance FROM ship_debts WHERE id = ? AND ship_id = ?`).bind(debt_id, id).first()
+  if (!debt) return c.json({ error: 'Debt not found' }, 404)
+
+  if (amount > ship.credits)        return c.json({ error: 'Insufficient credits' }, 400)
+  if (amount > debt.current_balance) return c.json({ error: 'Payment exceeds remaining balance' }, 400)
+
+  await db.batch([
+    db.prepare(`UPDATE ships SET credits = credits - ? WHERE id = ?`).bind(amount, id),
+    db.prepare(`UPDATE ship_debts SET current_balance = current_balance - ? WHERE id = ?`).bind(amount, debt_id),
+    db.prepare(`INSERT INTO debt_payments (id, debt_id, campaign_id, ship_id, tick, amount)
+                VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), debt_id, campaign_id, id, tick, amount),
+  ])
+
+  const updatedDebt = await db.prepare(`SELECT * FROM ship_debts WHERE id = ?`).bind(debt_id).first()
+  return c.json({ data: { ok: true, debt: updatedDebt, credits: ship.credits - amount } })
 })
 
 export default app
