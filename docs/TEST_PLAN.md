@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.2.0
+**Version:** 0.3.0
 
 ---
 
@@ -11,9 +11,9 @@ TTS uses a three-tier test strategy:
 
 | Tier | Tool | Scope | Run condition |
 |------|------|-------|---------------|
-| Unit | Vitest + happy-dom | Pure library functions, store actions with mocked Supabase | Every commit |
+| Unit | Vitest + happy-dom | Pure library functions, store actions against local D1 (miniflare) | Every commit |
 | Component | @vue/test-utils + Vitest | Vue component rendering and interaction | Every commit |
-| E2E | Playwright | Full user flows against a real (test) Supabase project | Pre-release |
+| E2E | Playwright | Full user flows against a running `wrangler dev` Worker + local D1 | Pre-release |
 
 All tests are deterministic. The trade engine uses a seeded PRNG, so price output is predictable without randomness mocking.
 
@@ -27,13 +27,13 @@ npm test           # Vitest run (headless, happy-dom)
 npm run coverage   # With V8 coverage report
 ```
 
-Environment variables for component tests that need Supabase: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` point to a dedicated test project (separate from production). All test data is isolated by campaign code prefix `TEST-`.
+Environment variable for tests that need the Worker API: `VITE_API_URL` points to a local `wrangler dev` instance (`cd worker && npx wrangler dev`, default `http://localhost:8787`), backed by a local D1 database (`.wrangler/state/v3/d1`, separate from the production database). All test data is isolated by campaign code prefix `TEST-`; manual verification/cleanup queries use `wrangler d1 execute trav-trade-sim --local --command "..."`.
 
 ### E2E
 ```
 npx playwright test
 ```
-Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Supabase credentials. Tests create their own campaigns and clean up after themselves.
+Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both the Vite dev server and local `wrangler dev` running. Tests create their own campaigns and clean up after themselves.
 
 ---
 
@@ -166,7 +166,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
-| ST-101 | `loadCalendar()` with Supabase returning tick=48 | `currentTick=48`, `imperialDate="001-1106"` |
+| ST-101 | `loadCalendar()` with the Worker returning tick=48 | `currentTick=48`, `imperialDate="001-1106"` |
 | ST-102 | `ensureWorldSnapshot()` when rows exist in DB | No insert; returns cached rows |
 | ST-103 | `ensureWorldSnapshot()` when no rows | Inserts 36 rows; caches result |
 | ST-104 | Call `ensureWorldSnapshot()` twice with same args | Second call hits cache, no DB query |
@@ -245,7 +245,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 7. Referee advances tick 3×
 8. Player selects Efate (hex 1705), opens Cargo tab
 9. Player sells Common Electronics — verify profit flash and updated credits
-10. Verify trade_record in Supabase dashboard
+10. Verify trade_record: `wrangler d1 execute trav-trade-sim --local --command "SELECT * FROM trade_records ORDER BY created_at DESC LIMIT 1"`
 
 ### MTS-2: Recovery Code Flow
 1. Create campaign; save recovery code
@@ -282,6 +282,51 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 9. Verify mail auto-delivers and ship credits increase by Cr25,000
 10. Return to Regina; referee issues refund on a second booked passenger; verify ship credits decrease by fare amount
 
+### MTS-8: Ship Templates
+1. Referee opens Campaign Management → Ships → Templates
+2. For a CT7 campaign with no templates yet, verify one starter template (Type A Free Trader) is lazily seeded, flagged unverified in its notes; T5 campaigns start with no seed
+3. Referee creates a new template (name, ruleset, stats)
+4. Referee opens the New Ship form; selects the template from the Template dropdown; verify hull tons, cargo capacity, jump rating, and market value pre-fill
+5. Switch back to "Custom Design"; verify the form clears to blank defaults
+6. Referee opens an existing ship's detail view; clicks "Save as Template"; enters a name; verify a new template is created matching that ship's current stats
+7. Attempt to create a second template with a duplicate name; verify rejection (409)
+
+### MTS-9: Asset Valuation & Net Worth
+1. Referee sets a ship's `market_value` via template selection or manual entry
+2. Referee records a debt and a partial payment (see MTS-10)
+3. Player opens Ship → Reports → Net Worth tab
+4. Verify Net Worth = credits + market_value + cargo value (at cost) − total debt
+5. Verify "Your Share" reflects the player's ownership percentage (100% by default with no `ship_ownership` rows recorded)
+
+### MTS-10: Debt Tracking
+1. Referee opens Campaign Management → Ships → Debts; creates a debt (type, principal, current_balance, due_tick, creditor_name)
+2. Verify it appears in the player's Reports → Debts tab
+3. Player makes a partial payment; verify the balance decreases and ship credits decrease by the same amount
+4. Attempt a payment exceeding ship credits; verify rejection
+5. Attempt a payment exceeding the remaining balance; verify rejection
+
+### MTS-11: Ownership Tracking
+1. Referee opens a ship's detail view → Ownership section; records a 40% share for a second player
+2. Attempt to add another share that would push the total over 100%; verify rejection
+3. Player (the ship's captain, with no explicit share recorded) opens the Net Worth tab; verify "Your Share" shows 60% (the recorded remainder), not a flat 100%
+
+### MTS-12: Organizations
+1. Player opens Ship → Organizations tab; founds an organization (name, treasury, dues rate); verify they're automatically listed as its officer
+2. A second, non-officer player attempts to edit the organization or its membership; verify rejection
+3. The first officer adds the second player as an officer; verify they can now manage it
+4. Attempt to remove the organization's last officer; verify rejection
+5. Add a ship as a member with "Owns Assets" unchecked, then attempt to mark a ship already owned outright by another organization as owned here too; verify rejection
+6. Confirm the same organization state (officers, member ships) appears identically in RefereeView's Organizations tab
+
+### MTS-13: Corporation/Fleet Financials
+1. Referee (or an officer) sets a dues rate and collection frequency on an organization with member ships
+2. Click "Collect Dues"; verify each member ship's credits decrease by the flat rate and the organization's treasury increases by the total collected
+3. Immediately click "Collect Dues" again; verify rejection ("not due yet")
+4. Disburse funds from the organization's treasury to a member ship; verify treasury decreases and ship credits increase; attempt to disburse more than the treasury balance and verify rejection
+5. Record an equity stake for a player in the organization; verify the same 100%-ceiling validation as Ownership Tracking
+6. Mark a member ship as owned outright by the organization; open that ship's Net Worth tab and verify "Your Share" now reflects the organization's equity percentage instead of the ship's own `ship_ownership` records
+7. Open the organization's Fleet Report (officers/referee only) and verify per-ship and fleet-wide totals match the ships' actual credits/value/cargo/debt
+
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)
 2. Navigate to Manage Campaign → Campaign tab
@@ -290,7 +335,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) and test Su
 5. Enter correct Referee PIN — verify:
    - Redirect to login screen
    - Sign-in attempt with `TEST-DELETE-01` returns "Campaign not found"
-   - Supabase dashboard shows no rows for this campaign_id in any table
+   - `wrangler d1 execute trav-trade-sim --local --command "SELECT * FROM campaigns WHERE code='TEST-DELETE-01'"` returns no rows (cascade-deleted)
 
 ### MTS-5: Multi-Milieu Dates
 1. Create campaign with Far Future milieu, starting year 1900

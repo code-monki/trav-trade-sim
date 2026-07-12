@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.2.0  
+**Version:** 0.3.0  
 **Status:** Active development
 
 ---
@@ -27,7 +27,7 @@
 | ID | Requirement |
 |----|------------|
 | FR-101 | The system shall allow a user to create a new campaign by supplying a label, unique campaign code, milieu, trade rules, starting year/day, referee character name, and PIN |
-| FR-102 | Campaign creation shall generate a one-time recovery code, display it to the referee, and store only its bcrypt hash |
+| FR-102 | Campaign creation shall generate a one-time recovery code, display it to the referee, and store only its PBKDF2 hash |
 | FR-103 | The system shall allow additional characters to join an existing campaign using the campaign code, a unique character name, and a new PIN |
 | FR-104 | The system shall authenticate a character with campaign code + character name + PIN |
 | FR-105 | Failed PIN attempts shall be counted; five consecutive failures shall lock the account for 15 minutes |
@@ -65,7 +65,7 @@
 |----|------------|
 | FR-401 | The market shall show current buy price, sell price, spread, and available quantity for all trade goods at the selected world |
 | FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG |
-| FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Supabase |
+| FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Cloudflare D1 |
 | FR-404 | On the first-ever visit to a world, the system shall backfill price history for all prior ticks in the current year |
 | FR-405 | Price colours shall indicate deviation from the CT7 base price (green = below base, red = above) |
 | FR-406 | Active market events shall be displayed in a banner above the market table; affected rows shall be visually distinguished |
@@ -138,7 +138,7 @@
 | FR-1101 | A player shall be able to book passengers (High, Middle, or Low passage) at the Port > Passengers tab |
 | FR-1102 | The booking form shall validate that stateroom/berth capacity is available before accepting the booking |
 | FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 per-parsec for High/Middle, flat for Low |
-| FR-1104 | A passenger booking shall create a `passenger_manifests` record, write a `passenger_fare` transaction, and credit the ship account |
+| FR-1104 | A passenger booking shall create an `obligations` record (kind='passenger'), write a `passenger_fare` transaction, and credit the ship account |
 | FR-1105 | Passengers shall be automatically delivered when the ship arrives at their destination world |
 | FR-1106 | The Ship > Manifest tab shall display stateroom/berth occupancy and all in-transit passengers |
 | FR-1107 | The referee shall be able to issue a refund for any in-transit passenger; refund shall create a `passenger_refund` transaction and debit the ship account |
@@ -160,9 +160,73 @@
 |----|------------|
 | FR-1301 | A player shall be able to accept a mail contract at the Port > Services tab by specifying a destination and (for T5) parsecs |
 | FR-1302 | Mail payment shall be CT7: flat Cr25,000; T5: Cr25,000 × parsecs |
-| FR-1303 | Mail contracts shall be tracked in `mail_contracts` as `in_transit` until the ship arrives at the destination |
+| FR-1303 | Mail contracts shall be tracked in `obligations` (kind='mail') as `pending` until the ship arrives at the destination |
 | FR-1304 | On delivery, the mail payment shall be credited to the ship account and a `mail` transaction written |
 | FR-1305 | Active mail contracts shall be visible in the Ship > Contracts tab |
+
+### 2.14 Ship Templates
+
+| ID | Requirement |
+|----|------------|
+| FR-1401 | The referee shall be able to create, edit, and delete ship templates scoped to the campaign |
+| FR-1402 | Each template shall be tagged with a ruleset (CT7 or T5) matching the campaign's trade rules |
+| FR-1403 | The New Ship form shall offer a Template dropdown defaulting to "Custom Design"; selecting a template shall pre-fill hull tons, cargo capacity, stateroom/low berth capacity, fuel capacity, jump/maneuver rating, and market value |
+| FR-1404 | The referee shall be able to save an existing ship's current stats as a new named template via a "Save as Template" action |
+| FR-1405 | Template names shall be unique per campaign; creating or renaming to a conflicting name shall be rejected |
+| FR-1406 | The system shall lazily seed one verified-unverified CT7 starter template (Type A Free Trader) the first time a CT7 campaign's Templates panel is opened with none present; T5 campaigns start with no seed |
+
+### 2.15 Asset Valuation & Net Worth
+
+| ID | Requirement |
+|----|------------|
+| FR-1501 | Ships shall have a referee-entered `market_value` field, populated via template selection or manual entry |
+| FR-1502 | The Cargo Hold view shall display a running total cargo value, valued at the currently viewed world's live sell price where available, falling back to purchase price for unappraised goods |
+| FR-1503 | The system shall provide a "Net Worth" report combining ship credits, market value, and cargo value (valued at purchase price for report stability) minus total outstanding debt |
+| FR-1504 | Net Worth shall be scaled by the current player's ownership share into a "Your Share" figure, per Ownership Tracking (§2.17) or Organization equity (§2.19) as applicable |
+
+### 2.16 Debt Tracking
+
+| ID | Requirement |
+|----|------------|
+| FR-1601 | The referee shall be able to create, edit, and delete per-ship debts, each with a type (mortgage, loan, or obligation), principal, current balance, due tick, creditor name, and notes |
+| FR-1602 | Debts shall accrue no interest; the current balance shall change only via explicit referee edits or recorded payments |
+| FR-1603 | A player with `can_trade` shall be able to pay down a debt from the ship's Reports > Debts tab |
+| FR-1604 | A payment shall be rejected if it exceeds either the ship's available credits or the debt's remaining balance |
+| FR-1605 | Each payment shall be recorded in a payment history separate from the main transaction ledger |
+
+### 2.17 Ownership Tracking
+
+| ID | Requirement |
+|----|------------|
+| FR-1701 | The referee shall be able to record one or more players jointly owning a percentage share of a single ship |
+| FR-1702 | The system shall reject any recorded share that would push a ship's total ownership percentage over 100% |
+| FR-1703 | A player's ownership share, when not explicitly recorded for that ship, shall default to the remainder (100% minus all other recorded shares) rather than a flat 100% |
+
+### 2.18 Organizations
+
+| ID | Requirement |
+|----|------------|
+| FR-1801 | Any authenticated player shall be able to found an organization by supplying a name, starting treasury, flat dues rate, and notes; the founder shall automatically become its first officer |
+| FR-1802 | An organization shall support multiple officers; any officer may manage the organization fully, including adding or removing other officers |
+| FR-1803 | Removing an organization's last remaining officer shall be rejected |
+| FR-1804 | The referee shall always retain the ability to manage or delete any organization regardless of officer status |
+| FR-1805 | Officers or the referee shall be able to add or remove member ships from an organization, marking each membership as organization-owned (`owns_ship`) or independently affiliated |
+| FR-1806 | A ship shall be owned outright (`owns_ship`) by at most one organization at a time |
+
+### 2.19 Corporation/Fleet Financials
+
+| ID | Requirement |
+|----|------------|
+| FR-1901 | An organization's dues shall be expressed as a single flat rate, officer-configurable, defaulting to zero |
+| FR-1902 | An organization shall have an officer-configurable dues collection frequency, expressed in ticks, defaulting to 4 (one month) |
+| FR-1903 | The system shall indicate when an organization's dues are next due without collecting them automatically |
+| FR-1904 | Officers or the referee shall be able to manually trigger dues collection, charging every member ship the flat rate independently |
+| FR-1905 | A member ship without sufficient credits at collection time shall be skipped and reported back, without blocking collection from the organization's other member ships |
+| FR-1906 | A dues collection attempt made before the configured collection period has elapsed since the last collection shall be rejected |
+| FR-1907 | Officers or the referee shall be able to disburse funds ad hoc from an organization's treasury to any member ship, capped at the treasury's current balance |
+| FR-1908 | Officers or the referee shall be able to record player equity percentages in an organization, subject to the same 100%-ceiling validation as ship ownership |
+| FR-1909 | The system shall provide a consolidated fleet report showing each member ship's financials and fleet-wide totals, visible only to the organization's officers and the referee |
+| FR-1910 | For a ship owned outright by an organization, personal Net Worth attribution shall be based on the player's equity percentage in that organization rather than the ship's own ownership records |
 
 ---
 
@@ -172,12 +236,12 @@
 |----|------------|
 | NFR-1 | **Performance:** Market snapshot generation for 36 goods shall complete and insert within 2 seconds on a standard broadband connection |
 | NFR-2 | **Determinism:** Given the same inputs, all clients shall produce identical prices and event outcomes |
-| NFR-3 | **Security:** PINs shall be stored as bcrypt hashes (cost factor 10) using pgcrypto; plaintext PINs shall never be stored or logged |
-| NFR-4 | **Security:** The recovery code shall be generated server-side, stored only as a bcrypt hash, and returned in plaintext exactly once |
-| NFR-5 | **Security:** All mutations to sensitive tables shall be performed through SECURITY DEFINER RPCs, never directly from client code |
+| NFR-3 | **Security:** PINs shall be stored as PBKDF2-SHA256 hashes (Web Crypto API, salted); plaintext PINs shall never be stored or logged |
+| NFR-4 | **Security:** The recovery code shall be generated server-side, stored only as a PBKDF2 hash, and returned in plaintext exactly once |
+| NFR-5 | **Security:** All mutations shall be performed through Worker route handlers behind session authentication, never directly from client code |
 | NFR-6 | **Accessibility:** The application shall provide keyboard shortcuts for all primary navigation actions; focus traps shall be applied to all modal dialogs |
 | NFR-7 | **Usability:** The application shall function at viewport widths from 1024px and above |
-| NFR-8 | **Reliability:** Loss of network connectivity during a trade operation shall not corrupt the ship's credit balance (atomic RPC design) |
+| NFR-8 | **Reliability:** Loss of network connectivity during a trade operation shall not corrupt the ship's credit balance (atomic `db.batch()` design) |
 | NFR-9 | **Portability:** The application shall run in current versions of Chrome, Firefox, and Safari without plugins |
 | NFR-10 | **Maintainability:** All database schema changes shall be expressed as numbered migration files applied sequentially |
 
@@ -239,3 +303,31 @@
 - Accepting a mail contract creates a contract record (status=in_transit) with no upfront payment
 - Arriving at the destination delivers the mail and credits the ship
 - Contracts tab lists all in-transit contracts with pending payment total
+
+### AC-12: Ship Templates
+- Selecting a template in the New Ship form pre-fills hull tons, cargo capacity, and market value
+- Switching back to Custom Design clears the form to blank defaults
+- Saving an existing ship as a template with a duplicate name is rejected
+
+### AC-13: Asset Valuation & Net Worth
+- Net Worth tab shows credits + market value + cargo value (at cost) minus total debt
+- A 40%-partner ship shows the ship's own captain with a 60% "Your Share", not 100%
+
+### AC-14: Debt Tracking
+- Referee creates a debt; it appears in the player's Reports > Debts tab
+- Player makes a partial payment; the balance decreases and the payment cannot exceed either the ship's credits or the remaining balance
+
+### AC-15: Ownership Tracking
+- Referee records a 40% partner share on a ship; the recorded total cannot exceed 100%
+- The ship's own captain, with no explicit share recorded, is shown owning the 60% remainder
+
+### AC-16: Organizations
+- A player founds an organization and is automatically its first officer
+- A second, non-officer player is rejected from editing the organization or its membership
+- Removing an organization's last officer is rejected; the referee can still delete the organization outright
+
+### AC-17: Corporation/Fleet Financials
+- Collecting dues charges every member ship the flat rate; a ship with insufficient credits is skipped and reported, not blocking the others
+- Collecting dues again before the configured period has elapsed is rejected
+- Marking a ship as owned outright by a second organization, when it is already owned by another, is rejected
+- A ship owned outright by an organization shows its Net Worth "Your Share" based on the player's organization equity, not ship ownership

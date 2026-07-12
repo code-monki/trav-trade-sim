@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.2.0
+**Version:** 0.3.0
 
 ---
 
@@ -41,10 +41,13 @@ The original backend was Supabase (PostgreSQL + PostgREST + SECURITY DEFINER RPC
 │                               │ D1 binding                          │
 │  ┌────────────────────────────▼─────────────────────────────────┐  │
 │  │  Cloudflare D1 (SQLite)                                      │  │
-│  │  campaigns · players · sessions · ships · crew               │  │
-│  │  cargo · passenger_manifests · mail_contracts                │  │
-│  │  market_snapshots · market_events · trade_records            │  │
-│  │  market_monthly · market_annual · realized_ohlcv (view)      │  │
+│  │  campaigns · players · sessions · ships · crew · obligations  │  │
+│  │  cargo · market_snapshots · market_events · trade_records     │  │
+│  │  market_monthly · market_annual · realized_ohlcv (view)       │  │
+│  │  ship_templates · ship_debts · debt_payments                  │  │
+│  │  ship_ownership · organizations · organization_members        │  │
+│  │  organization_officers · organization_ownership                │  │
+│  │  dues_payments · disbursements                                 │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
                               │ REST API
@@ -78,39 +81,50 @@ src/
 ├── router/
 │   └── index.js              Routes + auth guards (always use push({ name }) not push('/path'))
 ├── stores/
-│   ├── auth.js               Campaign/player session, login RPCs
+│   ├── auth.js               Campaign/player session, login/join/PIN-reset actions
 │   ├── map.js                Sector/world data, Traveller Map API
 │   ├── tick.js               Calendar, snapshots, price history, events
-│   ├── ship.js               Ship, cargo, passengers, mail; buy/sell/fuel/passenger/mail actions;
+│   ├── ship.js               Ship, cargo, passengers, mail (both backed by the unified
+│   │                         `obligations` table — field/action names kept as-is for
+│   │                         frontend compat); buy/sell/fuel/passenger/mail/payDebt actions;
 │   │                         updateLocation auto-delivers passengers + mail when opts provided
-│   ├── referee.js            Referee panel data (ships, crew, events, players); createShip
-│   │                         includes fuelCapacity / fuelCurrent
-│   └── theme.js              UI theme management
+│   ├── referee.js            Referee panel core CRUD: ships, players, ship templates,
+│   │                         organizations. Ship debts/ownership and organization
+│   │                         officers/members/equity/dues/disbursement are NOT store state —
+│   │                         managed via direct api.js calls in RefereeView.vue/
+│   │                         OrganizationsPanel.vue instead (a deliberate pattern)
+│   └── theme.js              UI theme management (persistence: DD.md §8)
 ├── views/
 │   ├── LoginView.vue         Sign In / Join / New Campaign / Reset PIN
 │   ├── MapView.vue           Main dashboard — two-level tabs:
 │   │                           TOP_TABS: overview / port / ship / events / jump
 │   │                           PORT_TABS: market / passengers / services
-│   │                           SHIP_TABS: cargo / manifest / contracts
-│   └── RefereeView.vue       Campaign management; inline label edit; ship stat grid with
-│                             fuel/stateroom/berth fields; passenger manifest + refund;
-│                             events catalogue; auto-delivery on ship move
+│   │                           SHIP_TABS: cargo / aboard / reports / organizations
+│   └── RefereeView.vue       Campaign management, five tabs: Ships (incl. Templates,
+│                             Debts, Ownership sub-panels) / Players / Organizations
+│                             (officers, members, dues, disbursement, equity, fleet
+│                             report) / Events / Campaign
 ├── components/
 │   ├── MarketTable.vue       Trade goods table with sort, filter, chart checkboxes, buy buttons
 │   ├── PriceChart.vue        lightweight-charts chart — Weekly/Monthly/Annual/Realized tabs
-│   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow
+│   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow + live valuation
 │   ├── PassengersPanel.vue   Port > Passengers sub-tab: booking form, capacity check, fare preview
 │   ├── ShipServices.vue      Port > Services sub-tab: fuel purchase + mail contract booking
-│   ├── PassengerManifest.vue Ship > Manifest sub-tab: occupancy + in-transit passengers
-│   ├── ContractsPanel.vue    Ship > Contracts sub-tab: mail contracts + pending payment
+│   ├── AboardPanel.vue       Ship > Aboard sub-tab: composes PassengerManifest + ContractsPanel
+│   ├── PassengerManifest.vue Occupancy + in-transit passengers
+│   ├── ContractsPanel.vue    In-transit mail contracts + pending payment
+│   ├── ReportsPanel.vue      Ship > Reports sub-tab: Ledger/Trades/Income/Debts/Net Worth
+│   ├── OrganizationsPanel.vue Ship > Organizations sub-tab: player-facing org browse/found/manage
 │   ├── BuyDialog.vue         Purchase quantity dialog
 │   ├── RouteAnalysis.vue     Jump range route table with profit projection
 │   ├── EventsHistory.vue     World event log
+│   ├── WorldPicker.vue       Destination picker (dropdown or manual hex), used by ShipServices
 │   ├── RecoveryCodeDialog.vue One-time recovery code display (teleported)
 │   ├── CharacterDialog.vue   Character stats display
 │   ├── HamburgerMenu.vue     Navigation menu
-│   ├── HelpDialog.vue        In-app user manual (tabbed)
-│   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links
+│   ├── HelpDialog.vue        In-app user manual (tabbed) — stale re: financial-model
+│   │                         features, flagged for a separate revisit
+│   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links — same caveat
 │   ├── AboutDialog.vue       About/license information
 │   └── ThemeDialog.vue       UI theme picker
 ├── lib/
@@ -245,6 +259,69 @@ Sell:
                 └─► UPDATE ships SET credits = credits + totalRevenue
 ```
 
+### 4.6 Financial Model Flows (Ship Templates → Corp/Fleet Financials)
+
+Six features layered on top of the core ship/credits model, in the order they were built. All financial mutations follow the same atomic `db.batch()` pattern as Buy/Sell above — a JS-side pre-check (D1 has no interactive transactions) followed by one batched write.
+
+**Ship Templates → Net Worth** are straightforward form-fill and read-only aggregation:
+```
+New Ship form: Template dropdown (default "Custom Design")
+  └─► selecting a template pre-fills hull/cargo/berth/fuel/drive/market_value fields
+        (no persistent link kept between the created ship and the template)
+
+Ship > Reports > Net Worth
+  └─► GET /api/reports/{debts,ownership} + ship.credits + ship.market_value + cargo value
+        └─► netWorth = credits + market_value + cargoValue(at cost) − Σ debt.current_balance
+              └─► "Your Share" = netWorth × ownershipPercentage (see chained-ownership branch below)
+```
+
+**Debt Tracking** — referee CRUD plus a player-facing payment identical in shape to Buy/Sell's atomic pattern:
+```
+Ship > Reports > Debts: player enters payment amount
+  └─► ship.payDebt()
+        └─► POST /api/ships/:id/pay-debt  (atomic db.batch(), validated against both
+              insufficient ship credits AND overpayment past current_balance)
+              ├─► UPDATE ships SET credits = credits - amount
+              ├─► UPDATE ship_debts SET current_balance = current_balance - amount
+              └─► INSERT debt_payments row
+```
+
+**Ownership Tracking** is referee-only CRUD on `ship_ownership` with server-validated 100%-ceiling (rejects any share that would push a ship's total over 100%).
+
+**Organizations** — any authenticated player can found one (auto-becoming its first officer); day-to-day management (edit, officers, members, dues, disbursement, equity) requires being an officer of that specific org, or the referee (who always overrides regardless of officer status — the same safety-net principle already used for editing any ship). This is a materially different authorization model from Ownership Tracking above, which stays strictly referee-only — a ship-ownership share is closer to a debt/contract the referee arbitrates, while an Organization is something a player actively runs, like a ship.
+```
+POST /api/organizations  (any authenticated player)
+  └─► INSERT organizations row
+  └─► INSERT organization_officers row (creator)
+
+isOfficerOrReferee(session, orgId) gates all mutations:
+  session.role === 'referee'  OR  EXISTS organization_officers WHERE (orgId, session.player_id)
+```
+
+**Corp/Fleet Financials** — dues collection is the one flow with a deliberate anti-automation guard, added specifically because "nothing financial happens automatically on Advance Tick" is a standing project rule (§4.4 already established this for market rollups):
+```
+POST /api/organizations/:id/collect-dues { tick }
+  ├─► 400 if dues_rate is null/0
+  ├─► 409 if last_dues_tick != null AND tick < last_dues_tick + dues_frequency_ticks
+  │     (first-ever collection always allowed; guards only against re-collecting early)
+  ├─► for each member ship: charge dues_rate if ship.credits ≥ dues_rate,
+  │     else skip (reported back as failed_ship_ids, doesn't block the others)
+  └─► atomic db.batch(): N ship credit decrements + 1 organizations update
+        (treasury_credits += collected, last_dues_tick = tick) + N dues_payments inserts
+
+POST /api/organizations/:id/disburse { ship_id, amount, notes }
+  └─► ad hoc, capped at organization.treasury_credits — no schedule, unlike dues
+```
+
+**Chained ownership** — the one cross-cutting design decision that touches Net Worth itself: for a ship with `organization_members.owns_ship = 1`, `GET /api/reports/ownership` transparently reads that organization's `organization_ownership` equity instead of the ship's own `ship_ownership` rows, in the identical response shape — so `ReportsPanel.vue`'s Net Worth computation needed no changes to support it:
+```
+GET /api/reports/ownership?ship_id=X
+  ├─► organization_members WHERE ship_id=X AND owns_ship=1 exists?
+  │     ├─► Yes → SELECT organization_ownership WHERE organization_id=<that org>
+  │     └─► No  → SELECT ship_ownership WHERE ship_id=X  (unchanged, original behavior)
+  └─► both branches return { id, player_id, character_name, percentage } rows
+```
+
 ## 5. Component Interactions
 
 ### 5.1 MapView Hierarchy
@@ -271,13 +348,15 @@ MapView
     │       └── ShipServices (fuel + mail sections)
     │
     ├── TOP TAB: Ship
-    │   ├── (sub-tab bar) [Cargo] [Manifest] [Contracts]
+    │   ├── (sub-tab bar) [Cargo] [Aboard] [Reports] [Organizations]
     │   ├── SHIP SUB-TAB: Cargo
     │   │   └── CargoHold
-    │   ├── SHIP SUB-TAB: Manifest
-    │   │   └── PassengerManifest
-    │   └── SHIP SUB-TAB: Contracts
-    │       └── ContractsPanel
+    │   ├── SHIP SUB-TAB: Aboard
+    │   │   └── AboardPanel (composes PassengerManifest + ContractsPanel)
+    │   ├── SHIP SUB-TAB: Reports
+    │   │   └── ReportsPanel (Ledger / Trades / Income / Debts / Net Worth)
+    │   └── SHIP SUB-TAB: Organizations
+    │       └── OrganizationsPanel
     │
     ├── TOP TAB: Events
     │   └── EventsHistory

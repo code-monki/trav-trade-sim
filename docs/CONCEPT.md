@@ -27,8 +27,7 @@ Speculative trade in Traveller is one of the game's most engaging subsystems, bu
 ## Non-Goals
 
 - Full character creation or advancement tracking
-- Ship combat or maintenance systems
-- Passenger or freight (speculative cargo only)
+- Ship combat or physical maintenance systems (annual maintenance rolls, misjump risk from skipped upkeep)
 - Real-money transactions or monetisation of any kind
 - Mobile-native app (responsive web only)
 
@@ -60,7 +59,11 @@ The Referee can also create events manually — useful for campaign-specific sto
 
 ### Ships and Crew
 
-Ships are the unit of trade operation. Each ship has a cargo capacity, an operating credit account, and a current location. Characters are assigned to ships as crew with roles (captain, pilot, engineer, etc.). The `can_trade` flag controls who may execute buy/sell transactions; captains receive it automatically.
+Ships are the unit of trade operation. Each ship has a cargo capacity, an operating credit account, and a current location. Characters are assigned to ships as crew with roles (captain, pilot, engineer, etc.). The `can_trade` flag controls who may execute buy/sell transactions; captains receive it automatically. A ship also carries a referee-entered market valuation, may jointly be owned by multiple players in recorded percentage shares, and may carry outstanding debts (mortgages, loans) that a Net Worth report nets against its credits and cargo value.
+
+### Organizations
+
+Players can found an Organization — a generic entity covering corporations, confederations, and trade unions alike, differentiated only by configuration rather than separate systems. An organization has its own treasury, can collect flat-rate dues from and disburse funds to its member ships, and may own a member ship outright (in which case that ship's value flows into its owning players' personal Net Worth via their equity stake in the organization, rather than the ship's own ownership shares). Any player can found one and becomes its first officer; day-to-day management is open to any of the organization's officers, not gated behind the Referee.
 
 ### Route Analysis
 
