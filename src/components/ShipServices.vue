@@ -27,7 +27,7 @@
 
           <div v-if="fuelCapacity > 0" class="fuel-status">
             <span class="fuel-status-label">Tank</span>
-            <div class="fuel-bar-wrap">
+            <div class="fuel-bar-wrap" aria-hidden="true">
               <div class="fuel-bar-fill" :style="{ width: fuelBarPct + '%' }"></div>
             </div>
             <span class="fuel-status-val">{{ fuelCurrent }}/{{ fuelCapacity }}t</span>
@@ -37,26 +37,30 @@
           <form class="fuel-form" @submit.prevent="submitFuel">
             <div class="form-row two-col">
               <div>
-                <label>Fuel Type</label>
-                <div class="type-btns">
+                <label id="fuel-type-label">Fuel Type</label>
+                <div class="type-btns" role="group" aria-labelledby="fuel-type-label">
                   <button v-if="availableFuel.refined"
                           type="button"
                           :class="['type-btn', { active: fuelForm.fuelType === 'refined' }]"
+                          :aria-pressed="fuelForm.fuelType === 'refined'"
                           @click="fuelForm.fuelType = 'refined'">Refined</button>
                   <button v-if="availableFuel.unrefined"
                           type="button"
                           :class="['type-btn', { active: fuelForm.fuelType === 'unrefined' }]"
+                          :aria-pressed="fuelForm.fuelType === 'unrefined'"
                           @click="fuelForm.fuelType = 'unrefined'">Unrefined</button>
                 </div>
               </div>
               <div>
-                <label>Tons</label>
+                <label for="fuel-tons-input">Tons</label>
                 <div class="stepper">
-                  <button type="button" @click="decFuelTons" :disabled="fuelForm.tons <= 1">−</button>
-                  <input v-model.number="fuelForm.tons" type="number" min="1"
+                  <button type="button" aria-label="Decrease fuel tons"
+                          @click="decFuelTons" :disabled="fuelForm.tons <= 1">−</button>
+                  <input id="fuel-tons-input" v-model.number="fuelForm.tons" type="number" min="1"
                          :max="fuelCapacity > 0 && tankSpace > 0 ? tankSpace : undefined"
                          class="count-input" />
-                  <button type="button" @click="incFuelTons" :disabled="fuelCapacity > 0 && tankSpace > 0 && fuelForm.tons >= tankSpace">+</button>
+                  <button type="button" aria-label="Increase fuel tons"
+                          @click="incFuelTons" :disabled="fuelCapacity > 0 && tankSpace > 0 && fuelForm.tons >= tankSpace">+</button>
                 </div>
               </div>
             </div>
@@ -110,8 +114,8 @@
               :sector-name="props.sectorName" />
           </div>
           <div class="form-row" v-if="tradeRules === 'T5'">
-            <label>Parsecs</label>
-            <input v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
+            <label for="mail-parsecs-input">Parsecs</label>
+            <input id="mail-parsecs-input" v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
           </div>
           <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
             {{ mailContainersAvailable }} container(s) offered this tick — take all or none, per MgT2022 rules

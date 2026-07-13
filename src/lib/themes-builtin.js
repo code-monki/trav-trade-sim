@@ -9,22 +9,23 @@ export const BUILTIN_THEMES = [
   {
     id:          'dark-imperium',
     name:        'Imperium (Dark)',
-    description: 'Deep space navy with gold accent',
+    description: 'Charcoal graphite with gold accent',
     builtin:     true,
     tokens: {
-      '--bg':            '#0d0f1a',
-      '--bg-panel':      '#13162a',
-      '--bg-item':       '#1a1e36',
-      '--bg-selected':   '#1f3a5f',
-      '--border':        '#2a3050',
-      '--text':          '#c8d0e8',
-      '--text-dim':      '#8090b8',   // 5.8:1 on --bg-panel ✓
-      '--accent':        '#c9a84c',
-      '--accent-dim':    '#8a6f2e',
+      '--bg':            '#1c1c1c',
+      '--bg-panel':      '#242424',
+      '--bg-item':       '#2e2e2e',
+      '--bg-selected':   '#3d3628',
+      '--border':        '#707070',   // 3.1:1 on --bg-panel ✓ (UI component)
+      '--text':          '#e6e6e6',
+      '--text-dim':      '#a8a8a8',   // 6.5:1 on --bg-panel ✓
+      '--accent':        '#d4b45c',
+      '--accent-dim':    '#a08040',
+      '--accent-text':   '#1c1c1c',   // 4.6:1 on --accent-dim ✓ (dark text reads better than white on this gold)
       '--code':          '#7ec8e3',
-      '--green':         '#4caf72',
+      '--green':         '#5cb87d',
       '--amber':         '#e8a020',
-      '--red':           '#d93a3a',
+      '--red':           '#e05252',
       '--surface-error': '#3a1a1a',
       '--text-error':    '#f5a0a0',
     },
@@ -44,6 +45,7 @@ export const BUILTIN_THEMES = [
       '--text-dim':      '#57606a',   // 6.5:1 on --bg-panel ✓
       '--accent':        '#0550ae',   // 7.5:1 on white ✓
       '--accent-dim':    '#1966c2',
+      '--accent-text':   '#ffffff',   // 5.6:1 on --accent-dim ✓
       '--code':          '#0550ae',
       '--green':         '#1a7f37',
       '--amber':         '#9a6700',
@@ -67,6 +69,7 @@ export const BUILTIN_THEMES = [
       '--text-dim':      '#705840',   // 5.2:1 on --bg-panel ✓
       '--accent':        '#7c4a1e',   // 5.7:1 on --bg-panel ✓
       '--accent-dim':    '#a0622a',
+      '--accent-text':   '#ffffff',   // 4.9:1 on --accent-dim ✓
       '--code':          '#7c4a1e',
       '--green':         '#2d6a1e',
       '--amber':         '#8a5a00',

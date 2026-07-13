@@ -153,7 +153,7 @@ async function copy() {
 
 .continue-btn {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   padding: 0.65rem;

@@ -74,7 +74,10 @@
                 <td class="good-name">{{ item.trade_good_name }}</td>
                 <td class="num">{{ item.tons }}</td>
                 <td class="num mono">Cr {{ fmt(item.purchase_price) }}/t</td>
-                <td class="source-world" :data-sector="item.purchase_sector">{{ worldLabel(item) }}</td>
+                <td class="source-world" :data-sector="item.purchase_sector">
+                  {{ worldLabel(item) }}
+                  <span v-if="item.purchase_sector" class="sr-only">, {{ item.purchase_sector }} sector</span>
+                </td>
                 <td class="num mono">
                   <span v-if="sellPriceFor(item) !== null">Cr {{ fmt(sellPriceFor(item)) }}/t</span>
                   <span v-else class="dim">—</span>
@@ -89,6 +92,7 @@
                   <button
                     class="sell-btn"
                     :disabled="sellPriceFor(item) === null || ship.loading || !ship.canTrade"
+                    :aria-label="`Sell ${item.tons} tons of ${item.trade_good_name}`"
                     @click="startSell(item)"
                   >
                     Sell
@@ -106,12 +110,16 @@
                   </span>
                 </td>
                 <td class="num">
-                  <button class="confirm-btn" :disabled="ship.loading" @click="doSell(item)">
+                  <button class="confirm-btn" :disabled="ship.loading"
+                          :aria-label="`Confirm sale of ${item.tons} tons of ${item.trade_good_name}`"
+                          @click="doSell(item)">
                     {{ ship.loading ? '…' : 'Confirm' }}
                   </button>
                 </td>
                 <td>
-                  <button class="cancel-btn" @click="pendingSellId = null">Cancel</button>
+                  <button class="cancel-btn"
+                          :aria-label="`Cancel sale of ${item.trade_good_name}`"
+                          @click="pendingSellId = null">Cancel</button>
                 </td>
               </tr>
             </template>
@@ -491,7 +499,7 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 .confirm-btn {
   background: var(--accent-dim);
   border: none;
-  color: #fff;
+  color: var(--accent-text);
   border-radius: var(--radius);
   padding: 0.2rem 0.6rem;
   font-size: 0.72rem;

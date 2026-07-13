@@ -24,13 +24,14 @@
 
         <form class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
-            <label>Lot Size</label>
-            <div class="type-btns">
+            <label id="lot-size-label">Lot Size</label>
+            <div class="type-btns" role="group" aria-labelledby="lot-size-label">
               <button
                 v-for="l in LOT_SIZES"
                 :key="l"
                 type="button"
                 :class="['type-btn', { active: form.lotSize === l }]"
+                :aria-pressed="form.lotSize === l"
                 @click="form.lotSize = l">
                 {{ LOT_SIZE_LABELS[l] }}
               </button>
@@ -39,17 +40,19 @@
 
           <div class="form-row two-col">
             <div>
-              <label>Tons</label>
+              <label for="freight-tons-input">Tons</label>
               <div class="stepper">
-                <button type="button" @click="decTons" :disabled="form.tons <= 1">−</button>
-                <input v-model.number="form.tons" type="number" min="1"
+                <button type="button" aria-label="Decrease tons"
+                        @click="decTons" :disabled="form.tons <= 1">−</button>
+                <input id="freight-tons-input" v-model.number="form.tons" type="number" min="1"
                        :max="maxTons" class="count-input" />
-                <button type="button" @click="incTons" :disabled="form.tons >= maxTons">+</button>
+                <button type="button" aria-label="Increase tons"
+                        @click="incTons" :disabled="form.tons >= maxTons">+</button>
               </div>
             </div>
             <div>
-              <label>Parsecs</label>
-              <input v-model.number="form.parsecs" type="number" min="1" max="6"
+              <label for="freight-parsecs-input">Parsecs</label>
+              <input id="freight-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
                      class="parsec-input" />
             </div>
           </div>

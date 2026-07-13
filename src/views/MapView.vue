@@ -96,7 +96,14 @@
               @click="onWorldSelect(world)"
               @keydown.enter.prevent="onWorldSelect(world)"
               @keydown.space.prevent="onWorldSelect(world)">
-            <span class="world-name">{{ world.Name || '(unnamed)' }}</span>
+            <span class="world-name">
+              <span v-if="world.Zone === 'A' || world.Zone === 'R'"
+                    class="zone-marker" :class="world.Zone === 'R' ? 'zone-red' : 'zone-amber'"
+                    aria-hidden="true">{{ world.Zone }}</span>
+              {{ world.Name || '(unnamed)' }}
+            </span>
+            <span v-if="world.Zone === 'A'" class="sr-only">, Amber zone — advisory</span>
+            <span v-if="world.Zone === 'R'" class="sr-only">, Red zone — prohibited</span>
             <span class="world-hex">{{ world.Hex }}</span>
           </li>
         </ul>
@@ -729,7 +736,7 @@ header {
 
 .advance-btn {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   padding: 0.35rem 0.9rem;

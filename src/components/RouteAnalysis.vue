@@ -65,7 +65,7 @@
               <td class="ctr">{{ w.dist }}</td>
               <td class="ctr w-port">{{ w.starport }}</td>
               <td v-if="ship.cargo.length" class="num profit-cell" :class="w.totalProfit >= 0 ? 'pos' : 'neg'">
-                {{ w.totalProfit >= 0 ? '+' : '' }}Cr {{ fmt(w.totalProfit) }}
+                {{ w.totalProfit >= 0 ? '+' : '-' }}Cr {{ fmt(w.totalProfit) }}
               </td>
               <td class="select-col">
                 <button class="select-btn" @click.stop="selectWorld(w)">Select</button>

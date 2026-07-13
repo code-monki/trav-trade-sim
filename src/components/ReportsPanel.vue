@@ -60,7 +60,7 @@
                 <td><span class="txn-type" :data-type="t.type">{{ TYPE_LABEL[t.type] ?? t.type }}</span></td>
                 <td class="desc-col">{{ txnDesc(t) }}</td>
                 <td :class="['right', 'mono', t.total_cr >= 0 ? 'pos' : 'neg']">
-                  {{ t.total_cr >= 0 ? '+' : '' }}Cr{{ Math.abs(t.total_cr).toLocaleString() }}
+                  {{ t.total_cr >= 0 ? '+' : '-' }}Cr{{ Math.abs(t.total_cr).toLocaleString() }}
                 </td>
               </tr>
             </tbody>
@@ -103,7 +103,7 @@
                 <td class="right mono">{{ t.buy_price_per_ton.toLocaleString() }}</td>
                 <td class="right mono">{{ t.sell_price_per_ton.toLocaleString() }}</td>
                 <td :class="['right', 'mono', 'profit', t.net_profit >= 0 ? 'pos' : 'neg']">
-                  {{ t.net_profit >= 0 ? '+' : '' }}Cr{{ Math.abs(t.net_profit).toLocaleString() }}
+                  {{ t.net_profit >= 0 ? '+' : '-' }}Cr{{ Math.abs(t.net_profit).toLocaleString() }}
                 </td>
               </tr>
             </tbody>
@@ -151,7 +151,7 @@
           <div class="breakdown-net">
             <span class="breakdown-label">Net Position</span>
             <span :class="['breakdown-val', 'mono', 'net', netPosition >= 0 ? 'pos' : 'neg']">
-              {{ netPosition >= 0 ? '+' : '' }}Cr{{ Math.abs(netPosition).toLocaleString() }}
+              {{ netPosition >= 0 ? '+' : '-' }}Cr{{ Math.abs(netPosition).toLocaleString() }}
             </span>
           </div>
         </div>
@@ -719,7 +719,7 @@ const myShare = computed(() => Math.round(netWorth.value * myPercentage.value / 
 .pay-btn {
   background: var(--accent-dim);
   border: none;
-  color: #fff;
+  color: var(--accent-text);
   border-radius: var(--radius);
   padding: 0.2rem 0.7rem;
   font-size: 0.78rem;

@@ -336,7 +336,7 @@ function fmt(n) { return (n ?? 0).toLocaleString() }
 .confirm-btn {
   background: var(--accent-dim);
   border: none;
-  color: #fff;
+  color: var(--accent-text);
   border-radius: var(--radius);
   padding: 0.4rem 1.1rem;
   font-size: 0.82rem;

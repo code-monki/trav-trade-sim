@@ -22,7 +22,8 @@
     <!-- Table -->
     <template v-else>
       <div class="table-controls">
-        <input v-model="filter" type="search" placeholder="Filter goods…" class="market-search" />
+        <input v-model="filter" type="search" placeholder="Filter goods…" class="market-search"
+               aria-label="Filter trade goods" />
         <span class="row-count">{{ filteredRows.length }} / {{ rows.length }} goods</span>
       </div>
 
@@ -31,22 +32,28 @@
           <thead>
             <tr>
               <th class="chart-col">Plot</th>
-              <th @click="setSort('trade_good_name')" class="sortable">
+              <th @click="setSort('trade_good_name')" @keydown.enter.space.prevent="setSort('trade_good_name')"
+                  class="sortable" tabindex="0" :aria-sort="ariaSort('trade_good_name')">
                 Good {{ sortIcon('trade_good_name') }}
               </th>
-              <th @click="setSort('trade_good_die')" class="sortable ctr">
+              <th @click="setSort('trade_good_die')" @keydown.enter.space.prevent="setSort('trade_good_die')"
+                  class="sortable ctr" tabindex="0" :aria-sort="ariaSort('trade_good_die')">
                 Die {{ sortIcon('trade_good_die') }}
               </th>
-              <th @click="setSort('purchase_price')" class="sortable num">
+              <th @click="setSort('purchase_price')" @keydown.enter.space.prevent="setSort('purchase_price')"
+                  class="sortable num" tabindex="0" :aria-sort="ariaSort('purchase_price')">
                 Buy (Cr/t) {{ sortIcon('purchase_price') }}
               </th>
-              <th @click="setSort('sale_price')" class="sortable num">
+              <th @click="setSort('sale_price')" @keydown.enter.space.prevent="setSort('sale_price')"
+                  class="sortable num" tabindex="0" :aria-sort="ariaSort('sale_price')">
                 Sell (Cr/t) {{ sortIcon('sale_price') }}
               </th>
-              <th @click="setSort('spread')" class="sortable num">
+              <th @click="setSort('spread')" @keydown.enter.space.prevent="setSort('spread')"
+                  class="sortable num" tabindex="0" :aria-sort="ariaSort('spread')">
                 Spread {{ sortIcon('spread') }}
               </th>
-              <th @click="setSort('qty_available')" class="sortable num">
+              <th @click="setSort('qty_available')" @keydown.enter.space.prevent="setSort('qty_available')"
+                  class="sortable num" tabindex="0" :aria-sort="ariaSort('qty_available')">
                 Qty (t) {{ sortIcon('qty_available') }}
               </th>
               <th v-if="showBuyButton"></th>
@@ -55,19 +62,29 @@
           <tbody>
             <tr v-for="row in filteredRows" :key="row.trade_good_die"
                 :class="['market-row', { 'row-selected': selectedDie === row.trade_good_die, 'row-event': row.hasEvent }]"
-                @click="selectRow(row)">
+                tabindex="0" role="button"
+                :aria-pressed="selectedDie === row.trade_good_die"
+                :aria-label="`Select ${row.trade_good_name} for purchase`"
+                @click="selectRow(row)"
+                @keydown.enter.space.prevent="selectRow(row)">
               <td class="chart-col" @click.stop>
                 <input type="checkbox"
                        :checked="chartedDies.includes(row.trade_good_die)"
                        class="chart-check"
-                       @change="$emit('toggle-chart', row.trade_good_die)" />
+                       :aria-label="`Plot ${row.trade_good_name} on the price chart`"
+                       @change="$emit('toggle-chart', row.trade_good_die)"
+                       @keydown.stop />
               </td>
               <td class="good-name">{{ row.trade_good_name }}</td>
               <td class="ctr mono">{{ row.trade_good_die }}</td>
-              <td class="num" :class="priceClass(row.purchase_price, 4000)">
+              <td class="num" :class="priceInfo(row.purchase_price, 4000).cls">
+                <span class="price-indicator" aria-hidden="true">{{ priceInfo(row.purchase_price, 4000).symbol }}</span>
+                <span class="sr-only">{{ priceInfo(row.purchase_price, 4000).label }}</span>
                 {{ fmt(row.purchase_price) }}
               </td>
-              <td class="num" :class="priceClass(row.sale_price, 5000)">
+              <td class="num" :class="priceInfo(row.sale_price, 5000).cls">
+                <span class="price-indicator" aria-hidden="true">{{ priceInfo(row.sale_price, 5000).symbol }}</span>
+                <span class="sr-only">{{ priceInfo(row.sale_price, 5000).label }}</span>
                 {{ fmt(row.sale_price) }}
               </td>
               <td class="num" :class="row.spread >= 0 ? 'pos' : 'neg'">
@@ -188,16 +205,22 @@ function sortIcon(key) {
   if (sortKey.value !== key) return ''
   return sortAsc.value ? '↑' : '↓'
 }
+function ariaSort(key) {
+  if (sortKey.value !== key) return 'none'
+  return sortAsc.value ? 'ascending' : 'descending'
+}
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 function fmt(n) { return n.toLocaleString() }
 
-// Price color: compare to CT7 base price (green = below base, red = above)
-function priceClass(price, base) {
+// Price vs. base: colour AND a symbol/label pair, so the signal isn't
+// colour-only (WCAG 2.2 SC 1.4.1) — ▼ below base (buyer's market),
+// ▲ above base (seller's market).
+function priceInfo(price, base) {
   const ratio = price / base
-  if (ratio < 0.85) return 'price-low'
-  if (ratio > 1.15) return 'price-high'
-  return 'price-mid'
+  if (ratio < 0.85) return { cls: 'price-low', symbol: '▼', label: 'Below base price: ' }
+  if (ratio > 1.15) return { cls: 'price-high', symbol: '▲', label: 'Above base price: ' }
+  return { cls: 'price-mid', symbol: '', label: '' }
 }
 </script>
 
@@ -343,6 +366,8 @@ function priceClass(price, base) {
 .price-mid  { color: var(--text); }
 .price-high { color: var(--red); }
 
+.price-indicator { display: inline-block; width: 0.9em; font-size: 0.75em; }
+
 .pos { color: var(--green); }
 .neg { color: var(--red); }
 
@@ -362,7 +387,7 @@ function priceClass(price, base) {
 
 .buy-row-btn {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   padding: 0.25rem 0.6rem;

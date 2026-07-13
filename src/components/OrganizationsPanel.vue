@@ -617,7 +617,7 @@ onMounted(async () => {
   font-weight: 600;
   border: 1px solid transparent;
 }
-.btn-primary { background: var(--accent-dim); color: #fff; padding: 0.3rem 0.8rem; font-size: 0.8rem; }
+.btn-primary { background: var(--accent-dim); color: var(--accent-text); padding: 0.3rem 0.8rem; font-size: 0.8rem; }
 .btn-primary:hover:not(:disabled) { background: var(--accent); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-sm { padding: 0.25rem 0.6rem; font-size: 0.78rem; }

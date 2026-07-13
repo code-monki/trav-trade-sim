@@ -6,8 +6,8 @@
       <div class="filter-row">
         <!-- Subsector filter (only shown when names are available) -->
         <div v-if="hasSubsectors" class="form-row">
-          <label>Subsector</label>
-          <select v-model="selectedSS" @change="selectedHex = ''; emitClear()">
+          <label :for="`${uid}-ss`">Subsector</label>
+          <select :id="`${uid}-ss`" v-model="selectedSS" @change="selectedHex = ''; emitClear()">
             <option value="">All subsectors</option>
             <option v-for="ss in subsectorOptions" :key="ss.index" :value="ss.index">
               {{ ss.index }} — {{ ss.name }}
@@ -16,8 +16,9 @@
         </div>
         <!-- Search filter -->
         <div class="form-row">
-          <label>Search</label>
+          <label :for="`${uid}-search`">Search</label>
           <input
+            :id="`${uid}-search`"
             v-model="searchQuery"
             placeholder="Name or hex…"
             autocomplete="off"
@@ -27,8 +28,8 @@
       </div>
 
       <div class="form-row">
-        <label>World <span v-if="filteredWorlds.length" class="count">({{ filteredWorlds.length }})</span></label>
-        <select v-model="selectedHex" @change="onPick">
+        <label :for="`${uid}-world`">World <span v-if="filteredWorlds.length" class="count">({{ filteredWorlds.length }})</span></label>
+        <select :id="`${uid}-world`" v-model="selectedHex" @change="onPick">
           <option value="">— select world —</option>
           <option v-for="w in filteredWorlds" :key="w.Hex" :value="w.Hex">
             {{ w.Hex }} — {{ w.Name || '(unnamed)' }}
@@ -47,17 +48,17 @@
     <!-- Manual mode -->
     <template v-else>
       <div class="form-row">
-        <label>World Name (optional)</label>
-        <input v-model="manualName" placeholder="World name" @input="emitManual" />
+        <label :for="`${uid}-name`">World Name (optional)</label>
+        <input :id="`${uid}-name`" v-model="manualName" placeholder="World name" @input="emitManual" />
       </div>
       <div class="form-row two-col">
         <div>
-          <label>Hex</label>
-          <input v-model="manualHex" placeholder="e.g. 1910" maxlength="4" @input="emitManual" />
+          <label :for="`${uid}-hex`">Hex</label>
+          <input :id="`${uid}-hex`" v-model="manualHex" placeholder="e.g. 1910" maxlength="4" @input="emitManual" />
         </div>
         <div>
-          <label>Sector</label>
-          <input v-model="manualSector" :placeholder="sectorName || 'Sector name'" @input="emitManual" />
+          <label :for="`${uid}-sector`">Sector</label>
+          <input :id="`${uid}-sector`" v-model="manualSector" :placeholder="sectorName || 'Sector name'" @input="emitManual" />
         </div>
       </div>
       <button v-if="hasWorlds" type="button" class="mode-link" @click="switchDropdown">
@@ -69,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, useId } from 'vue'
 import { useMapStore } from '../stores/map.js'
 
 const props = defineProps({
@@ -79,6 +80,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const map = useMapStore()
+const uid = useId()
 
 const manualMode   = ref(false)
 const selectedSS   = ref('')

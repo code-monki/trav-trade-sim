@@ -396,7 +396,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 
 .btn-primary {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   padding: 0.35rem 1.1rem;

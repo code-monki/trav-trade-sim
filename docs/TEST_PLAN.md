@@ -365,8 +365,8 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 3. Repeat for booking a passenger and (MgT2022 campaigns) a freight lot, including the passage-type/lot-size button groups
 4. Open and close a modal dialog (e.g. Recovery Code, Buy confirmation); verify focus is trapped inside while open and returns to the triggering control on close
 5. Run an automated audit (Lighthouse or equivalent) against the production build (`vite build && vite preview`) for Login, Map, and Referee; verify no critical/serious violations — record the accessibility score
-6. Visually confirm each color-coded indicator (market price deviation, travel-zone highlighting, cargo profit/loss) also carries a non-color cue (text, icon, or symbol); this is a known open gap as of 2026-07-13, expected to fail until addressed — track failures rather than silently passing
-7. Spot-check text/UI contrast on the darkest and lightest theme variants against WCAG 2.2 AA thresholds (4.5:1 normal text, 3:1 large text/UI components) using a contrast-checker tool
+6. Visually confirm each color-coded indicator (market price deviation, travel-zone highlighting, ledger/trades/income net figures) also carries a non-color cue (text, icon, or symbol) — closed 2026-07-13: `MarketTable.vue` price cells show ▼/▲, world-list zones show an A/R badge, and `ReportsPanel.vue`/`RouteAnalysis.vue`'s previously sign-dropping (`Math.abs()`-only) profit/loss figures now always show an explicit +/− sign
+7. Spot-check text/UI contrast on all three theme variants (including the redesigned `dark-imperium` charcoal palette) against WCAG 2.2 AA thresholds (4.5:1 normal text, 3:1 large text/UI components) using a contrast-checker tool or `npx lighthouse` — the charcoal repaint's default `--accent-dim` button text initially failed at 3.71:1 until the new `--accent-text` token was introduced (see DD.md)
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

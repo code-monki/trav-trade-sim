@@ -38,13 +38,14 @@
 
         <form class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
-            <label>Passage Type</label>
-            <div class="type-btns">
+            <label id="passage-type-label">Passage Type</label>
+            <div class="type-btns" role="group" aria-labelledby="passage-type-label">
               <button
                 v-for="t in passageTypes"
                 :key="t"
                 type="button"
                 :class="['type-btn', { active: form.passageType === t }]"
+                :aria-pressed="form.passageType === t"
                 @click="form.passageType = t">
                 {{ PASSAGE_TYPE_LABELS[t] }}
               </button>
@@ -53,17 +54,19 @@
 
           <div class="form-row two-col">
             <div>
-              <label>Passengers</label>
+              <label for="passenger-count-input">Passengers</label>
               <div class="stepper">
-                <button type="button" @click="decCount" :disabled="form.count <= 1">−</button>
-                <input v-model.number="form.count" type="number" min="1"
+                <button type="button" aria-label="Decrease passenger count"
+                        @click="decCount" :disabled="form.count <= 1">−</button>
+                <input id="passenger-count-input" v-model.number="form.count" type="number" min="1"
                        :max="maxCount" class="count-input" />
-                <button type="button" @click="incCount" :disabled="form.count >= maxCount">+</button>
+                <button type="button" aria-label="Increase passenger count"
+                        @click="incCount" :disabled="form.count >= maxCount">+</button>
               </div>
             </div>
             <div v-if="tradeRules === 'T5' || tradeRules === 'MgT2022'">
-              <label>Parsecs</label>
-              <input v-model.number="form.parsecs" type="number" min="1" max="6"
+              <label for="passenger-parsecs-input">Parsecs</label>
+              <input id="passenger-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
                      class="parsec-input" />
             </div>
           </div>

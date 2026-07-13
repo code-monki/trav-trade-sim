@@ -307,7 +307,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 .add-btn {
   background: var(--accent-dim);
   border: none;
-  color: #fff;
+  color: var(--accent-text);
   border-radius: var(--radius);
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
@@ -336,7 +336,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 .close-primary {
   background: var(--accent-dim);
   border: none;
-  color: #fff;
+  color: var(--accent-text);
   border-radius: var(--radius);
   padding: 0.35rem 1.1rem;
   font-size: 0.82rem;

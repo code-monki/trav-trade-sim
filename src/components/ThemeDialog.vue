@@ -532,7 +532,7 @@ async function doImport(e) {
 
 .btn-primary {
   background: var(--accent-dim);
-  color: var(--bg);
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   padding: 0.35rem 1rem;

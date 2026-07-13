@@ -22,6 +22,7 @@ export const THEME_TOKEN_GROUPS = [
       { key: '--text-dim',     label: 'Secondary Text'       },
       { key: '--accent',       label: 'Accent'               },
       { key: '--accent-dim',   label: 'Accent Muted'         },
+      { key: '--accent-text',  label: 'Text on Accent Button' },
       { key: '--code',         label: 'Code / Mono'          },
     ],
   },
