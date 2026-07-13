@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -139,7 +139,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-1101 | Book passengers at Port > Passengers | DD §2 `PassengersPanel` | `PassengersPanel.vue`, `ship.js:bookPassengers`, `d1/004_obligations.sql` (kind='passenger') | — | — | — | — |
 | FR-1102 | Validate capacity before booking | DD §3 | `ship.js:bookPassengers` (stateroomsAvailable check) | UT-501–504 | — | — | — |
-| FR-1103 | CT7/T5 fare calculation | DD §1.1 `obligations` | `passengers.js:passengerFare` | UT-501–504 | — | — | — |
+| FR-1103 | CT7/T5/MgT2022 fare calculation | DD §1.1 `obligations` | `passengers.js:passengerFare` | UT-501–504, UT-513 | — | — | — |
 | FR-1104 | Booking creates obligation + transaction | HLD §4 | `ship.js:bookPassengers`, `worker/src/routes/ships.js` | — | — | — | — |
 | FR-1105 | Auto-deliver on arrival | HLD §5.1 | `ship.js:updateLocation`, `worker/src/routes/ships.js` | — | — | — | — |
 | FR-1106 | Aboard tab shows occupancy + passengers | DD §2 `AboardPanel`/`PassengerManifest` | `AboardPanel.vue`, `PassengerManifest.vue` | — | — | — | — |
@@ -161,7 +161,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-1301 | Accept mail at Port > Services | DD §2 `ShipServices` | `ShipServices.vue`, `ship.js:acceptMailContract`, `d1/004_obligations.sql` (kind='mail') | — | — | — | — |
-| FR-1302 | CT7/T5 payment calculation | DD §2 | `passengers.js:mailPayment` | UT-511–512 | — | — | — |
+| FR-1302 | CT7/T5/MgT2022 payment calculation | DD §2 | `passengers.js:mailPayment` | UT-511–512, UT-515 | — | — | — |
 | FR-1303 | Track in obligations table | DD §1.1 `obligations` | `d1/004_obligations.sql`, `ship.js:acceptMailContract` | — | — | — | — |
 | FR-1304 | Auto-deliver + credit on arrival | HLD §4 | `ship.js:updateLocation`, `worker/src/routes/ships.js` | — | — | — | — |
 | FR-1305 | Contracts tab | DD §2 `ContractsPanel` | `ContractsPanel.vue` (composed within `AboardPanel.vue`) | — | — | — | — |
@@ -171,11 +171,11 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-1401 | Referee CRUD on ship templates | HLD §4.6, DD §1.1 `ship_templates` | `worker/src/routes/referee.js` (ship-templates routes), `RefereeView.vue` Templates sub-panel | — | — | — | MTS-8 |
-| FR-1402 | Ruleset tagging (CT7/T5) | DD §1.1 `ship_templates` | `d1/005_ship_templates.sql` (`trade_rules` CHECK) | — | — | — | MTS-8 |
+| FR-1402 | Ruleset tagging (CT7/T5/MgT2022) | DD §1.1 `ship_templates` | `d1/010_mgt2022_trade_rules.sql` (`trade_rules` CHECK, widened from `d1/005_ship_templates.sql`'s 2-value original) | — | — | — | MTS-8 |
 | FR-1403 | New Ship form template pre-fill | DD §2 | `RefereeView.vue` New Ship form Template dropdown | — | — | — | MTS-8 |
 | FR-1404 | Save existing ship as template | DD §1.2 | `RefereeView.vue` "Save as Template" action | — | — | — | MTS-8 |
 | FR-1405 | Template name uniqueness | DD §1.1 | `d1/005_ship_templates.sql` (`UNIQUE(campaign_id, name)`), `worker/src/routes/referee.js` pre-check (409) | — | — | — | MTS-8 |
-| FR-1406 | Lazy CT7 starter seed | DD §1.1 | `worker/src/routes/referee.js` (seed-on-first-open logic) | — | — | — | MTS-8 |
+| FR-1406 | Lazy CT7/MgT2022 starter seed | DD §1.1 | `worker/src/routes/referee.js` (seed-on-first-open logic) | — | — | — | MTS-8 |
 
 ## 2.15 Asset Valuation & Net Worth
 
@@ -229,6 +229,19 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-1908 | Organization equity, 100%-ceiling | DD §1.1 `organization_ownership` | `worker/src/routes/organizations.js` (ownership routes) | — | — | — | MTS-13 |
 | FR-1909 | Consolidated fleet report, officer/referee only | HLD §4.6, DD §6 | `worker/src/routes/organizations.js:fleet-report` | — | — | — | MTS-13 |
 | FR-1910 | Chained ownership for org-owned ships | HLD §4.6 | `worker/src/routes/reports.js` (`GET /ownership` org-equity branch) | — | — | — | MTS-13 |
+
+## 2.20 MgT2022 Freight & Traffic Availability
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-2001 | Port > Freight tab (MgT2022 only) | HLD §4 | `FreightPanel.vue`, `MapView.vue` (`PORT_TABS` computed) | UT-604 | — | — | MTS-14 |
+| FR-2002 | Freight obligation + upfront charge | DD §1.1 `obligations` (kind='freight') | `worker/src/routes/ships.js:book-freight`, `ship.js:bookFreight` | — | — | — | MTS-14 |
+| FR-2003 | Auto-deliver on arrival | HLD §5.1 | `ship.js:autoDeliver` (freight branch), `worker/src/routes/ships.js:deliver-freight` | — | — | — | MTS-14 |
+| FR-2004 | Late-delivery penalty | DD §1.1 `obligations.due_tick` | `trade-engine-mgt2022.js:freightLatePenaltyPct`/`freightNetAfterPenalty`, `worker/src/routes/ships.js:deliver-freight` | UT-605 | — | — | MTS-14 |
+| FR-2005 | Freight refund | HLD §5.1 | `worker/src/routes/ships.js:refund-freight`, `ship.js:refundFreight` | — | — | — | MTS-14 |
+| FR-2006 | Deterministic per-tick traffic-availability roll | HLD §4.6 | `traffic-tick.js:generateTrafficSnapshot`, `tick.js:ensureTrafficSnapshot` | UT-610–611 | — | — | MTS-14 |
+| FR-2007 | Availability count shown + enforced in booking forms | DD §2 | `PassengersPanel.vue`, `FreightPanel.vue`, `ShipServices.vue` (`trafficAvailability` reads) | — | — | — | MTS-14 |
+| FR-2008 | Traffic data scoped to MgT2022 only | DD §1.1 `traffic_snapshots` | `tick.js:ensureTrafficSnapshot` (`trade_rules === 'MgT2022'` guard) | — | — | — | MTS-14 |
 
 ---
 

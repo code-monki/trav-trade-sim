@@ -1,3 +1,10 @@
+// ── Trade ruleset definitions ─────────────────────────────────────────────────
+export const TRADE_RULESETS = [
+  { code: 'CT7',     label: 'Classic Traveller Book 7' },
+  { code: 'T5',      label: 'Traveller 5th Edition'    },
+  { code: 'MgT2022', label: 'Mongoose Traveller 2022'  },
+]
+
 // ── Milieu definitions ────────────────────────────────────────────────────────
 // Codes from /api/milieux — names are locally defined (API returns no labels).
 export const MILIEUS = [

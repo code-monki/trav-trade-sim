@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0  
+**Version:** 0.4.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -202,7 +202,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Main Flow:**
 1. System checks whether a market snapshot exists for this world at the current tick
 2. If none exists, system generates prices deterministically and, on a world's first-ever visit, backfills price history for the current year
-3. System displays buy/sell price, spread, and quantity for all trade goods, colour-coded against the CT7 base price
+3. System displays buy/sell price, spread, and quantity for all trade goods, colour-coded against the campaign ruleset's base price (CT7, T5, or MgT2022)
 4. Active market events are shown in a banner; affected goods are visually distinguished
 5. User selects one or more goods to chart; system renders weekly/monthly/annual/realized price history
 
@@ -430,7 +430,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Main Flow:**
 1. Player selects passage type (High, Middle, or Low), passenger count, and a destination
 2. System validates capacity is available
-3. System collects fare at embarkation (CT7: flat per jump; T5: per-parsec for High/Middle, flat for Low)
+3. System collects fare at embarkation (CT7: flat per jump; T5/MgT2022: per-parsec for High/Middle, flat for Low; MgT2022 also offers a fourth Basic tier billed per parsec, consuming cargo tonnage instead of a berth)
 4. System creates an obligation record (kind = passenger), writes a `passenger_fare` transaction, and credits the ship account
 5. System updates the Ship > Aboard tab occupancy display
 
@@ -503,10 +503,10 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 - Player's character has `can_trade`
 
 **Main Flow:**
-1. Player specifies a destination (and parsecs, for T5) and accepts the contract
+1. Player specifies a destination (and parsecs, for T5) and accepts the contract; for MgT2022, acceptance is take-all-or-none against the tick's rolled container count
 2. System creates an obligation (kind = mail) with status `in_transit`; no upfront payment
 3. When the ship arrives at the destination (Jump Select or referee move), system delivers the mail automatically
-4. System credits the ship account (CT7: flat Cr25,000; T5: Cr25,000 × parsecs) and writes a `mail` transaction
+4. System credits the ship account (CT7: flat Cr25,000; T5: Cr25,000 × parsecs; MgT2022: Cr25,000 × rolled container count) and writes a `mail` transaction
 5. Ship > Contracts tab reflects delivery
 
 **Alternate / Exception Flows:**
@@ -530,7 +530,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 - User is authenticated as referee
 
 **Main Flow:**
-1. If no templates exist yet for a CT7 campaign, system lazily seeds one starter (Type A Free Trader)
+1. If no templates exist yet for a CT7 or MgT2022 campaign, system lazily seeds one starter (Type A Free Trader)
 2. Referee creates a new template with a name, ruleset, and stat values, or edits/deletes an existing one
 3. System enforces name uniqueness per campaign
 
@@ -828,3 +828,91 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Postconditions:**
 - Read-only; no state changes
+
+## 2.20 MgT2022 Freight & Traffic Availability
+
+### UC-35: Book a Basic Passage Passenger (MgT2022)
+
+**Actor:** Player
+**Related Requirements:** FR-1101, FR-1102, FR-1103, FR-2007
+**Trigger:** Player opens Port > Passengers on an MgT2022 campaign and selects the Basic tier
+
+**Preconditions:**
+- Player's character has `can_trade`
+- Campaign's `trade_rules` is `MgT2022`
+
+**Main Flow:**
+1. Player selects Basic passage, a passenger count, and a destination
+2. System validates general cargo tonnage is available (2 tons/passenger) and caps the count against the tick's rolled Basic-passage traffic availability
+3. System collects the per-parsec fare upfront, creates an obligation (kind = passenger, passage_type = basic), and credits the ship account
+4. Ship's `cargoAvailable` decreases by the reserved tonnage until the passenger is delivered or refunded
+
+**Alternate / Exception Flows:**
+- **A1 — Insufficient cargo space:** Booking rejected with the shortfall shown
+- **A2 — No Basic passengers available this tick:** Booking rejected
+
+**Postconditions:**
+- Obligation created (pending); ship credits and cargo availability updated
+
+### UC-36: Book Freight (MgT2022)
+
+**Actor:** Player
+**Related Requirements:** FR-2001, FR-2002, FR-2007
+**Trigger:** Player opens Port > Freight (visible only for MgT2022 campaigns) and books a lot
+
+**Preconditions:**
+- Player's character has `can_trade`
+- Campaign's `trade_rules` is `MgT2022`
+
+**Main Flow:**
+1. Player selects a lot size (Major, Minor, or Incidental), a tonnage, parsecs, and a destination
+2. System validates cargo space and caps the tonnage/lot count against the tick's rolled freight-lot traffic availability
+3. System creates an obligation (kind = freight) recording the tonnage, lot size, rate, and a due tick, charges the agreed amount upfront, and credits the ship account
+4. Ship > Aboard > Freight in Transit reflects the new lot
+
+**Alternate / Exception Flows:**
+- **A1 — Insufficient cargo space:** Booking rejected
+- **A2 — No lots of the selected size available this tick:** Booking rejected
+
+**Postconditions:**
+- Freight obligation created (pending); ship credits and cargo availability updated
+
+### UC-37: Deliver Freight, Including Late Penalty (MgT2022)
+
+**Actor:** System (triggered by ship arrival)
+**Related Requirements:** FR-2003, FR-2004
+**Trigger:** Ship arrives at a freight lot's destination world
+
+**Preconditions:**
+- A pending freight obligation exists for this ship with a matching destination
+
+**Main Flow:**
+1. System marks the obligation fulfilled
+2. If the current tick is at or before the obligation's due tick, no further credit adjustment occurs (already paid upfront)
+3. If the current tick is after the due tick, system rolls a late-delivery penalty ((1D+4)×10% of the charge), deducts it from the ship's credits, and records a `freight_penalty` transaction
+
+**Alternate / Exception Flows:**
+- None
+
+**Postconditions:**
+- Obligation resolved (fulfilled); ship credits reduced by any late penalty
+
+### UC-38: View Traffic Availability (MgT2022)
+
+**Actor:** Player, Referee
+**Related Requirements:** FR-2006, FR-2007, FR-2008
+**Trigger:** Player opens the Passengers, Freight, or Services (Mail) tab on an MgT2022 campaign
+
+**Preconditions:**
+- Campaign's `trade_rules` is `MgT2022`
+
+**Main Flow:**
+1. System deterministically rolls (or retrieves, if already rolled this tick) the current tick's passenger/freight/mail traffic-availability counts for the selected world, seeded the same way as market snapshot generation
+2. System displays the rolled count next to each passage tier, freight lot size, and the mail contract form
+3. Booking forms cap their inputs at the displayed availability
+
+**Alternate / Exception Flows:**
+- **A1 — CT7/T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity
+
+**Postconditions:**
+- `traffic_snapshots` has a row for this (campaign, world, tick) if one didn't already exist

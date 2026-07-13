@@ -323,6 +323,16 @@
           </div>
         </template>
 
+        <!-- ── Port: Freight tab (MgT2022 only) ──────────────────────────── -->
+        <template v-if="topTab === 'port' && portTab === 'freight'">
+          <div class="subtab-wrap">
+            <FreightPanel
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
+
         <!-- ── Ship: Cargo tab ───────────────────────────────────────────── -->
         <template v-if="topTab === 'ship' && shipTab === 'cargo'">
           <div class="cargo-tab-wrap">
@@ -412,6 +422,7 @@ import TutorialDialog   from '../components/TutorialDialog.vue'
 import RouteAnalysis    from '../components/RouteAnalysis.vue'
 import PassengersPanel  from '../components/PassengersPanel.vue'
 import ShipServices     from '../components/ShipServices.vue'
+import FreightPanel     from '../components/FreightPanel.vue'
 import AboardPanel  from '../components/AboardPanel.vue'
 import ReportsPanel from '../components/ReportsPanel.vue'
 import OrganizationsPanel from '../components/OrganizationsPanel.vue'
@@ -450,11 +461,15 @@ const TOP_TABS = [
   { key: 'jump',     label: 'Jump'     },
 ]
 
-const PORT_TABS = [
-  { key: 'market',     label: 'Market'     },
-  { key: 'passengers', label: 'Passengers' },
-  { key: 'services',   label: 'Services'   },
-]
+const PORT_TABS = computed(() => {
+  const tabs = [
+    { key: 'market',     label: 'Market'     },
+    { key: 'passengers', label: 'Passengers' },
+    { key: 'services',   label: 'Services'   },
+  ]
+  if (auth.campaign?.trade_rules === 'MgT2022') tabs.push({ key: 'freight', label: 'Freight' })
+  return tabs
+})
 
 const SHIP_TABS = [
   { key: 'cargo',         label: 'Cargo'         },

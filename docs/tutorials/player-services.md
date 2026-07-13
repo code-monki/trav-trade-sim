@@ -21,9 +21,9 @@ low berth occupancy.
 
 | Field         | Notes                                                                              |
 | ------------- | ---------------------------------------------------------------------------------- |
-| Passage Type  | **High** / **Middle** / **Low**. High and Middle share staterooms; Low uses cryo-berths. |
-| Count         | Number of passengers. Must not exceed available berths.                            |
-| Parsecs       | *T5 campaigns only.* Jump distance determines the fare for High and Middle passage. |
+| Passage Type  | **High** / **Middle** / **Low** — and, in MgT2022 campaigns, a fourth **Basic** tier. High and Middle share staterooms; Low uses cryo-berths; Basic consumes 2 tons of general cargo space per passenger instead. |
+| Count         | Number of passengers. Must not exceed available berths (or, for Basic, free cargo tons) — MgT2022 also caps this at the tick's rolled traffic-availability count for that tier. |
+| Parsecs       | *T5 and MgT2022 campaigns.* Jump distance determines the fare for High, Middle, and (MgT2022 only) Basic passage. |
 | Destination   | Hex and sector of the destination world. Name is optional (for your reference).    |
 
 The **fare preview** updates as you fill in the form.
@@ -33,14 +33,16 @@ and the booking appears on **Ship → Manifest**.
 
 ### Fare rates
 
-| Passage | CT7 (per jump) | T5 (High/Middle per parsec · Low flat) |
-| ------- | -------------- | --------------------------------------- |
-| High    | Cr 10,000      | Cr 10,000/parsec                        |
-| Middle  | Cr 8,000       | Cr 8,000/parsec                         |
-| Low     | Cr 1,000       | Cr 1,000                                |
+| Passage | CT7 (per jump) | T5 (per parsec) | MgT2022 (per parsec) |
+| ------- | -------------- | ---------------- | --------------------- |
+| High    | Cr 10,000      | Cr 10,000/parsec  | Cr 10,000–30,000 (1–6 parsecs) |
+| Middle  | Cr 8,000       | Cr 8,000/parsec   | Cr 8,000–18,000 (1–6 parsecs)  |
+| Basic   | —              | —                 | Cr 2,000–7,000 (1–6 parsecs)   |
+| Low     | Cr 1,000       | Cr 1,000 (flat)   | Cr 700 (flat)                  |
 
-> ℹ **Note:** If the Book button is greyed out, either the form is incomplete or there are
-> not enough free berths. Check the occupancy summary at the top of the tab.
+> ℹ **Note:** If the Book button is greyed out, either the form is incomplete, there are
+> not enough free berths/cargo space, or (MgT2022) this tick's rolled traffic availability
+> for that tier has been used up. Check the occupancy summary at the top of the tab.
 
 ---
 
@@ -95,17 +97,48 @@ Scroll to the **Mail Contract** section in **Port → Services**.
 | ------------ | ---------------------------------------------------------------- |
 | Destination  | Hex and sector of the mail destination                           |
 | Name         | Optional world name for display in the Contracts tab             |
-| Parsecs      | *T5 campaigns only.* Sets the payment amount.                    |
+| Parsecs      | *T5 campaigns only.* Sets the payment amount. MgT2022 mail instead pays per rolled container, unaffected by parsecs. |
+
+MgT2022 campaigns also show this tick's rolled container count — mail is only offered when
+the world's roll succeeds, and acceptance is take-all-or-none for that count.
 
 The **payment preview** shows the amount you will receive on delivery:
 
-| Rules | Payment          |
-| ----- | ---------------- |
-| CT7   | Cr 25,000 flat   |
-| T5    | Cr 25,000/parsec |
+| Rules   | Payment                             |
+| ------- | ------------------------------------ |
+| CT7     | Cr 25,000 flat                       |
+| T5      | Cr 25,000/parsec                     |
+| MgT2022 | Cr 25,000 × rolled container count   |
 
 Click **Accept Mail Contract**. The contract appears on **Ship → Contracts**.
 **No credits are transferred yet** — payment is on delivery only.
+
+> ℹ **MgT2022 Freight:** Bulk cargo lots (Major/Minor/Incidental) are a separate,
+> MgT2022-only system with their own **Port → Freight** tab, covered in section 6 below.
+
+---
+
+## 6. Book Freight (MgT2022 only)
+
+Open **Port → Freight** — visible only in MgT2022 campaigns. Pick a lot size, tonnage,
+parsecs, and a destination:
+
+| Field       | Notes                                                                          |
+| ----------- | ------------------------------------------------------------------------------- |
+| Lot Size    | **Major**, **Minor**, or **Incidental** — smaller lots pay a higher rate per ton. |
+| Tons        | Capped by free cargo space and this tick's rolled availability for that lot size. |
+| Parsecs     | Sets both the rate and the delivery deadline (due tick).                         |
+| Destination | Hex and sector of the delivery world.                                            |
+
+The charge is **collected upfront**, like passenger fares. The lot appears in
+**Ship → Aboard → Freight in Transit** with its due tick.
+
+Freight auto-delivers on arrival, the same as passengers and mail. Arriving **after** the
+due tick applies a randomized late-delivery penalty — a portion of the already-collected
+charge is deducted from the ship's credits at that point. Arriving on time costs nothing
+extra.
+
+You (or your Referee) can cancel a pending freight lot for a full refund before it delivers.
 
 ---
 
@@ -121,7 +154,7 @@ Mail contracts are an Imperial obligation — there is no cancellation mechanic.
 
 ---
 
-## 6. Track Passengers and Mail
+## 7. Track Passengers, Mail, and Freight
 
 **Ship → Manifest** shows all passengers currently in transit:
 - Passage type and count
@@ -133,6 +166,9 @@ Mail contracts are an Imperial obligation — there is no cancellation mechanic.
 - Jump distance (parsecs)
 - Payment due on delivery
 - Total pending payment footer
+
+**Ship → Aboard → Freight in Transit** (MgT2022 only) shows all freight lots currently in
+transit: lot size, tonnage, destination, charge already collected, and due tick.
 
 ---
 

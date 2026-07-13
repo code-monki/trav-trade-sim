@@ -8,6 +8,7 @@ import {
   shouldRollupMonth,
   shouldRollupYear,
   makeRng,
+  generateWorldSnapshot,
 } from '../src/lib/market-tick.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -173,5 +174,53 @@ describe('makeRng', () => {
     const tick10 = makeRng('camp:0101:11:10')
     const tick11 = makeRng('camp:0101:11:11')
     expect(tick10()).not.toBe(tick11())
+  })
+})
+
+// ── generateWorldSnapshot dispatch ─────────────────────────────────────────────
+
+const testWorld = { Hex: '0101', UWP: 'A788899-C', Remarks: 'Ag Ri' }
+
+describe('generateWorldSnapshot dispatch', () => {
+  it('defaults to CT7 when tradeRules is omitted', () => {
+    const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1 })
+    expect(rows).toHaveLength(36)
+    expect(rows[0].trade_good_name).toBe('Textiles') // CT2_TRADE_GOODS[0]
+  })
+
+  it('MgT2022 uses its own 36-entry goods table, not CT2', () => {
+    const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
+    expect(rows).toHaveLength(36)
+    expect(rows[0].trade_good_name).toBe('Common Electronics') // MGT2022_TRADE_GOODS[0]
+    // 'Liquor' (CT2 die 13) has no MgT2022 equivalent — confirms the CT2
+    // table isn't being used under the hood.
+    expect(rows.every(r => r.trade_good_name !== 'Liquor')).toBe(true)
+  })
+
+  it('is deterministic — same inputs produce identical rows across calls', () => {
+    const a = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 5, tradeRules: 'MgT2022' })
+    const b = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 5, tradeRules: 'MgT2022' })
+    expect(a).toEqual(b)
+  })
+
+  it('fixes the pre-existing bug where T5 silently used CT7 pricing — T5 and CT7 now diverge', () => {
+    const ct7Rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 7, tradeRules: 'CT7' })
+    const t5Rows  = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 7, tradeRules: 'T5' })
+    // Both use the same 36-entry CT2 goods table (T5 has no goods table of its
+    // own in this codebase), but the pricing formulas differ, so at least
+    // some purchase prices must differ given the same seed.
+    const anyDifferent = ct7Rows.some((r, i) => r.purchase_price !== t5Rows[i].purchase_price)
+    expect(anyDifferent).toBe(true)
+  })
+
+  it('every row has positive purchase/sale prices and non-negative qty for all three rulesets', () => {
+    for (const tradeRules of ['CT7', 'T5', 'MgT2022']) {
+      const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 3, tradeRules })
+      for (const row of rows) {
+        expect(row.purchase_price).toBeGreaterThan(0)
+        expect(row.sale_price).toBeGreaterThan(0)
+        expect(row.qty_available).toBeGreaterThanOrEqual(0)
+      }
+    }
   })
 })

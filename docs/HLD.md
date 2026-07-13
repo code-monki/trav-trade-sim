@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 ---
 
@@ -110,7 +110,8 @@ src/
 │   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow + live valuation
 │   ├── PassengersPanel.vue   Port > Passengers sub-tab: booking form, capacity check, fare preview
 │   ├── ShipServices.vue      Port > Services sub-tab: fuel purchase + mail contract booking
-│   ├── AboardPanel.vue       Ship > Aboard sub-tab: composes PassengerManifest + ContractsPanel
+│   ├── FreightPanel.vue      Port > Freight sub-tab (MgT2022 only): lot booking, cargo capacity check
+│   ├── AboardPanel.vue       Ship > Aboard sub-tab: composes PassengerManifest + ContractsPanel + Freight-in-transit
 │   ├── PassengerManifest.vue Occupancy + in-transit passengers
 │   ├── ContractsPanel.vue    In-transit mail contracts + pending payment
 │   ├── ReportsPanel.vue      Ship > Reports sub-tab: Ledger/Trades/Income/Debts/Net Worth
@@ -122,19 +123,21 @@ src/
 │   ├── RecoveryCodeDialog.vue One-time recovery code display (teleported)
 │   ├── CharacterDialog.vue   Character stats display
 │   ├── HamburgerMenu.vue     Navigation menu
-│   ├── HelpDialog.vue        In-app user manual (tabbed) — stale re: financial-model
-│   │                         features, flagged for a separate revisit
-│   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links — same caveat
+│   ├── HelpDialog.vue        In-app user manual (tabbed)
+│   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links
 │   ├── AboutDialog.vue       About/license information
 │   └── ThemeDialog.vue       UI theme picker
 ├── lib/
-│   ├── trade-engine-ct7.js   CT Book 7 price formulas (pure functions)
-│   ├── trade-engine-t5.js    T5 price formulas (pure functions)
-│   ├── market-tick.js        Snapshot generation, seeded RNG, calendar helpers
+│   ├── trade-engine-ct7.js       CT Book 7 price formulas (pure functions)
+│   ├── trade-engine-t5.js        T5 price formulas (pure functions)
+│   ├── trade-engine-mgt2022.js   MgT2022 price/freight/mail/traffic formulas (pure functions)
+│   ├── market-tick.js        Snapshot generation dispatch (CT7/T5/MgT2022), seeded RNG, calendar helpers
+│   ├── traffic-tick.js       MgT2022-only passenger/freight/mail traffic-availability roll generation
 │   ├── market-events.js      Event table, probability engine, active event filter
 │   ├── passengers.js         passengerFare, passageCapacityNeeded, availableFuelTypes,
 │   │                         jumpFuelTons, fuelCost, mailPayment (all pure functions)
-│   ├── traveller-data.js     CT2 trade goods, CT7 lookup tables, milieu list
+│   ├── traveller-data.js         CT2 trade goods, CT7 lookup tables, milieu list, trade ruleset list
+│   ├── traveller-data-mgt2022.js MgT2022 D66 trade goods, price/fare/freight/traffic tables
 │   ├── traveller-helpers.js  UWP decode, hex distance, subsector helpers
 │   ├── tutorials.js          In-app tutorial content (HTML strings)
 │   ├── api.js                HTTP client (fetch + Bearer token; replaces @supabase/supabase-js)
@@ -337,22 +340,24 @@ MapView
     ├── TOP TAB: Overview — world data sections (UWP, trade codes, routes)
     │
     ├── TOP TAB: Port
-    │   ├── (sub-tab bar) [Market] [Passengers] [Services]
+    │   ├── (sub-tab bar) [Market] [Passengers] [Services] [Freight — MgT2022 only]
     │   ├── PORT SUB-TAB: Market
     │   │   ├── MarketTable (emits: select-good, toggle-chart, buy-good)
     │   │   ├── (resize handle)
     │   │   └── PriceChart (Weekly / Monthly / Annual / Realized)
     │   ├── PORT SUB-TAB: Passengers
     │   │   └── PassengersPanel
-    │   └── PORT SUB-TAB: Services
-    │       └── ShipServices (fuel + mail sections)
+    │   ├── PORT SUB-TAB: Services
+    │   │   └── ShipServices (fuel + mail sections)
+    │   └── PORT SUB-TAB: Freight (MgT2022 only)
+    │       └── FreightPanel
     │
     ├── TOP TAB: Ship
     │   ├── (sub-tab bar) [Cargo] [Aboard] [Reports] [Organizations]
     │   ├── SHIP SUB-TAB: Cargo
     │   │   └── CargoHold
     │   ├── SHIP SUB-TAB: Aboard
-    │   │   └── AboardPanel (composes PassengerManifest + ContractsPanel)
+    │   │   └── AboardPanel (composes PassengerManifest + ContractsPanel + Freight-in-transit)
     │   ├── SHIP SUB-TAB: Reports
     │   │   └── ReportsPanel (Ledger / Trades / Income / Debts / Net Worth)
     │   └── SHIP SUB-TAB: Organizations

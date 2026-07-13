@@ -98,7 +98,11 @@
       <section class="service-section">
         <h3>Mail Contract</h3>
 
-        <form class="mail-form" @submit.prevent="submitMail">
+        <div v-if="tradeRules === 'MgT2022' && mailContainersAvailable <= 0" class="no-service">
+          No mail offered at this starport this tick — check back next tick.
+        </div>
+
+        <form v-else class="mail-form" @submit.prevent="submitMail">
           <div class="form-row">
             <label>Destination World</label>
             <WorldPicker
@@ -109,6 +113,9 @@
             <label>Parsecs</label>
             <input v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
           </div>
+          <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
+            {{ mailContainersAvailable }} container(s) offered this tick — take all or none, per MgT2022 rules
+          </p>
 
           <div class="fare-preview">
             <span class="fare-label">Payment on delivery</span>
@@ -258,14 +265,20 @@ watch(() => mailDest.value.hex, (hex) => {
   }
 })
 
+// MgT2022 only — this tick's rolled mail container count (see traffic-tick.js).
+// Always null (unlimited) for CT7/T5.
+const mailContainersAvailable = computed(() => tick.trafficAvailability?.mail_containers ?? 0)
+
 const mailPay = computed(() =>
-  mailPayment(tradeRules.value, mailParsecs.value)
+  mailPayment(tradeRules.value, mailParsecs.value, mailContainersAvailable.value)
 )
 
-const canAcceptMail = computed(() =>
-  mailDest.value.hex.trim().length > 0 &&
-  mailDest.value.sector.trim().length > 0
-)
+const canAcceptMail = computed(() => {
+  if (mailDest.value.hex.trim().length === 0) return false
+  if (mailDest.value.sector.trim().length === 0) return false
+  if (tradeRules.value === 'MgT2022') return mailContainersAvailable.value > 0
+  return true
+})
 
 async function submitMail() {
   mailError.value   = ''
@@ -414,6 +427,8 @@ async function submitMail() {
 }
 .fare-label  { color: var(--text-dim); }
 .fare-amount strong { color: var(--accent); }
+
+.traffic-note { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
 
 .form-actions { display: flex; justify-content: flex-end; }
 

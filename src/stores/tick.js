@@ -7,6 +7,7 @@ import {
   TICKS_PER_YEAR, shouldRollupMonth, shouldRollupYear,
 } from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
+import { generateTrafficSnapshot } from '../lib/traffic-tick.js'
 
 export const useTickStore = defineStore('tick', () => {
   const auth = useAuthStore()
@@ -28,6 +29,10 @@ export const useTickStore = defineStore('tick', () => {
 
   // Full event history for the currently viewed world (active + expired)
   const worldEventHistory = ref([])
+
+  // MgT2022-only: current tick's passenger/freight/mail traffic-availability
+  // counts for the currently viewed world. Always null for CT7/T5 campaigns.
+  const trafficAvailability = ref(null)
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const imperialDate = computed(() => formatImperialDate(currentTick.value))
@@ -69,6 +74,7 @@ export const useTickStore = defineStore('tick', () => {
       // Invalidate snapshot cache — prices change each tick
       worldSnapshots.value   = {}
       snapshotWorldKey.value = ''
+      trafficAvailability.value = null
 
       await loadActiveEvents()
       return { ok: true, tick: data.tick }
@@ -177,6 +183,7 @@ export const useTickStore = defineStore('tick', () => {
             const activeAtT = activeEventsForWorld(eventPool, world.Hex, t, sectorName)
             backfillRows.push(...generateWorldSnapshot({
               world, sectorName, campaignId, tick: t, activeEvents: activeAtT,
+              tradeRules: auth.campaign?.trade_rules,
             }))
 
             if (shouldRollupMonth(t) || shouldRollupYear(t)) boundariesToRepair.push(t)
@@ -198,6 +205,7 @@ export const useTickStore = defineStore('tick', () => {
           world, sectorName, campaignId,
           tick:         currentTick.value,
           activeEvents: eventsForWorld,
+          tradeRules:   auth.campaign?.trade_rules,
         })
 
         const { error: insertErr } = await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows })
@@ -207,6 +215,7 @@ export const useTickStore = defineStore('tick', () => {
         for (const row of rows) cache[row.trade_good_die] = row
         worldSnapshots.value   = cache
         snapshotWorldKey.value = cacheKey
+        await ensureTrafficSnapshot(world, sectorName)
         return rows
       }
 
@@ -222,6 +231,7 @@ export const useTickStore = defineStore('tick', () => {
       for (const row of data ?? []) cache[row.trade_good_die] = row
       worldSnapshots.value   = cache
       snapshotWorldKey.value = cacheKey
+      await ensureTrafficSnapshot(world, sectorName)
       return data ?? []
     } catch (e) {
       error.value = e.message
@@ -229,6 +239,27 @@ export const useTickStore = defineStore('tick', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // ── Traffic availability (MgT2022 only) ───────────────────────────────────
+
+  // Deterministically generates this tick's passenger/freight/mail traffic
+  // snapshot for a world and persists it (idempotent — INSERT OR IGNORE, and
+  // regeneration from the same seed always produces the same row, so a race
+  // between two clients is harmless). No-op for CT7/T5 campaigns.
+  async function ensureTrafficSnapshot(world, sectorName) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022') {
+      trafficAvailability.value = null
+      return null
+    }
+
+    const row = generateTrafficSnapshot({
+      world, sectorName, campaignId, tick: currentTick.value,
+    })
+    await api.post(`/api/campaigns/${campaignId}/traffic`, row)
+    trafficAvailability.value = row
+    return row
   }
 
   // ── Price history ──────────────────────────────────────────────────────────
@@ -289,11 +320,13 @@ export const useTickStore = defineStore('tick', () => {
   return {
     currentTick, currentYear, currentDay, currentMonth,
     loading, error, activeEvents, worldSnapshots, worldEventHistory,
+    trafficAvailability,
     imperialDate,
     loadCalendar,
     advanceTick,
     loadActiveEvents,
     ensureWorldSnapshot,
+    ensureTrafficSnapshot,
     loadWeeklyHistory,
     loadMonthlyHistory,
     loadAnnualHistory,

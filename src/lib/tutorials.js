@@ -24,8 +24,8 @@ trade.</p>
 <p>Decide in advance:</p>
 <ul>
   <li>A unique <strong>campaign code</strong> players can type, e.g. <code>SPINWARD-42</code></li>
-  <li><strong>Trade rules</strong> — CT7 (Classic Traveller Book 7) or T5 (Traveller 5th Edition).
-      Cannot be changed after creation.</li>
+  <li><strong>Trade rules</strong> — CT7 (Classic Traveller Book 7), T5 (Traveller 5th Edition), or
+      MgT2022 (Mongoose Traveller 2022). Cannot be changed after creation.</li>
   <li><strong>Starting Imperial date</strong> — year and day (default: Year 1105, Day 1)</li>
 </ul>
 <p>Player join instructions are in
@@ -44,7 +44,7 @@ trade.</p>
     <tr><td>Campaign Name</td><td>Human-readable label, e.g. "Spinward Marches Run"</td></tr>
     <tr><td>Campaign Code</td><td>Uppercase, no spaces. Share this with players. Auto-uppercased as you type.</td></tr>
     <tr><td>Milieu</td><td>Imperial era. Defaults to 1105 (Third Imperium classic).</td></tr>
-    <tr><td>Trade Rules</td><td>CT7 or T5. <strong>Cannot be changed after creation.</strong></td></tr>
+    <tr><td>Trade Rules</td><td>CT7, T5, or MgT2022. <strong>Cannot be changed after creation.</strong></td></tr>
     <tr><td>Starting Date</td><td>Imperial year and day (1–365). Week is derived automatically (day ÷ 7, rounded up).</td></tr>
     <tr><td>Your Character Name</td><td>Your Referee character's name. Must be unique in the campaign.</td></tr>
     <tr><td>PIN</td><td>Minimum 4 characters. <strong>Cannot be changed.</strong> Save it somewhere safe.</td></tr>
@@ -172,7 +172,7 @@ also fire automatically on a world's first Market tab visit each tick.</p>
 One tick = one jump-week = 7 Imperial days.</p>
 <p>What happens automatically on tick advance:</p>
 <ul>
-  <li>Prices are recalculated for all worlds using CT7/T5 rules</li>
+  <li>Prices are recalculated for all worlds using CT7/T5/MgT2022 rules</li>
   <li>Market events that have reached their expiry tick are closed automatically</li>
   <li>A random event may fire on the next world visit (one per world per tick, M.U.L.E.-style)</li>
   <li>Monthly OHLC candlestick rollup triggers every 4 ticks</li>
@@ -350,7 +350,7 @@ if you haven't made one yet.</p>
   <thead><tr><th>Field</th><th>Notes</th></tr></thead>
   <tbody>
     <tr><td>Name</td><td>Must be unique within the campaign.</td></tr>
-    <tr><td>Ruleset</td><td>CT7 or T5 — tags which edition's numbers this design uses.</td></tr>
+    <tr><td>Ruleset</td><td>CT7, T5, or MgT2022 — tags which edition's numbers this design uses.</td></tr>
     <tr><td>Hull Tons / Cargo / Jump Rating / Maneuver Rating</td><td>Same fields as the ship edit form.</td></tr>
     <tr><td>Staterooms / Low Berths / Fuel Capacity</td><td>Same fields as the ship edit form.</td></tr>
     <tr><td>Market Value</td><td>Referee-assessed value — see
@@ -358,7 +358,7 @@ if you haven't made one yet.</p>
     <tr><td>Notes</td><td>Free text — use it to flag numbers you haven't verified against the book.</td></tr>
   </tbody>
 </table>
-<p class="tut-note">ℹ The first time a CT7 campaign's Templates panel is opened with none yet
+<p class="tut-note">ℹ The first time a CT7 or MgT2022 campaign's Templates panel is opened with none yet
 created, one starter template (a Type A Free Trader) is seeded automatically, flagged as
 unverified in its notes. T5 campaigns start with no seed.</p>
 `
@@ -523,7 +523,7 @@ from the world's <strong>UWP</strong> (Universal World Profile). Key fields for 
       Better starports generally yield better trade prices and larger quantities.</li>
   <li><strong>Tech Level</strong> — higher-tech worlds produce and consume different goods.</li>
   <li><strong>Trade Codes</strong> — Ag, In, Ri, Po, etc. These drive price modifiers for
-      specific goods per the CT7/T5 trade tables.</li>
+      specific goods per the CT7/T5/MgT2022 trade tables.</li>
   <li><strong>Travel Zone</strong> — Amber = caution; Red = interdicted.
       The world list highlights these in colour.</li>
 </ul>
@@ -586,7 +586,7 @@ and open the <strong>Market</strong> tab (<kbd>M</kbd>).</p>
   <tbody>
     <tr><td>Plot</td><td>Tick to add this good's price history to the chart below the table</td></tr>
     <tr><td>Good</td><td>Trade good name</td></tr>
-    <tr><td>Die</td><td>The d66 result that identifies this good (used in CT7/T5 rules)</td></tr>
+    <tr><td>Die</td><td>The d66 result that identifies this good (used in CT7/T5/MgT2022 rules)</td></tr>
     <tr><td>Buy (Cr/t)</td><td>Price per ton to purchase here <em>this week</em></td></tr>
     <tr><td>Sell (Cr/t)</td><td>Price per ton if you sell here this week</td></tr>
     <tr><td>Spread</td><td>Sell minus Buy. Positive = you could buy and sell here for a profit without jumping.</td></tr>
@@ -707,7 +707,7 @@ stateroom and low berth occupancy.</p>
   <tbody>
     <tr><td>Passage Type</td><td>High / Middle / Low. High and Middle share staterooms; Low uses cryo-berths.</td></tr>
     <tr><td>Count</td><td>Number of passengers. Must not exceed available berths.</td></tr>
-    <tr><td>Parsecs</td><td>T5 campaigns only — jump distance determines the fare.</td></tr>
+    <tr><td>Parsecs</td><td>T5 and MgT2022 campaigns — jump distance determines the fare. MgT2022 also offers a fourth <strong>Basic Passage</strong> tier that consumes cargo tonnage instead of a stateroom/berth.</td></tr>
     <tr><td>Destination</td><td>Destination world hex and sector. Optional name for display.</td></tr>
   </tbody>
 </table>
@@ -715,7 +715,8 @@ stateroom and low berth occupancy.</p>
 to confirm. The fare is credited to the ship immediately and passengers appear on the
 <strong>Ship → Manifest</strong> tab.</p>
 <p class="tut-note">ℹ CT7 fares are flat per jump (High Cr10,000 · Middle Cr8,000 · Low Cr1,000).
-T5 fares for High and Middle scale with parsecs; Low is always flat.</p>
+T5 and MgT2022 fares for High and Middle (and, for MgT2022, Basic) scale with parsecs; Low is always flat.
+MgT2022 campaigns also cap each tier's count against that tick's rolled traffic availability.</p>
 `
       },
       {
@@ -762,10 +763,13 @@ uses 40 tons.</p>
 Mail is an Imperial obligation — once accepted it must be delivered.</p>
 <div class="tut-shot">📸 Services tab mail section showing destination fields and payment preview</div>
 <p>Enter the <strong>destination hex</strong> and <strong>sector</strong>.
-For T5 campaigns, enter the <strong>parsecs</strong> (jump distance) — this sets the payment.
+For T5 and MgT2022 campaigns, enter the <strong>parsecs</strong> (jump distance) — this sets the payment
+for T5. MgT2022 mail instead pays a flat rate per rolled container and is only offered when the
+world's tick roll succeeds — see the Book Freight section below for the sibling MgT2022-only
+cargo-lot system.
 An optional destination name helps you identify the contract later.</p>
 <p>The <strong>payment preview</strong> shows what you will receive on delivery:
-CT7 flat Cr25,000; T5 Cr25,000 × parsecs.</p>
+CT7 flat Cr25,000; T5 Cr25,000 × parsecs; MgT2022 Cr25,000 × the tick's rolled container count.</p>
 <p>Click <strong>Accept Mail Contract</strong>. The contract appears on
 <strong>Ship → Contracts</strong>. <strong>No credits are transferred yet</strong> —
 payment is on delivery only.</p>
@@ -784,8 +788,31 @@ from the Contracts tab.</p>
 `
       },
       {
+        id: 'book-freight',
+        title: '6. Book Freight (MgT2022 only)',
+        body: `
+<p>Open <strong>Port → Freight</strong> — visible only in MgT2022 campaigns. Pick a lot
+size, tonnage, parsecs, and a destination.</p>
+<table class="tut-table">
+  <tr><th>Field</th><th>Notes</th></tr>
+  <tr><td>Lot Size</td><td><strong>Major</strong>, <strong>Minor</strong>, or <strong>Incidental</strong> — smaller lots pay a higher rate per ton.</td></tr>
+  <tr><td>Tons</td><td>Capped by free cargo space and this tick's rolled availability for that lot size.</td></tr>
+  <tr><td>Parsecs</td><td>Sets both the rate and the delivery deadline (due tick).</td></tr>
+  <tr><td>Destination</td><td>Hex and sector of the delivery world.</td></tr>
+</table>
+<p>The charge is <strong>collected upfront</strong>, like passenger fares. The lot appears
+in <strong>Ship → Aboard → Freight in Transit</strong> with its due tick.</p>
+<p>Freight auto-delivers on arrival, the same as passengers and mail. Arriving
+<strong>after</strong> the due tick applies a randomized late-delivery penalty — a portion
+of the already-collected charge is deducted from the ship's credits at that point. Arriving
+on time costs nothing extra.</p>
+<p>You (or your Referee) can cancel a pending freight lot for a full refund before it
+delivers.</p>
+`
+      },
+      {
         id: 'track-contracts',
-        title: '6. Track Passengers and Mail',
+        title: '7. Track Passengers, Mail, and Freight',
         body: `
 <p><strong>Ship → Manifest</strong> shows all passengers currently in transit:</p>
 <ul>
@@ -800,8 +827,11 @@ from the Contracts tab.</p>
   <li>Payment due on delivery</li>
   <li>Total pending payment footer</li>
 </ul>
+<p><strong>Ship → Aboard → Freight in Transit</strong> (MgT2022 only) shows all freight
+lots currently in transit: lot size, tonnage, destination, charge already collected, and
+due tick.</p>
 <div class="tut-shot">📸 Contracts sub-tab showing in-transit mail contracts table</div>
-<p>Both lists clear an entry automatically once it's delivered.</p>
+<p>All lists clear an entry automatically once it's delivered.</p>
 `
       }
     ]

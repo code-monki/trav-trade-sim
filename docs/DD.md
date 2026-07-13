@@ -1,13 +1,13 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 ---
 
 ## 1. Database Schema
 
-The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/009_org_financials.sql`.
+The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/010_mgt2022_trade_rules.sql`.
 
 ### 1.1 Tables
 
@@ -18,7 +18,7 @@ The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary key
 | `code` | TEXT | NOT NULL, UNIQUE | Shareable campaign identifier |
 | `label` | TEXT | NOT NULL | Display name |
 | `milieu` | TEXT | NOT NULL, default `'M1105'` | Traveller Map milieu code |
-| `trade_rules` | TEXT | NOT NULL, default `'CT7'` | `'CT7'` or `'T5'`; locked after creation |
+| `trade_rules` | TEXT | NOT NULL, default `'CT7'` | `'CT7'`, `'T5'`, or `'MgT2022'`; locked after creation (no CHECK constraint on this column) |
 | `recovery_code_hash` | TEXT | nullable | PBKDF2 hash of the one-time recovery code |
 | `created_at` | TEXT | NOT NULL, default `datetime('now')` | |
 
@@ -88,7 +88,7 @@ Index: `idx_ships_campaign (campaign_id)`
 |--------|------|-------------|-------------|
 | `id` | TEXT | PK | |
 | `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
-| `trade_rules` | TEXT | NOT NULL, CHECK IN ('CT7','T5') | Ruleset this template's stats are tagged for |
+| `trade_rules` | TEXT | NOT NULL, CHECK IN ('CT7','T5','MgT2022') | Ruleset this template's stats are tagged for |
 | `name` | TEXT | NOT NULL | |
 | `hull_type` | TEXT | nullable | |
 | `hull_tons` | INTEGER | NOT NULL, default 200 | |
@@ -99,7 +99,7 @@ Index: `idx_ships_campaign (campaign_id)`
 | `low_berth_capacity` | INTEGER | NOT NULL, default 0 | |
 | `fuel_capacity` | INTEGER | NOT NULL, default 0 | |
 | `market_value` | INTEGER | NOT NULL, default 0 | |
-| `notes` | TEXT | nullable | Flags the lazily-seeded CT7 starter template as unverified |
+| `notes` | TEXT | nullable | Flags the lazily-seeded CT7/MgT2022 starter template as unverified |
 | `created_at` | TEXT | NOT NULL | |
 | UNIQUE | `(campaign_id, name)` | | |
 
@@ -347,7 +347,7 @@ Indexes: `idx_cargo_player (campaign_id, player_id)`, `idx_cargo_ship (campaign_
 | `player_id` | TEXT | FK → players(id) ON DELETE CASCADE | |
 | `ship_id` | TEXT | FK → ships(id) ON DELETE SET NULL, nullable | |
 | `tick` | INTEGER | NOT NULL | |
-| `type` | TEXT | NOT NULL, CHECK IN (`buy`,`sell`,`fee`,`event`,`fuel`,`passenger_fare`,`passenger_refund`,`mail`) | This `CHECK` can't be `ALTER`ed in place — why `debt_payments`/`dues_payments`/`disbursements` are separate tables rather than new `type` values |
+| `type` | TEXT | NOT NULL, CHECK IN (`buy`,`sell`,`fee`,`event`,`fuel`,`passenger_fare`,`passenger_refund`,`mail`,`freight_charge`,`freight_refund`,`freight_penalty`) | This `CHECK` can't be `ALTER`ed in place — why `debt_payments`/`dues_payments`/`disbursements` are separate tables rather than new `type` values (the three `freight_*` values were added via a table-rebuild migration, `d1/010_mgt2022_trade_rules.sql`, since a straight `ALTER` isn't possible in SQLite either) |
 | `trade_good_die` / `trade_good_name` / `tons` / `price_per_ton` | — | nullable | |
 | `total_cr` | INTEGER | NOT NULL | Positive = income, negative = expense |
 | `world_hex` / `sector` / `notes` | TEXT | nullable | |
@@ -363,7 +363,7 @@ Records a completed buy+sell round trip; feeds the `realized_ohlcv` view below.
 | `campaign_id` | TEXT | FK | |
 | `player_id` | TEXT | FK → players(id) ON DELETE CASCADE | |
 | `ship_id` | TEXT | FK → ships(id) ON DELETE SET NULL, nullable | |
-| `trade_rules` | TEXT | NOT NULL, CHECK IN ('CT7','T5') | |
+| `trade_rules` | TEXT | NOT NULL, CHECK IN ('CT7','T5','MgT2022') | |
 | `trade_good_die` / `trade_good_name` | TEXT | NOT NULL | |
 | `tons` | INTEGER | NOT NULL, CHECK (tons > 0) | |
 | `cargo_id_t5` | TEXT | nullable | |
@@ -372,7 +372,7 @@ Records a completed buy+sell round trip; feeds the `realized_ohlcv` view below.
 | `buy_price_per_ton` / `total_cost` | INTEGER | NOT NULL | |
 | `market_world_hex` / `market_sector` | TEXT | NOT NULL | Where sold |
 | `sell_tick` | INTEGER | NOT NULL | |
-| `tc_adjusted_price_per_ton` | INTEGER | nullable | CT7-specific |
+| `tc_adjusted_price_per_ton` | INTEGER | nullable | T5-specific (name predates MgT2022's Modified Price % fields, which are not separately persisted) |
 | `trade_price_per_ton` / `sell_price_per_ton` | INTEGER | NOT NULL | |
 | `effective_flux` / `broker_dm` / `broker_fee_total` | INTEGER | nullable | T5-specific |
 | `total_revenue` / `net_profit` | INTEGER | NOT NULL | |
@@ -388,22 +388,42 @@ Indexes: `idx_trade_records_market`, `idx_trade_records_player`, `idx_trade_reco
 | `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
 | `ship_id` | TEXT | FK → ships(id) ON DELETE CASCADE | |
 | `player_id` | TEXT | FK → players(id), nullable | |
-| `kind` | TEXT | NOT NULL, CHECK IN ('mail','passenger') | |
-| `status` | TEXT | NOT NULL, default `'pending'`, CHECK IN ('pending','fulfilled','cancelled') | `fulfilled` on arrival at destination (both kinds); `cancelled` on referee refund (passenger only — mail has no cancel path) |
-| `amount` | INTEGER | NOT NULL | |
+| `kind` | TEXT | NOT NULL, CHECK IN ('mail','passenger','freight') | `'freight'` added via `d1/010_mgt2022_trade_rules.sql` (MgT2022 only) |
+| `status` | TEXT | NOT NULL, default `'pending'`, CHECK IN ('pending','fulfilled','cancelled') | `fulfilled` on arrival at destination (all three kinds); `cancelled` on referee/player refund (passenger and freight only — mail has no cancel path) |
+| `amount` | INTEGER | NOT NULL | Fare (passenger), payment (mail), or full agreed charge (freight — charged upfront at booking) |
 | `origin_world_hex` / `origin_sector` / `origin_world_name` | TEXT | nullable | |
 | `dest_world_hex` / `dest_sector` | TEXT | NOT NULL | |
 | `dest_world_name` | TEXT | nullable | |
 | `accept_tick` | INTEGER | NOT NULL | |
 | `resolve_tick` | INTEGER | nullable | |
-| `passage_type` | TEXT | nullable | passenger only: `'high'` \| `'middle'` \| `'low'` |
+| `due_tick` | INTEGER | nullable | freight only: deadline tick for on-time delivery; late delivery applies a (1D+4)×10% penalty computed at delivery time (never stored — see `trade-engine-mgt2022.js`'s `freightLatePenaltyPct`) |
+| `passage_type` | TEXT | nullable | passenger only: `'high'` \| `'middle'` \| `'basic'` \| `'low'` (`'basic'` is MgT2022-only, no `CHECK` constraint on this column) |
 | `passenger_count` | INTEGER | nullable | passenger only |
 | `fare_per_head` | INTEGER | nullable | passenger only |
-| `parsecs` | INTEGER | nullable | mail only |
+| `parsecs` | INTEGER | nullable | mail and freight |
+| `freight_tons` | INTEGER | nullable | freight only |
+| `freight_lot_size` | TEXT | nullable | freight only: `'major'` \| `'minor'` \| `'incidental'` (no `CHECK` constraint) |
+| `rate_per_ton` | INTEGER | nullable | freight only: agreed Cr/ton for the whole run |
 | `notes` | TEXT | nullable | |
 | `created_at` | TEXT | NOT NULL | |
 
 Indexes: `idx_obligations_ship (campaign_id, ship_id, kind, status)`, `idx_obligations_dest (dest_world_hex, dest_sector) WHERE status = 'pending'`
+
+#### `traffic_snapshots`
+*(`d1/010_mgt2022_trade_rules.sql`)* — MgT2022-only passenger/freight/mail traffic-availability rolls, one row per (campaign, world, tick), generated deterministically alongside the market snapshot (see `src/lib/traffic-tick.js`). CT7/T5 campaigns never populate this table.
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PK, AUTOINCREMENT | |
+| `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
+| `world_hex` / `sector` | TEXT | NOT NULL | |
+| `tick` | INTEGER | NOT NULL | |
+| `high_passages` / `middle_passages` / `basic_passages` / `low_passages` | INTEGER | NOT NULL, default 0 | Rolled availability count per passage tier this tick |
+| `major_freight_lots` / `minor_freight_lots` / `incidental_freight_lots` | INTEGER | NOT NULL, default 0 | Rolled availability count per freight lot size this tick |
+| `mail_containers` | INTEGER | NOT NULL, default 0 | Rolled container count (0 if the 2D mail-availability roll didn't meet 12+) |
+| `created_at` | TEXT | NOT NULL | |
+| UNIQUE | `(campaign_id, world_hex, sector, tick)` | | |
+
+Index: `idx_traffic_snapshots_lookup (campaign_id, world_hex, sector, tick)`
 
 Worker routes alias these columns back to the pre-refactor field names in SQL (`amount AS fare_total`, `origin_world_hex AS embark_world_hex`, `passenger_count AS count`, etc. — see `PASSENGER_SELECT`/`MAIL_SELECT` in `worker/src/routes/ships.js` and `referee.js`), so the frontend store (`useShipStore`'s `passengers`/`mailContracts` state, `bookPassengers`/`acceptMailContract` actions — §3) needed zero changes when the tables were unified.
 
@@ -500,7 +520,7 @@ Anchors reachable-worlds computation to the ship's actual `current_world`/`curre
 | `world` | Object | `null` | Current world (embark metadata) |
 | `sectorName` | String | `''` | |
 
-No emits. Booking form: passage type selector, count stepper, T5 parsecs input (shown when `trade_rules='T5'`), destination fields, real-time fare preview. Validates stateroom/berth availability before submitting; calls `ship.bookPassengers`.
+No emits. Booking form: passage type selector (High/Middle/Low, plus Basic for MgT2022), count stepper, parsecs input (shown for T5 and MgT2022), destination fields, real-time fare preview. Validates stateroom/berth/cargo-tonnage availability and (for MgT2022) the tick's rolled traffic-availability count before submitting; calls `ship.bookPassengers`.
 
 ### `ShipServices`
 | Prop | Type | Default | Description |
@@ -508,7 +528,7 @@ No emits. Booking form: passage type selector, count stepper, T5 parsecs input (
 | `world` | Object | `null` | Determines fuel availability |
 | `sectorName` | String | `''` | |
 
-No emits. Two sections: **Fuel** (availability badges, tonnage stepper capped at tank space, fill-level bar, one-click "Fill for jump" that computes and immediately purchases the tons needed for one jump) and **Mail Contract** (destination fields, T5 parsecs, payment preview). Embeds `WorldPicker.vue` for destination selection; calls `ship.purchaseFuel`/`ship.acceptMailContract`.
+No emits. Two sections: **Fuel** (availability badges, tonnage stepper capped at tank space, fill-level bar, one-click "Fill for jump" that computes and immediately purchases the tons needed for one jump) and **Mail Contract** (destination fields, T5 parsecs, payment preview; MgT2022 instead shows the tick's rolled container count and gates acceptance on it being > 0). Embeds `WorldPicker.vue` for destination selection; calls `ship.purchaseFuel`/`ship.acceptMailContract`.
 
 ### `AboardPanel`
 No props, no emits. Ship's "Aboard" sub-tab — composes `PassengerManifest` and `ContractsPanel` under one view (occupancy + in-transit passengers, and in-transit mail contracts).
@@ -750,7 +770,7 @@ Error bodies may carry extra fields beyond `error` (e.g. `locked_until`, `attemp
 ```json
 {
   "data": {
-    "campaign": { "id": "...", "code": "SPINWARD-42", "label": "...", "milieu": "M1105", "trade_rules": "CT7" },
+    "campaign": { "id": "...", "code": "SPINWARD-42", "label": "...", "milieu": "M1105", "trade_rules": "CT7" },  // or "T5" / "MgT2022"
     "player": { "id": "...", "character_name": "Gvoudzon", "role": "referee", "credits": 0 },
     "token": "..."
   }
@@ -789,7 +809,7 @@ Two-level tab system: **TOP_TABS** select the major section; a second **sub-tab 
 
 ```
 ┌────────────────── header (grid: left | center | right) ─────────────────────┐
-│ TTS · Campaign Name   │  001-1105 Tick 0 · CT7  [Advance Tick]  │  User [≡]  │
+│ TTS · Campaign Name   │  001-1105 Tick 0 · CT7  [Advance Tick]  │  User [≡]  │  (badge shows CT7/T5/MgT2022)
 └─────────────────────────────────────────────────────────────────────────────┘
 ┌────── sidebar ──────────┬──────────────── main panel ────────────────────────┐
 │ Sector                  │ World Name                         UWP ↗            │

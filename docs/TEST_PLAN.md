@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 ---
 
@@ -109,6 +109,27 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 | UT-510 | `jumpFuelTons` | hull=200, parsecs=1 | `20` (ceil(200 × 0.1 × 1)) |
 | UT-511 | `mailPayment` | CT7, parsecs=1 | `25000` |
 | UT-512 | `mailPayment` | T5, parsecs=3 | `75000` (25000 × 3) |
+| UT-513 | `passengerFare` | Basic, 1 pax, MgT2022, parsecs=1 | Cr2,000 (basic < middle at every parsec, see full comparison test) |
+| UT-514 | `passageCapacityNeeded` | `'basic'`, count=3 | `{ stateroomsNeeded: 0, lowBerthsNeeded: 0, cargoTonsNeeded: 6 }` |
+| UT-515 | `mailPayment` | MgT2022, containerCount=4 | Cr100,000 (25000 × 4) |
+
+### 3.6 `src/lib/trade-engine-mgt2022.js`, `src/lib/traffic-tick.js`, `src/lib/market-tick.js` dispatch
+
+Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engine-mgt2022.test.js`, 42 cases) and the new traffic-availability generator (`tests/traffic-tick.test.js`). Representative cases:
+
+| TC-ID | Function | Input | Expected Output |
+|-------|----------|-------|-----------------|
+| UT-601 | `modifiedPricePct` | roll = -3 | `{ purchasePct: 300, salePct: 10 }` |
+| UT-602 | `modifiedPricePct` | roll = 25 | `{ purchasePct: 15, salePct: 400 }` |
+| UT-603 | `modifiedPricePct` | rolls -3..25 | Purchase% monotonically non-increasing, Sale% monotonically non-decreasing |
+| UT-604 | `freightRate` | `'incidental'` vs `'major'`, same parsecs | Incidental > minor > major (smaller lots pay more per ton) |
+| UT-605 | `freightLatePenaltyPct` / `freightNetAfterPenalty` | 1D=6, charge=1000 | penalty 100%, net Cr0 (never negative) |
+| UT-606 | `mailAvailable` | 2D=11 vs 12 | `false` vs `true` (needs 12+) |
+| UT-607 | `smugglingRiskDM` | higher Law Level vs higher Sale DM | Risk increases with Law Level, decreases with Sale DM |
+| UT-608 | `generateWorldSnapshot` | `tradeRules: 'MgT2022'` | 36 rows from `MGT2022_TRADE_GOODS`, not `CT2_TRADE_GOODS` |
+| UT-609 | `generateWorldSnapshot` | `tradeRules: 'CT7'` vs `'T5'`, same seed | Purchase prices diverge — confirms the pre-existing T5-uses-CT7-pricing bug is fixed |
+| UT-610 | `generateTrafficSnapshot` | same inputs twice | Identical row (deterministic) |
+| UT-611 | `generateTrafficSnapshot` | high-population vs low-population world, 30 ticks | High-population world's summed traffic ≥ low-population world's |
 
 ### 3.4 `src/utils/hexDistance.js`
 
@@ -284,7 +305,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 
 ### MTS-8: Ship Templates
 1. Referee opens Campaign Management → Ships → Templates
-2. For a CT7 campaign with no templates yet, verify one starter template (Type A Free Trader) is lazily seeded, flagged unverified in its notes; T5 campaigns start with no seed
+2. For a CT7 or MgT2022 campaign with no templates yet, verify one starter template (Type A Free Trader) is lazily seeded, flagged unverified in its notes; T5 campaigns start with no seed
 3. Referee creates a new template (name, ruleset, stats)
 4. Referee opens the New Ship form; selects the template from the Template dropdown; verify hull tons, cargo capacity, jump rating, and market value pre-fill
 5. Switch back to "Custom Design"; verify the form clears to blank defaults
@@ -326,6 +347,17 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 5. Record an equity stake for a player in the organization; verify the same 100%-ceiling validation as Ownership Tracking
 6. Mark a member ship as owned outright by the organization; open that ship's Net Worth tab and verify "Your Share" now reflects the organization's equity percentage instead of the ship's own `ship_ownership` records
 7. Open the organization's Fleet Report (officers/referee only) and verify per-ship and fleet-wide totals match the ships' actual credits/value/cargo/debt
+
+### MTS-14: MgT2022 Trade Ruleset (Freight, Basic Passage, Traffic Availability)
+1. Create a campaign with Trade Rules = MgT2022; verify the option appears in the New Campaign dropdown alongside CT7/T5
+2. Open Campaign Management → Ships → Templates; verify a "Type A Free Trader" template is lazily seeded (parity with CT7)
+3. Select a world with the Market tab open; verify the 36 goods shown are MgT2022's own names (e.g. "Common Electronics"), not CT7/T5's Book 2 names
+4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity)
+5. Open Port → Freight (visible only for MgT2022 campaigns); book a Major/Minor/Incidental lot; verify the charge is collected upfront and the lot appears in Ship → Aboard → Freight in Transit
+6. Advance the tick past the freight's due tick, then navigate the ship to its destination; verify a late-delivery penalty is deducted from credits at delivery and the obligation clears
+7. Open Port → Services → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
+8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
+9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

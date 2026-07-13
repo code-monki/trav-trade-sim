@@ -37,7 +37,7 @@ Click **Advance Tick ›** in the header, or press `T`. One tick = one jump-week
 
 What happens automatically on tick advance:
 
-- Prices are recalculated for all worlds using CT7/T5 trade rules
+- Prices are recalculated for all worlds using CT7/T5/MgT2022 trade rules
 - Market events that have reached their expiry tick are closed automatically
 - A random event may fire on the next world visit (one per world per tick, M.U.L.E.-style)
 - Monthly OHLC candlestick rollup triggers every 4 ticks

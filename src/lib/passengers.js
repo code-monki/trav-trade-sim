@@ -2,22 +2,32 @@
  * Passenger, fuel, and mail contract engine.
  *
  * All functions are pure (no side-effects, no randomness).
- * Covers both CT7 (Classic Traveller Book 7) and T5 (Traveller 5th Edition).
+ * Covers CT7 (Classic Traveller Book 7), T5 (Traveller 5th Edition), and
+ * MgT2022 (Mongoose Traveller 2022).
  *
  * Key rule differences:
- *   CT7 passage fares — flat per jump regardless of parsec distance
- *   T5  passage fares — per parsec (High/Middle scale with distance)
- *   Fuel pricing      — identical in both; starport class determines availability
- *   Mail payment      — CT7 flat Cr25,000 per contract; T5 Cr25,000 per parsec
+ *   CT7     passage fares — flat per jump regardless of parsec distance
+ *   T5      passage fares — per parsec (High/Middle scale with distance)
+ *   MgT2022 passage fares — per parsec, 4 tiers (adds Basic, which consumes
+ *           general cargo tonnage instead of a dedicated stateroom/berth)
+ *   Fuel pricing      — identical in all three; starport class determines availability
+ *   Mail payment      — CT7 flat Cr25,000; T5 Cr25,000/parsec; MgT2022 flat
+ *           Cr25,000 per 5-ton container, container count rolled separately
+ *           (see trade-engine-mgt2022.js's mailAvailable/mailContainerCount)
  */
+
+import { MGT2022_PASSAGE_FARES, MGT2022_BASIC_PASSAGE_TONS } from './traveller-data-mgt2022.js'
+import { mailPaymentMgT2022 } from './trade-engine-mgt2022.js'
 
 // ── Passage types ─────────────────────────────────────────────────────────────
 
 export const PASSAGE_TYPES = ['high', 'middle', 'low']
+export const PASSAGE_TYPES_MGT2022 = ['high', 'middle', 'basic', 'low']
 
 export const PASSAGE_TYPE_LABELS = {
   high:   'High Passage',
   middle: 'Middle Passage',
+  basic:  'Basic Passage',
   low:    'Low Passage',
 }
 
@@ -46,17 +56,20 @@ const T5_PASSAGE_FARES_PER_PARSEC = {
 /**
  * Compute total fare for a passenger booking.
  *
- * @param {string} passageType  — 'high' | 'middle' | 'low'
+ * @param {string} passageType  — 'high' | 'middle' | 'basic' | 'low'
  * @param {number} count        — number of passengers
- * @param {string} tradeRules   — 'CT7' | 'T5'
+ * @param {string} tradeRules   — 'CT7' | 'T5' | 'MgT2022'
  * @param {number} parsecs      — jump distance in parsecs (CT7: ignored except for low)
  * @returns {{ farePerHead: number, fareTotal: number }}
  */
 export function passengerFare(passageType, count, tradeRules, parsecs = 1) {
-  const safeParsecs = Math.max(1, parsecs)
+  const safeParsecs = Math.max(1, Math.min(6, parsecs))
   let farePerHead
 
-  if (tradeRules === 'T5') {
+  if (tradeRules === 'MgT2022') {
+    const table = MGT2022_PASSAGE_FARES[passageType] ?? []
+    farePerHead = table[safeParsecs - 1] ?? 0
+  } else if (tradeRules === 'T5') {
     const base = T5_PASSAGE_FARES_PER_PARSEC[passageType] ?? 0
     // Low passage is flat; High and Middle scale with parsecs
     farePerHead = passageType === 'low' ? base : base * safeParsecs
@@ -74,20 +87,26 @@ export function passengerFare(passageType, count, tradeRules, parsecs = 1) {
 // ── Stateroom / berth capacity ─────────────────────────────────────────────────
 
 /**
- * Tons consumed in the cargo hold by this passage booking.
+ * Tons/berths consumed by this passage booking.
  * High and Middle use staterooms (tracked separately from cargo hold).
  * Low uses low berths (also tracked separately).
- * These are counted against stateroom_capacity / low_berth_capacity, not cargo_capacity.
+ * Basic (MgT2022 only) uses general cargo tonnage instead of a dedicated
+ * stateroom or berth — 2 tons of spare room per passenger.
+ * These are counted against stateroom_capacity / low_berth_capacity /
+ * cargo_capacity, never against each other.
  *
  * @param {string} passageType
  * @param {number} count
- * @returns {{ stateroomsNeeded: number, lowBerthsNeeded: number }}
+ * @returns {{ stateroomsNeeded: number, lowBerthsNeeded: number, cargoTonsNeeded: number }}
  */
 export function passageCapacityNeeded(passageType, count) {
   if (passageType === 'low') {
-    return { stateroomsNeeded: 0, lowBerthsNeeded: count }
+    return { stateroomsNeeded: 0, lowBerthsNeeded: count, cargoTonsNeeded: 0 }
   }
-  return { stateroomsNeeded: count, lowBerthsNeeded: 0 }
+  if (passageType === 'basic') {
+    return { stateroomsNeeded: 0, lowBerthsNeeded: 0, cargoTonsNeeded: count * MGT2022_BASIC_PASSAGE_TONS }
+  }
+  return { stateroomsNeeded: count, lowBerthsNeeded: 0, cargoTonsNeeded: 0 }
 }
 
 // ── Fuel ──────────────────────────────────────────────────────────────────────
@@ -149,14 +168,19 @@ export function fuelCost(tons, pricePerTon) {
 
 /**
  * Mail payment per contract.
- * CT7: Cr25,000 flat per consignment (one mail bag = 5 tons).
- * T5:  Cr25,000 per parsec.
+ * CT7:     Cr25,000 flat per consignment (one mail bag = 5 tons).
+ * T5:      Cr25,000 per parsec.
+ * MgT2022: Cr25,000 per 5-ton container, container count rolled separately
+ *          (see trade-engine-mgt2022.js's mailContainerCount) — pass the
+ *          rolled container count via `containerCount` for MgT2022.
  *
- * @param {string} tradeRules  — 'CT7' | 'T5'
+ * @param {string} tradeRules  — 'CT7' | 'T5' | 'MgT2022'
  * @param {number} parsecs
+ * @param {number} [containerCount]  — MgT2022 only
  * @returns {number} payment in Credits
  */
-export function mailPayment(tradeRules, parsecs = 1) {
+export function mailPayment(tradeRules, parsecs = 1, containerCount = 1) {
+  if (tradeRules === 'MgT2022') return mailPaymentMgT2022(containerCount)
   if (tradeRules === 'T5') return 25_000 * Math.max(1, parsecs)
   return 25_000  // CT7: flat
 }

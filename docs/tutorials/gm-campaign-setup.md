@@ -15,7 +15,7 @@ be ready to trade.
 Decide in advance:
 
 - A unique **campaign code** players can type, e.g. `SPINWARD-42`
-- **Trade rules** — CT7 (Classic Traveller Book 7) or T5 (Traveller 5th Edition).
+- **Trade rules** — CT7 (Classic Traveller Book 7), T5 (Traveller 5th Edition), or MgT2022 (Mongoose Traveller 2022).
   Cannot be changed after creation.
 - **Starting Imperial date** — year and day (default: Year 1105, Day 1)
 
@@ -32,7 +32,7 @@ Open the app and click the **New Campaign** tab on the login screen.
 | Campaign Name       | Human-readable label, e.g. "Spinward Marches Run"                                   |
 | Campaign Code       | Uppercase, no spaces. Share this with players. Auto-uppercased as you type.         |
 | Milieu              | Imperial era. Defaults to 1105 (Third Imperium classic).                            |
-| Trade Rules         | CT7 or T5. **Cannot be changed after creation.**                                    |
+| Trade Rules         | CT7, T5, or MgT2022. **Cannot be changed after creation.**                          |
 | Starting Date       | Imperial year and day (1–365). Week is derived automatically (day ÷ 7, rounded up). |
 | Your Character Name | Your Referee character's name. Must be unique in the campaign.                      |
 | PIN                 | Minimum 4 characters. **Cannot be changed.** Save it somewhere safe.                |

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Traveller Trade Simulator (TTS) is a web-based speculative trade dashboard for tabletop roleplaying campaigns set in the Traveller universe. It provides a shared, persistent market economy that the Referee manages and players interact with in real time, replacing the paper-and-dice mechanics of Classic Traveller Book 7 and Traveller 5th Edition with a tracked, historically-charted digital equivalent.
+Traveller Trade Simulator (TTS) is a web-based speculative trade dashboard for tabletop roleplaying campaigns set in the Traveller universe. It provides a shared, persistent market economy that the Referee manages and players interact with in real time, replacing the paper-and-dice mechanics of Classic Traveller Book 7, Traveller 5th Edition, and Mongoose Traveller 2022 with a tracked, historically-charted digital equivalent.
 
 ## Problem Statement
 
@@ -20,7 +20,7 @@ Speculative trade in Traveller is one of the game's most engaging subsystems, bu
 | **G-2** | Provide persistent, shared market state that all players in a campaign see identically |
 | **G-3** | Enable route analysis — show projected profit for every reachable world before committing to a jump |
 | **G-4** | Produce a living market that changes over time via M.U.L.E.-style random events and Referee-created events |
-| **G-5** | Support multiple Traveller editions (Classic CT7, Traveller 5th Edition) in a single tool |
+| **G-5** | Support multiple Traveller editions (Classic CT7, Traveller 5th Edition, Mongoose Traveller 2022) in a single tool |
 | **G-6** | Require no server infrastructure beyond a Cloudflare free-tier account (Workers + D1) |
 | **G-7** | Run entirely in a web browser with no installation |
 
@@ -75,8 +75,9 @@ From any world, the Jump tab shows all reachable worlds within the ship's jump r
 |------|--------|-------------|
 | `CT7` | Classic Traveller Book 7 (Merchant Prince) | Cost-of-goods table, market price table, actual value table, broker DM and fee |
 | `T5`  | Traveller 5th Edition | T5 trade classification list and pricing rules |
+| `MgT2022` | Mongoose Traveller 2022 Core Rulebook | D66 trade goods table, Modified Price % table (3D + Broker/Purchase/Sale DMs), Basic Passage tier, Freight (Major/Minor/Incidental lots with late-delivery penalty), container-based mail, and population/starport-driven traffic-availability rolls for passengers/freight/mail |
 
-Trade rules are chosen at campaign creation and are immutable. Both rule sets use the same calendar, event, and ship systems.
+Trade rules are chosen at campaign creation and are immutable. All three rule sets use the same calendar, event, and ship systems.
 
 ## Market Data Lifecycle
 

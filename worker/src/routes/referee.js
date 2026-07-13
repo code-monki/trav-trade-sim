@@ -137,6 +137,20 @@ app.get('/ship-templates', requireReferee, async (c) => {
     return c.json({ data: seeded ?? [] })
   }
 
+  if ((existing ?? []).length === 0 && campaign.trade_rules === 'MgT2022') {
+    await db.prepare(
+      `INSERT INTO ship_templates
+         (id, campaign_id, trade_rules, name, hull_type, hull_tons, cargo_capacity,
+          jump_rating, maneuver_drive_rating, stateroom_capacity, low_berth_capacity,
+          fuel_capacity, market_value, notes)
+       VALUES (?, ?, 'MgT2022', 'Type A Free Trader', 'Free Trader', 200, 82, 1, 1, 6, 20, 30, 37680000, ?)`
+    ).bind(crypto.randomUUID(), session.campaign_id,
+           'Standard MgT2022 Core Rulebook reference design — verify against your own copy before relying on these numbers.').run()
+
+    const { results: seeded } = await listTemplates()
+    return c.json({ data: seeded ?? [] })
+  }
+
   return c.json({ data: existing ?? [] })
 })
 

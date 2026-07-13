@@ -19,13 +19,13 @@ Open the Referee panel → **Ships** tab → **Templates**.
 | Field | Notes |
 | ----- | ----- |
 | Name | Must be unique within the campaign. |
-| Ruleset | CT7 or T5 — tags which edition's numbers this design uses. |
+| Ruleset | CT7, T5, or MgT2022 — tags which edition's numbers this design uses. |
 | Hull Tons / Cargo / Jump Rating / Maneuver Rating | Same fields as the ship edit form. |
 | Staterooms / Low Berths / Fuel Capacity | Same fields as the ship edit form. |
 | Market Value | Referee-assessed value — see [Fleet & Organizations → Check Your Net Worth](./player-fleet-organizations.md#1-check-your-net-worth). |
 | Notes | Free text — flag numbers you haven't verified against the book. |
 
-> ℹ **Note:** The first time a CT7 campaign's Templates panel is opened with none yet
+> ℹ **Note:** The first time a CT7 or MgT2022 campaign's Templates panel is opened with none yet
 > created, one starter template (a Type A Free Trader) is seeded automatically, flagged as
 > unverified in its notes. T5 campaigns start with no seed.
 

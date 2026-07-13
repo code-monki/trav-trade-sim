@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_ships_campaign
 CREATE TABLE IF NOT EXISTS ship_templates (
   id                    TEXT    PRIMARY KEY,
   campaign_id           TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  trade_rules           TEXT    NOT NULL CHECK (trade_rules IN ('CT7', 'T5')),
+  trade_rules           TEXT    NOT NULL CHECK (trade_rules IN ('CT7', 'T5', 'MgT2022')),
   name                  TEXT    NOT NULL,
   hull_type             TEXT,
   hull_tons             INTEGER NOT NULL DEFAULT 200,
@@ -426,7 +426,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   tick            INTEGER NOT NULL,
   type            TEXT    NOT NULL CHECK (type IN (
                     'buy', 'sell', 'fee', 'event',
-                    'fuel', 'passenger_fare', 'passenger_refund', 'mail'
+                    'fuel', 'passenger_fare', 'passenger_refund', 'mail',
+                    'freight_charge', 'freight_refund', 'freight_penalty'
                   )),
   trade_good_die  TEXT,
   trade_good_name TEXT,
@@ -451,7 +452,7 @@ CREATE TABLE IF NOT EXISTS trade_records (
   campaign_id               TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   player_id                 TEXT    NOT NULL REFERENCES players(id)   ON DELETE CASCADE,
   ship_id                   TEXT    REFERENCES ships(id) ON DELETE SET NULL,
-  trade_rules               TEXT    NOT NULL CHECK (trade_rules IN ('CT7', 'T5')),
+  trade_rules               TEXT    NOT NULL CHECK (trade_rules IN ('CT7', 'T5', 'MgT2022')),
   trade_good_die            TEXT    NOT NULL,
   trade_good_name           TEXT    NOT NULL,
   tons                      INTEGER NOT NULL CHECK (tons > 0),
@@ -495,7 +496,7 @@ CREATE TABLE IF NOT EXISTS obligations (
   campaign_id       TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   ship_id           TEXT    NOT NULL REFERENCES ships(id)     ON DELETE CASCADE,
   player_id         TEXT    REFERENCES players(id),
-  kind              TEXT    NOT NULL CHECK (kind IN ('mail', 'passenger')),
+  kind              TEXT    NOT NULL CHECK (kind IN ('mail', 'passenger', 'freight')),
   status            TEXT    NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'fulfilled', 'cancelled')),
   amount            INTEGER NOT NULL,
@@ -507,10 +508,14 @@ CREATE TABLE IF NOT EXISTS obligations (
   dest_world_name   TEXT,
   accept_tick       INTEGER NOT NULL,
   resolve_tick      INTEGER,
-  passage_type      TEXT,     -- passenger only: 'high' | 'middle' | 'low'
+  due_tick          INTEGER,  -- freight only: deadline tick for on-time delivery
+  passage_type      TEXT,     -- passenger only: 'high' | 'middle' | 'basic' | 'low'
   passenger_count   INTEGER,  -- passenger only
   fare_per_head     INTEGER,  -- passenger only
-  parsecs           INTEGER,  -- mail only
+  parsecs           INTEGER,  -- mail + freight
+  freight_tons      INTEGER,  -- freight only
+  freight_lot_size  TEXT,     -- freight only: 'major' | 'minor' | 'incidental'
+  rate_per_ton      INTEGER,  -- freight only: agreed Cr/ton for the whole run
   notes             TEXT,
   created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -520,6 +525,34 @@ CREATE INDEX IF NOT EXISTS idx_obligations_ship
 CREATE INDEX IF NOT EXISTS idx_obligations_dest
   ON obligations (dest_world_hex, dest_sector)
   WHERE status = 'pending';
+
+-- ── Traffic Snapshots ─────────────────────────────────────────────────────────
+-- MgT2022-only passenger/freight/mail availability rolls (population/starport
+-- -driven 2D scarcity tables). One row per (campaign, world, tick), generated
+-- automatically alongside the market snapshot — see src/lib/traffic-tick.js.
+-- CT7/T5 campaigns never populate this table; passengers/freight/mail stay
+-- unlimited-subject-to-ship-capacity for those rulesets.
+
+CREATE TABLE IF NOT EXISTS traffic_snapshots (
+  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id             TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  world_hex               TEXT    NOT NULL,
+  sector                  TEXT    NOT NULL,
+  tick                    INTEGER NOT NULL,
+  high_passages           INTEGER NOT NULL DEFAULT 0,
+  middle_passages         INTEGER NOT NULL DEFAULT 0,
+  basic_passages          INTEGER NOT NULL DEFAULT 0,
+  low_passages            INTEGER NOT NULL DEFAULT 0,
+  major_freight_lots      INTEGER NOT NULL DEFAULT 0,
+  minor_freight_lots      INTEGER NOT NULL DEFAULT 0,
+  incidental_freight_lots INTEGER NOT NULL DEFAULT 0,
+  mail_containers         INTEGER NOT NULL DEFAULT 0,
+  created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (campaign_id, world_hex, sector, tick)
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_snapshots_lookup
+  ON traffic_snapshots (campaign_id, world_hex, sector, tick);
 
 -- ── Realized OHLCV View ───────────────────────────────────────────────────────
 -- Inline equivalents of the Postgres helper functions:

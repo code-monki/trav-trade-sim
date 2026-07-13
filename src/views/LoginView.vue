@@ -110,8 +110,7 @@
           <div class="field-row">
             <label>Trade Rules</label>
             <select v-model="form.tradeRules">
-              <option value="CT7">Classic Traveller Book 7</option>
-              <option value="T5">Traveller 5th Edition</option>
+              <option v-for="r in TRADE_RULESETS" :key="r.code" :value="r.code">{{ r.label }}</option>
             </select>
           </div>
         </div>
@@ -215,7 +214,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
-import { MILIEUS } from '../lib/traveller-data.js'
+import { MILIEUS, TRADE_RULESETS } from '../lib/traveller-data.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 import TutorialDialog     from '../components/TutorialDialog.vue'
 

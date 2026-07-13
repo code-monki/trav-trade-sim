@@ -212,4 +212,52 @@ app.get('/:id/market/annual', requireAuth, async (c) => {
   return c.json({ data: results ?? [] })
 })
 
+// ── GET /api/campaigns/:id/traffic — MgT2022 passenger/freight/mail scarcity ──
+// ?world_hex=X&sector=Y&tick=N — returns the row for this world/tick, or
+// all-zero defaults if MgT2022 hasn't generated one yet (e.g. tick 0).
+// CT7/T5 campaigns never call this route.
+app.get('/:id/traffic', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { world_hex, sector, tick } = c.req.query()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM traffic_snapshots
+     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ?`
+  ).bind(id, world_hex, sector, Number(tick)).first()
+
+  return c.json({
+    data: row ?? {
+      high_passages: 0, middle_passages: 0, basic_passages: 0, low_passages: 0,
+      major_freight_lots: 0, minor_freight_lots: 0, incidental_freight_lots: 0,
+      mail_containers: 0,
+    },
+  })
+})
+
+// ── POST /api/campaigns/:id/traffic — insert one tick's traffic snapshot ─────
+app.post('/:id/traffic', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const r = await c.req.json()
+
+  await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO traffic_snapshots
+       (campaign_id, world_hex, sector, tick, high_passages, middle_passages,
+        basic_passages, low_passages, major_freight_lots, minor_freight_lots,
+        incidental_freight_lots, mail_containers)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    id, r.world_hex, r.sector, r.tick,
+    r.high_passages, r.middle_passages, r.basic_passages, r.low_passages,
+    r.major_freight_lots, r.minor_freight_lots, r.incidental_freight_lots,
+    r.mail_containers
+  ).run()
+
+  return c.json({ data: { ok: true } }, 201)
+})
+
 export default app

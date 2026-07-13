@@ -32,7 +32,7 @@ Select a world in the left sidebar (see [Getting Started → Navigate the Interf
 | ----------- | ------------------------------------------------------------------------------- |
 | Plot        | Check to add this good's price history to the chart below the table             |
 | Good        | Trade good name                                                                 |
-| Die         | The d66 result that identifies this good (used in CT7/T5 rules)                 |
+| Die         | The d66 result that identifies this good (used in CT7/T5/MgT2022 rules)          |
 | Buy (Cr/t)  | Price per ton to purchase here *this week*                                      |
 | Sell (Cr/t) | Price per ton if you sell here this week                                        |
 | Spread      | Sell minus Buy per ton. Positive = you could buy and sell here without jumping. |

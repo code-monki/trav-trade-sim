@@ -3,9 +3,48 @@ import { requireAuth } from '../middleware/auth.js'
 
 const app = new Hono()
 
-// obligations rows aliased back to the passenger_manifests / mail_contracts
-// shapes the frontend already expects (see docs/financial-model-gap-analysis.md
-// — "Commercial obligations" — for why both kinds share one table).
+// ── MgT2022 late-delivery penalty (deliberately self-contained — the worker
+//    package doesn't share code with the frontend src/lib, same as every
+//    other route file here; same seeded-RNG scheme and (1D+4)×10% formula as
+//    src/lib/trade-engine-mgt2022.js's freightLatePenaltyPct, but rolls its
+//    own die here since the route is the source of truth at delivery time) ─
+
+function fnv1a(str) {
+  let h = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619) >>> 0
+  }
+  return h
+}
+
+function makeRng(seedStr) {
+  let s = fnv1a(seedStr)
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000
+  }
+}
+
+function d6(rng) { return Math.floor(rng() * 6) + 1 }
+
+// Late-delivery penalty: (1D + 4) × 10%, rolled deterministically per
+// obligation at delivery time (never stored — see d1/010_mgt2022_trade_rules.sql).
+function freightLatePenaltyPct(campaignId, obligationId) {
+  const rng = makeRng(`${campaignId}:${obligationId}:late`)
+  return (d6(rng) + 4) * 10
+}
+
+function freightNetAfterPenalty(charge, penaltyPct) {
+  return Math.max(0, Math.round(charge * (1 - penaltyPct / 100)))
+}
+
+// obligations rows aliased back to the passenger_manifests / mail_contracts /
+// freight shapes the frontend already expects (see
+// docs/financial-model-gap-analysis.md — "Commercial obligations" — for why
+// all three kinds share one table).
 const PASSENGER_SELECT = `
   SELECT id, campaign_id, ship_id, player_id, passage_type,
          passenger_count AS count,
@@ -20,6 +59,14 @@ const MAIL_SELECT = `
          origin_world_hex, origin_sector, origin_world_name, accept_tick,
          dest_world_hex, dest_sector, dest_world_name,
          parsecs, amount AS payment, status, resolve_tick, created_at
+  FROM obligations`
+
+const FREIGHT_SELECT = `
+  SELECT id, campaign_id, ship_id, player_id,
+         origin_world_hex, origin_sector, origin_world_name, accept_tick,
+         dest_world_hex, dest_sector, dest_world_name,
+         parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick,
+         amount AS charge, status, resolve_tick, created_at
   FROM obligations`
 
 // ── GET /api/ships/current — player's active ship ─────────────────────────────
@@ -60,16 +107,17 @@ app.get('/current', requireAuth, async (c) => {
     crew_role: crew.role, can_trade: crew.can_trade === 1,
   }
 
-  const [{ results: cargoRows }, { results: passengerRows }, { results: mailRows }, crewStateRow] = await Promise.all([
+  const [{ results: cargoRows }, { results: passengerRows }, { results: mailRows }, { results: freightRows }, crewStateRow] = await Promise.all([
     db.prepare(`SELECT * FROM cargo WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(MAIL_SELECT + ` WHERE kind = 'mail' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
+    db.prepare(FREIGHT_SELECT + ` WHERE kind = 'freight' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(`SELECT COUNT(*) as cnt FROM crew WHERE ship_id = ? AND campaign_id = ? AND left_tick IS NULL AND has_stateroom = 1`).bind(ship.id, campaign_id).first(),
   ])
 
   ship.crew_staterooms = crewStateRow?.cnt ?? 0
 
-  return c.json({ data: { ship, cargo: cargoRows ?? [], passengers: passengerRows ?? [], mailContracts: mailRows ?? [] } })
+  return c.json({ data: { ship, cargo: cargoRows ?? [], passengers: passengerRows ?? [], mailContracts: mailRows ?? [], freight: freightRows ?? [] } })
 })
 
 // ── POST /api/ships — create ship + crew assignment ───────────────────────────
@@ -340,6 +388,107 @@ app.post('/:id/deliver-mail', requireAuth, async (c) => {
   ]
 
   await c.env.DB.batch(stmts)
+  return c.json({ data: { ok: true } })
+})
+
+// ── POST /api/ships/:id/book-freight — atomic: obligation + transaction + credits ──
+// MgT2022 only. Charged upfront, like passenger fares.
+app.post('/:id/book-freight', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const body    = await c.req.json()
+  const { campaign_id, player_id, origin_world_hex, origin_sector, origin_world_name,
+          dest_world_hex, dest_sector, dest_world_name, parsecs,
+          freight_tons, freight_lot_size, rate_per_ton, charge, due_tick, tick } = body
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+
+  const obligationId = crypto.randomUUID()
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick)
+                      VALUES (?, ?, ?, ?, 'freight', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(obligationId, campaign_id, id, player_id, charge, origin_world_hex, origin_sector, origin_world_name ?? '',
+            tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick),
+    c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+                      VALUES (?, ?, ?, ?, ?, 'freight_charge', ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, charge, origin_world_hex, origin_sector,
+            `${freight_tons}t ${freight_lot_size} freight → ${dest_world_name || dest_world_hex}`),
+    c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(charge, id),
+  ])
+
+  const obligation = await c.env.DB.prepare(FREIGHT_SELECT + ` WHERE id = ?`).bind(obligationId).first()
+  return c.json({ data: obligation }, 201)
+})
+
+// ── POST /api/ships/:id/deliver-freight — atomic: obligations + late penalty + transactions + credits ──
+app.post('/:id/deliver-freight', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { lots, world_hex, sector, tick, campaign_id, player_id } = await c.req.json()
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+  if (!lots?.length) return c.json({ data: { ok: true, lots: [] } })
+
+  const stmts = []
+  const deliveredLots = []
+  let netTotal = 0
+
+  for (const lot of lots) {
+    const isLate = lot.due_tick != null && tick > lot.due_tick
+    const penaltyPct = isLate ? freightLatePenaltyPct(campaign_id, lot.id) : 0
+    const net = isLate ? freightNetAfterPenalty(lot.charge, penaltyPct) : lot.charge
+    netTotal += net
+    deliveredLots.push({ ...lot, penaltyPct, net })
+
+    stmts.push(
+      c.env.DB.prepare(`UPDATE obligations SET status = 'fulfilled', resolve_tick = ? WHERE id = ? AND campaign_id = ? AND kind = 'freight'`)
+        .bind(tick, lot.id, campaign_id)
+    )
+    // Note: the charge itself was already paid at booking time (book-freight
+    // credits the ship immediately) — nothing to record here on time.
+    if (isLate) {
+      const penaltyAmount = net - lot.charge // negative
+      stmts.push(
+        c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+                          VALUES (?, ?, ?, ?, ?, 'freight_penalty', ?, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, penaltyAmount, world_hex, sector,
+                `Late delivery penalty: ${penaltyPct}%`)
+      )
+    }
+  }
+  // Freight was already paid at booking time (see book-freight); a late
+  // penalty claws back the difference here instead of paying again.
+  const clawback = lots.reduce((s, l) => s + l.charge, 0) - netTotal
+  if (clawback > 0) {
+    stmts.push(c.env.DB.prepare(`UPDATE ships SET credits = credits - ? WHERE id = ?`).bind(clawback, id))
+  }
+
+  await c.env.DB.batch(stmts)
+  return c.json({ data: { ok: true, lots: deliveredLots, clawback } })
+})
+
+// ── POST /api/ships/:id/refund-freight — atomic: obligation + transaction + credits ──
+app.post('/:id/refund-freight', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { obligation_id, tick, campaign_id, player_id } = await c.req.json()
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+
+  const db         = c.env.DB
+  const obligation = await db.prepare(FREIGHT_SELECT + ` WHERE id = ? AND campaign_id = ?`).bind(obligation_id, campaign_id).first()
+  if (!obligation) return c.json({ error: 'Freight contract not found' }, 404)
+
+  await db.batch([
+    db.prepare(`UPDATE obligations SET status = 'cancelled', resolve_tick = ? WHERE id = ?`).bind(tick, obligation_id),
+    db.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+                VALUES (?, ?, ?, ?, ?, 'freight_refund', ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, -obligation.charge,
+            obligation.origin_world_hex, obligation.origin_sector,
+            `Refund: ${obligation.freight_tons}t ${obligation.freight_lot_size} freight`),
+    db.prepare(`UPDATE ships SET credits = credits - ? WHERE id = ?`).bind(obligation.charge, id),
+  ])
+
   return c.json({ data: { ok: true } })
 })
 

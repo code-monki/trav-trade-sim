@@ -97,7 +97,7 @@ from its **UWP** (Universal World Profile). Key fields for traders:
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Starport    | A/B = full facilities; C/D = limited; E = frontier; X = none. Better starports generally yield better prices and larger quantities available. |
 | Tech Level  | Higher-tech worlds produce and consume different goods.                                                                                       |
-| Trade Codes | Ag, In, Ri, Po, etc. These drive price modifiers per the CT7/T5 tables.                                                                       |
+| Trade Codes | Ag, In, Ri, Po, etc. These drive price modifiers per the CT7/T5/MgT2022 tables.                                                                |
 | Travel Zone | Amber = caution; Red = interdicted. The world list highlights these in colour.                                                                |
 
 The UWP badge in the world header is a link to the Traveller Map website for additional

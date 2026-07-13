@@ -106,6 +106,48 @@
       <p class="hint">
         Mail contracts are automatically paid when the ship arrives at the destination world.
       </p>
+
+      <!-- ── Freight (MgT2022 only) ─────────────────────────────────────── -->
+      <template v-if="ship.freight.length">
+        <div class="section-divider"></div>
+        <div class="section-header">Freight in Transit</div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Lot</th>
+              <th class="center">Tons</th>
+              <th>Destination</th>
+              <th class="right">Charge</th>
+              <th>Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in ship.freight" :key="f.id">
+              <td class="capitalize">{{ f.freight_lot_size }}</td>
+              <td class="center">{{ f.freight_tons }}</td>
+              <td>
+                <span class="world-name">{{ f.dest_world_name || f.dest_world_hex }}</span>
+                <span class="world-meta">{{ f.dest_sector }}</span>
+              </td>
+              <td class="right mono">Cr{{ f.charge.toLocaleString() }}</td>
+              <td class="muted">Tick {{ f.due_tick ?? '—' }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="total-label">Total charged (already collected)</td>
+              <td class="right mono total-val">Cr{{ totalFreightCharge.toLocaleString() }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <p class="hint">
+          Freight is paid upfront and auto-delivers on arrival; late delivery
+          incurs a penalty deducted from the ship's credits at that time.
+        </p>
+      </template>
     </template>
   </div>
 </template>
@@ -117,8 +159,9 @@ import { PASSAGE_TYPE_LABELS } from '../lib/passengers.js'
 
 const ship = useShipStore()
 
-const totalFare    = computed(() => ship.passengers.reduce((s, p) => s + p.fare_total, 0))
-const totalPayment = computed(() => ship.mailContracts.reduce((s, m) => s + m.payment, 0))
+const totalFare         = computed(() => ship.passengers.reduce((s, p) => s + p.fare_total, 0))
+const totalPayment      = computed(() => ship.mailContracts.reduce((s, m) => s + m.payment, 0))
+const totalFreightCharge = computed(() => ship.freight.reduce((s, f) => s + f.charge, 0))
 </script>
 
 <style scoped>
@@ -190,10 +233,11 @@ const totalPayment = computed(() => ship.mailContracts.reduce((s, m) => s + m.pa
 .world-name { display: block; }
 .world-meta { display: block; font-size: 0.72rem; color: var(--text-dim); }
 
-.center { text-align: center; }
-.right  { text-align: right; }
-.mono   { font-family: monospace; }
-.muted  { color: var(--text-dim); }
+.center     { text-align: center; }
+.right      { text-align: right; }
+.mono       { font-family: monospace; }
+.muted      { color: var(--text-dim); }
+.capitalize { text-transform: capitalize; }
 
 .total-label { color: var(--text-dim); font-size: 0.72rem; text-align: right; }
 .total-val   { font-weight: 600; color: var(--accent); font-family: monospace; }

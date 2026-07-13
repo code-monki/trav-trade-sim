@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.3.0  
+**Version:** 0.4.0  
 **Status:** Active development
 
 ---
@@ -64,10 +64,10 @@
 | ID | Requirement |
 |----|------------|
 | FR-401 | The market shall show current buy price, sell price, spread, and available quantity for all trade goods at the selected world |
-| FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG |
+| FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG, dispatched per-campaign to the CT7, T5, or MgT2022 pricing engine matching the campaign's `trade_rules` |
 | FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Cloudflare D1 |
 | FR-404 | On the first-ever visit to a world, the system shall backfill price history for all prior ticks in the current year |
-| FR-405 | Price colours shall indicate deviation from the CT7 base price (green = below base, red = above) |
+| FR-405 | Price colours shall indicate deviation from the campaign's ruleset base price (CT7's Cost of Goods table, T5's Trade Chart-2, or MgT2022's per-good Base Price) — green = below base, red = above |
 | FR-406 | Active market events shall be displayed in a banner above the market table; affected rows shall be visually distinguished |
 | FR-407 | The user shall be able to select multiple goods for simultaneous price charting via checkboxes |
 | FR-408 | Price charts shall support weekly (line), monthly (candlestick), annual (candlestick), and realized (candlestick/line from trade records) time frames |
@@ -135,9 +135,9 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-1101 | A player shall be able to book passengers (High, Middle, or Low passage) at the Port > Passengers tab |
-| FR-1102 | The booking form shall validate that stateroom/berth capacity is available before accepting the booking |
-| FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 per-parsec for High/Middle, flat for Low |
+| FR-1101 | A player shall be able to book passengers (High, Middle, or Low passage; MgT2022 campaigns add a fourth tier, Basic passage) at the Port > Passengers tab |
+| FR-1102 | The booking form shall validate that stateroom/berth capacity is available before accepting the booking; for MgT2022 Basic passage, general cargo tonnage shall be validated instead (2 tons/passenger), since Basic passage has no dedicated stateroom or berth |
+| FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 and MgT2022 per-parsec for High/Middle (MgT2022 also scales Basic by parsec), flat for Low |
 | FR-1104 | A passenger booking shall create an `obligations` record (kind='passenger'), write a `passenger_fare` transaction, and credit the ship account |
 | FR-1105 | Passengers shall be automatically delivered when the ship arrives at their destination world |
 | FR-1106 | The Ship > Manifest tab shall display stateroom/berth occupancy and all in-transit passengers |
@@ -158,8 +158,8 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-1301 | A player shall be able to accept a mail contract at the Port > Services tab by specifying a destination and (for T5) parsecs |
-| FR-1302 | Mail payment shall be CT7: flat Cr25,000; T5: Cr25,000 × parsecs |
+| FR-1301 | A player shall be able to accept a mail contract at the Port > Services tab by specifying a destination and (for T5) parsecs; for MgT2022, acceptance is take-all-or-none for the tick's rolled container count |
+| FR-1302 | Mail payment shall be CT7: flat Cr25,000; T5: Cr25,000 × parsecs; MgT2022: Cr25,000 × rolled 5-ton container count, only available when the world's 2D mail-availability roll meets or beats 12 |
 | FR-1303 | Mail contracts shall be tracked in `obligations` (kind='mail') as `pending` until the ship arrives at the destination |
 | FR-1304 | On delivery, the mail payment shall be credited to the ship account and a `mail` transaction written |
 | FR-1305 | Active mail contracts shall be visible in the Ship > Contracts tab |
@@ -169,11 +169,11 @@
 | ID | Requirement |
 |----|------------|
 | FR-1401 | The referee shall be able to create, edit, and delete ship templates scoped to the campaign |
-| FR-1402 | Each template shall be tagged with a ruleset (CT7 or T5) matching the campaign's trade rules |
+| FR-1402 | Each template shall be tagged with a ruleset (CT7, T5, or MgT2022) matching the campaign's trade rules |
 | FR-1403 | The New Ship form shall offer a Template dropdown defaulting to "Custom Design"; selecting a template shall pre-fill hull tons, cargo capacity, stateroom/low berth capacity, fuel capacity, jump/maneuver rating, and market value |
 | FR-1404 | The referee shall be able to save an existing ship's current stats as a new named template via a "Save as Template" action |
 | FR-1405 | Template names shall be unique per campaign; creating or renaming to a conflicting name shall be rejected |
-| FR-1406 | The system shall lazily seed one verified-unverified CT7 starter template (Type A Free Trader) the first time a CT7 campaign's Templates panel is opened with none present; T5 campaigns start with no seed |
+| FR-1406 | The system shall lazily seed one verified-unverified starter template (Type A Free Trader) the first time a CT7 or MgT2022 campaign's Templates panel is opened with none present; T5 campaigns start with no seed |
 
 ### 2.15 Asset Valuation & Net Worth
 
@@ -227,6 +227,19 @@
 | FR-1908 | Officers or the referee shall be able to record player equity percentages in an organization, subject to the same 100%-ceiling validation as ship ownership |
 | FR-1909 | The system shall provide a consolidated fleet report showing each member ship's financials and fleet-wide totals, visible only to the organization's officers and the referee |
 | FR-1910 | For a ship owned outright by an organization, personal Net Worth attribution shall be based on the player's equity percentage in that organization rather than the ship's own ownership records |
+
+### 2.20 MgT2022 Freight & Traffic Availability
+
+| ID | Requirement |
+|----|------------|
+| FR-2001 | MgT2022 campaigns shall offer a Port > Freight tab for booking bulk cargo lots (Major, Minor, or Incidental), priced per ton per parsec, with smaller lots charged a higher per-ton rate |
+| FR-2002 | A freight booking shall create an `obligations` record (kind='freight') carrying the agreed tonnage, lot size, rate, and a due tick, write a `freight_charge` transaction, and credit the ship account upfront |
+| FR-2003 | Freight shall be automatically delivered when the ship arrives at its destination world, mirroring passenger/mail auto-delivery |
+| FR-2004 | Freight delivered after its due tick shall incur a randomized late-delivery penalty ((1D+4)×10% of the charge), clawed back from the ship's credits at delivery time and recorded as a `freight_penalty` transaction |
+| FR-2005 | The referee or player shall be able to cancel a pending freight obligation for a full refund via a "refund freight" action, mirroring passenger refunds |
+| FR-2006 | The system shall generate one deterministic, seeded traffic-availability roll per world per tick (population/starport-class driven), covering passenger counts per tier, freight lots per size, and mail container count — automatically, with no referee action required, following the same precedent as goods-quantity availability |
+| FR-2007 | Passenger, freight, and mail booking forms shall display and enforce the current tick's rolled availability count for the selected tier/lot size, capping bookings at that count |
+| FR-2008 | Traffic-availability data shall be scoped to MgT2022 campaigns only; CT7/T5 campaigns shall remain unlimited-subject-to-ship-capacity, unaffected by this feature |
 
 ---
 

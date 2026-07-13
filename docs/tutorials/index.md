@@ -18,7 +18,7 @@ or **≡ Menu → Tutorials** while in a campaign.
 |---|---|
 | [Getting Started](./player-getting-started.md) | Join a campaign, navigate the two-level interface, find your ship |
 | [Your First Trade](./player-first-trade.md) | Read the market, buy cargo, jump to a destination, and sell |
-| [Passengers, Fuel & Mail](./player-services.md) | Book passengers, purchase fuel, and accept Imperial mail contracts |
+| [Passengers, Fuel & Mail](./player-services.md) | Book passengers, purchase fuel, accept Imperial mail contracts, and (MgT2022) book Freight cargo lots |
 | [Route Analysis](./player-route-analysis.md) | Use the Jump tab to find profitable trade routes |
 | [Fleet & Organizations](./player-fleet-organizations.md) | Check your Net Worth, pay down debts, and found or manage an Organization |
 

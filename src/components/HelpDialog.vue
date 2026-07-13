@@ -44,7 +44,7 @@
               generate a new recovery code at any time from Manage Campaign → Campaign tab.
             </p>
             <p>
-              Trade rules (CT7 or T5) and the starting milieu/year are selected at
+              Trade rules (CT7, T5, or MgT2022) and the starting milieu/year are selected at
               campaign creation and cannot be changed later.
             </p>
           </section>
@@ -148,18 +148,21 @@
             <h3>Passengers</h3>
             <p>
               Book passengers at the <strong>Port &gt; Passengers</strong> tab —
-              choose High, Middle, or Low passage, a passenger count, and a
+              choose High, Middle, or Low passage (MgT2022 campaigns add a fourth
+              tier, <strong>Basic Passage</strong>), a passenger count, and a
               destination. The booking form checks that enough stateroom or low
-              berth capacity is free before accepting it.
+              berth capacity is free before accepting it — Basic Passage instead
+              checks general cargo space, since it has no dedicated berth.
             </p>
             <p>
               Fares are collected up front: CT7 charges a flat rate per passenger
-              regardless of distance; T5 charges per parsec for High and Middle
-              passage, and a flat rate for Low. Passengers deliver themselves
-              automatically — and their fare is already paid — when the ship
-              arrives at their destination. The Ship &gt; Aboard tab shows current
-              occupancy and everyone still in transit. The Referee can issue a
-              refund for any in-transit passenger from the Referee panel.
+              regardless of distance; T5 and MgT2022 charge per parsec for High
+              and Middle passage (MgT2022 also scales Basic by parsec), and a flat
+              rate for Low. Passengers deliver themselves automatically — and
+              their fare is already paid — when the ship arrives at their
+              destination. The Ship &gt; Aboard tab shows current occupancy and
+              everyone still in transit. The Referee can issue a refund for any
+              in-transit passenger from the Referee panel.
             </p>
           </section>
 
@@ -180,6 +183,33 @@
               like passengers, a mail contract pays out and clears itself
               automatically the moment the ship arrives at its destination. The
               Ship &gt; Aboard tab lists any contracts still in transit.
+            </p>
+            <p>
+              <strong>MgT2022 mail</strong> works differently: each tick, the
+              world rolls whether any mail is on offer at all (2D, needing 12+)
+              and, if so, how many 5-ton containers are available. Accepting is
+              take-all-or-none for that tick's container count, and payment is
+              flat Cr25,000 per container regardless of distance.
+            </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Freight (MgT2022 only)</h3>
+            <p>
+              MgT2022 campaigns get a fourth Port sub-tab, <strong>Freight</strong>,
+              for bulk cargo lots — Major, Minor, or Incidental — booked and paid
+              for like passengers/mail but priced per ton per parsec (smaller
+              lots pay a higher per-ton rate). Freight auto-delivers on arrival
+              like passengers and mail, but carries a deadline: delivering after
+              its due tick applies a randomized late-delivery penalty, clawed
+              back from the ship's credits at that time.
+            </p>
+            <p>
+              How many lots of each size — and how many passengers of each
+              tier, and mail containers — are actually on offer at a world this
+              tick is itself a deterministic per-tick roll (population and
+              starport class driven), shown as an availability count next to
+              each option in the Passengers/Freight/Services forms.
             </p>
           </section>
 
@@ -213,8 +243,10 @@
             <h3>Market Tab</h3>
             <p>
               Shows current buy and sell prices for all trade goods. Price colours
-              indicate deviation from the CT7 base price — green means below base
-              (buyer's market), red means above (seller's market).
+              indicate deviation from the ruleset's base price (CT7's Cost of
+              Goods/Market Price tables, T5's Trade Chart-2, or MgT2022's Base
+              Price per good) — green means below base (buyer's market), red
+              means above (seller's market).
             </p>
             <p>
               Goods affected by an active market event are highlighted with a left
@@ -240,7 +272,7 @@
                 </tr>
                 <tr>
                   <td><strong>Buy (Cr/t)</strong></td>
-                  <td>Purchase price per ton at this world this tick, derived from trade codes, starport class, and tech level per CT7/T5 rules.</td>
+                  <td>Purchase price per ton at this world this tick, derived from trade codes, starport class, and tech level per CT7/T5/MgT2022 rules.</td>
                 </tr>
                 <tr>
                   <td><strong>Sell (Cr/t)</strong></td>
@@ -444,7 +476,7 @@
             <p>
               Manage a catalogue of reusable ship designs from Campaign
               Management → Ships → Templates, tagged for the campaign's ruleset
-              (CT7 or T5). The New Ship form's Template dropdown pre-fills every
+              (CT7, T5, or MgT2022). The New Ship form's Template dropdown pre-fills every
               stat field (hull tons, cargo, staterooms, fuel, drives, market
               value) from a selection — pick <strong>Custom Design</strong> to
               fill the form blank instead. There's no ongoing link between a

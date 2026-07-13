@@ -2,12 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../lib/api.js'
 import { useTickStore } from './tick.js'
+import { MGT2022_BASIC_PASSAGE_TONS } from '../lib/traveller-data-mgt2022.js'
 
 export const useShipStore = defineStore('ship', () => {
   const ship          = ref(null)   // current ship record (or null if not aboard one)
   const cargo         = ref([])     // cargo rows currently in the hold
   const passengers    = ref([])     // passenger_manifests rows (in_transit)
   const mailContracts = ref([])     // mail_contracts rows (in_transit)
+  const freight       = ref([])     // freight obligations rows (in_transit, MgT2022 only)
   const loading       = ref(false)
   const error         = ref(null)
 
@@ -15,7 +17,13 @@ export const useShipStore = defineStore('ship', () => {
   const canTrade       = computed(() => ship.value?.can_trade ?? false)
   const cargoUsed      = computed(() => cargo.value.reduce((s, r) => s + r.tons, 0))
   const cargoCapacity  = computed(() => ship.value?.cargo_capacity ?? 0)
-  const cargoAvailable = computed(() => cargoCapacity.value - cargoUsed.value)
+  // Basic Passage (MgT2022) consumes general cargo tonnage, not a dedicated
+  // stateroom/berth — always 0 for CT7/T5 campaigns since 'basic' passage_type
+  // never appears there.
+  const basicPassageTonsUsed = computed(() =>
+    passengers.value.filter(p => p.passage_type === 'basic')
+      .reduce((s, p) => s + p.count * MGT2022_BASIC_PASSAGE_TONS, 0))
+  const cargoAvailable = computed(() => cargoCapacity.value - cargoUsed.value - basicPassageTonsUsed.value)
 
   const stateroomsTotal     = computed(() => ship.value?.stateroom_capacity ?? 0)
   const crewStateroomsUsed  = computed(() => ship.value?.crew_staterooms ?? 0)
@@ -47,16 +55,17 @@ export const useShipStore = defineStore('ship', () => {
       })
       if (apiErr) throw new Error(apiErr)
       if (!data) {
-        ship.value = null; cargo.value = []; passengers.value = []; mailContracts.value = []
+        ship.value = null; cargo.value = []; passengers.value = []; mailContracts.value = []; freight.value = []
         return
       }
       ship.value          = data.ship
       cargo.value         = data.cargo ?? []
       passengers.value    = data.passengers ?? []
       mailContracts.value = data.mailContracts ?? []
+      freight.value        = data.freight ?? []
     } catch (e) {
       error.value = e.message
-      ship.value  = null; cargo.value = []; passengers.value = []; mailContracts.value = []
+      ship.value  = null; cargo.value = []; passengers.value = []; mailContracts.value = []; freight.value = []
     } finally {
       loading.value = false
     }
@@ -136,6 +145,10 @@ export const useShipStore = defineStore('ship', () => {
       m => m.dest_world_hex === worldHex && m.dest_sector === sector
     )
 
+    const freightToDeliver = freight.value.filter(
+      f => f.dest_world_hex === worldHex && f.dest_sector === sector
+    )
+
     const tasks = []
 
     if (passengerIds.length) {
@@ -159,6 +172,23 @@ export const useShipStore = defineStore('ship', () => {
           if (data && ship.value) {
             const totalPayment = mailToDeliver.reduce((s, m) => s + m.payment, 0)
             ship.value = { ...ship.value, credits: (ship.value.credits ?? 0) + totalPayment }
+          }
+        })
+      )
+    }
+
+    if (freightToDeliver.length) {
+      tasks.push(
+        api.post(`/api/ships/${shipId}/deliver-freight`, {
+          lots: freightToDeliver, world_hex: worldHex, sector,
+          tick, campaign_id: campaignId, player_id: playerId,
+        }).then(({ data }) => {
+          const deliveredIds = freightToDeliver.map(f => f.id)
+          freight.value = freight.value.filter(f => !deliveredIds.includes(f.id))
+          // Freight was already credited at booking time; only a late-delivery
+          // clawback (if any) still needs to be reflected here.
+          if (data?.clawback > 0 && ship.value) {
+            ship.value = { ...ship.value, credits: (ship.value.credits ?? 0) - data.clawback }
           }
         })
       )
@@ -409,19 +439,89 @@ export const useShipStore = defineStore('ship', () => {
     }
   }
 
+  // ── bookFreight ───────────────────────────────────────────────────────────
+  // MgT2022 only. Charged upfront, same as passenger fares.
+
+  async function bookFreight({
+    campaignId, playerId,
+    originWorldHex, originSector, originWorldName,
+    destWorldHex, destSector, destWorldName,
+    parsecs, freightTons, freightLotSize, ratePerTon, charge, dueTick, tick,
+  }) {
+    if (!ship.value) return { ok: false, error: 'No active ship' }
+
+    loading.value = true
+    error.value   = null
+    try {
+      const { data, error: apiErr } = await api.post(`/api/ships/${ship.value.id}/book-freight`, {
+        campaign_id:       campaignId,
+        player_id:         playerId,
+        origin_world_hex:  originWorldHex,
+        origin_sector:     originSector,
+        origin_world_name: originWorldName ?? '',
+        dest_world_hex:    destWorldHex,
+        dest_sector:       destSector,
+        dest_world_name:   destWorldName ?? '',
+        parsecs,
+        freight_tons:      freightTons,
+        freight_lot_size:  freightLotSize,
+        rate_per_ton:      ratePerTon,
+        charge,
+        due_tick:          dueTick,
+        tick,
+      })
+      if (apiErr) throw new Error(apiErr)
+
+      freight.value = [...freight.value, data]
+      ship.value = { ...ship.value, credits: (ship.value.credits ?? 0) + charge }
+      return { ok: true }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // ── refundFreight ─────────────────────────────────────────────────────────
+
+  async function refundFreight(obligationId, tick, campaignId, playerId) {
+    const obligation = freight.value.find(f => f.id === obligationId)
+    if (!obligation) return { ok: false, error: 'Freight contract not found' }
+
+    loading.value = true
+    error.value   = null
+    try {
+      const { error: apiErr } = await api.post(`/api/ships/${ship.value.id}/refund-freight`, {
+        obligation_id: obligationId, tick, campaign_id: campaignId, player_id: playerId,
+      })
+      if (apiErr) throw new Error(apiErr)
+
+      freight.value = freight.value.filter(f => f.id !== obligationId)
+      ship.value = { ...ship.value, credits: (ship.value.credits ?? 0) - obligation.charge }
+      return { ok: true }
+    } catch (e) {
+      error.value = e.message
+      return { ok: false, error: e.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
   function clear() {
     ship.value          = null
     cargo.value         = []
     passengers.value    = []
     mailContracts.value = []
+    freight.value       = []
     loading.value       = false
     error.value         = null
   }
 
   return {
-    ship, cargo, passengers, mailContracts, loading, error,
+    ship, cargo, passengers, mailContracts, freight, loading, error,
     hasShip, canTrade,
-    cargoUsed, cargoCapacity, cargoAvailable,
+    cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed,
     stateroomsTotal, crewStateroomsUsed, stateroomsUsed, stateroomsAvailable,
     lowBerthsTotal, lowBerthsUsed, lowBerthsAvailable,
     clearError, loadShip, createShip, updateLocation,
@@ -430,6 +530,7 @@ export const useShipStore = defineStore('ship', () => {
     purchaseFuel,
     payDebt,
     acceptMailContract,
+    bookFreight, refundFreight,
     clear,
   }
 })

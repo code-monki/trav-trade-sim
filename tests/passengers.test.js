@@ -7,6 +7,7 @@ import {
   fuelCost,
   mailPayment,
   PASSAGE_TYPES,
+  PASSAGE_TYPES_MGT2022,
   FUEL_PRICES,
 } from '../src/lib/passengers.js'
 
@@ -59,24 +60,65 @@ describe('passengerFare — T5 (per parsec for High/Middle; Low flat)', () => {
   })
 })
 
+describe('passengerFare — MgT2022 (per parsec, 4 tiers)', () => {
+  it('high passage scales with parsecs from the fare table', () => {
+    expect(passengerFare('high', 1, 'MgT2022', 1)).toEqual({ farePerHead: 10_000, fareTotal: 10_000 })
+    expect(passengerFare('high', 1, 'MgT2022', 6)).toEqual({ farePerHead: 30_000, fareTotal: 30_000 })
+  })
+
+  it('basic passage is cheaper than middle at every parsec', () => {
+    for (let p = 1; p <= 6; p++) {
+      const basic  = passengerFare('basic',  1, 'MgT2022', p).farePerHead
+      const middle = passengerFare('middle', 1, 'MgT2022', p).farePerHead
+      expect(basic).toBeLessThan(middle)
+    }
+  })
+
+  it('low passage is flat regardless of parsecs', () => {
+    expect(passengerFare('low', 1, 'MgT2022', 1).farePerHead).toBe(700)
+    expect(passengerFare('low', 1, 'MgT2022', 6).farePerHead).toBe(700)
+  })
+
+  it('clamps parsecs to the 1-6 table range', () => {
+    expect(passengerFare('high', 1, 'MgT2022', 0).farePerHead).toBe(passengerFare('high', 1, 'MgT2022', 1).farePerHead)
+    expect(passengerFare('high', 1, 'MgT2022', 10).farePerHead).toBe(passengerFare('high', 1, 'MgT2022', 6).farePerHead)
+  })
+
+  it('scales fareTotal by count', () => {
+    const { farePerHead, fareTotal } = passengerFare('basic', 4, 'MgT2022', 1)
+    expect(fareTotal).toBe(farePerHead * 4)
+  })
+})
+
+describe('PASSAGE_TYPES_MGT2022 constant', () => {
+  it('contains the four tiers including basic', () => {
+    expect(PASSAGE_TYPES_MGT2022).toEqual(['high', 'middle', 'basic', 'low'])
+  })
+})
+
 // ── passageCapacityNeeded ─────────────────────────────────────────────────────
 
 describe('passageCapacityNeeded', () => {
-  it('high passengers consume staterooms, not low berths', () => {
-    expect(passageCapacityNeeded('high', 2)).toEqual({ stateroomsNeeded: 2, lowBerthsNeeded: 0 })
+  it('high passengers consume staterooms, not low berths or cargo', () => {
+    expect(passageCapacityNeeded('high', 2)).toEqual({ stateroomsNeeded: 2, lowBerthsNeeded: 0, cargoTonsNeeded: 0 })
   })
 
-  it('middle passengers consume staterooms, not low berths', () => {
-    expect(passageCapacityNeeded('middle', 3)).toEqual({ stateroomsNeeded: 3, lowBerthsNeeded: 0 })
+  it('middle passengers consume staterooms, not low berths or cargo', () => {
+    expect(passageCapacityNeeded('middle', 3)).toEqual({ stateroomsNeeded: 3, lowBerthsNeeded: 0, cargoTonsNeeded: 0 })
   })
 
-  it('low passengers consume low berths, not staterooms', () => {
-    expect(passageCapacityNeeded('low', 4)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 4 })
+  it('low passengers consume low berths, not staterooms or cargo', () => {
+    expect(passageCapacityNeeded('low', 4)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 4, cargoTonsNeeded: 0 })
   })
 
   it('count of 1', () => {
-    expect(passageCapacityNeeded('high', 1)).toEqual({ stateroomsNeeded: 1, lowBerthsNeeded: 0 })
-    expect(passageCapacityNeeded('low',  1)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 1 })
+    expect(passageCapacityNeeded('high', 1)).toEqual({ stateroomsNeeded: 1, lowBerthsNeeded: 0, cargoTonsNeeded: 0 })
+    expect(passageCapacityNeeded('low',  1)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 1, cargoTonsNeeded: 0 })
+  })
+
+  it('basic passengers (MgT2022) consume cargo tonnage, not staterooms or low berths', () => {
+    expect(passageCapacityNeeded('basic', 1)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 0, cargoTonsNeeded: 2 })
+    expect(passageCapacityNeeded('basic', 3)).toEqual({ stateroomsNeeded: 0, lowBerthsNeeded: 0, cargoTonsNeeded: 6 })
   })
 })
 
@@ -181,6 +223,15 @@ describe('mailPayment', () => {
 
   it('CT7: defaults parsecs to 1', () => {
     expect(mailPayment('CT7')).toBe(25_000)
+  })
+
+  it('MgT2022: Cr25,000 per 5-ton container, scaled by container count', () => {
+    expect(mailPayment('MgT2022', 1, 1)).toBe(25_000)
+    expect(mailPayment('MgT2022', 1, 4)).toBe(100_000)
+  })
+
+  it('MgT2022: zero containers pays zero', () => {
+    expect(mailPayment('MgT2022', 1, 0)).toBe(0)
   })
 })
 
