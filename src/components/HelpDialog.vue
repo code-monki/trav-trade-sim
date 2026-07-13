@@ -164,25 +164,39 @@
               everyone still in transit. The Referee can issue a refund for any
               in-transit passenger from the Referee panel.
             </p>
+            <p>
+              "Arrives" means the ship's location was actually updated — via
+              <strong>Jump &gt; Select</strong>, or <strong>Set Here</strong> on
+              the Cargo tab — not just browsing a world in the sidebar. If a
+              world you're looking at has a passenger, mail, or freight
+              obligation waiting for it, a small badge appears next to the
+              zone indicator in the world header as a reminder.
+            </p>
           </section>
 
           <section class="help-section">
-            <h3>Fuel &amp; Mail Contracts</h3>
+            <h3>Fuel</h3>
             <p>
-              The <strong>Port &gt; Services</strong> tab has two sections. Fuel
-              availability and price depend on the world's starport class:
-              refined fuel at Class A/B starports, unrefined at Class C/D, and no
-              commercial fuel at all at Class E/X. Purchases are capped at the
-              ship's remaining tank space; the <strong>Fill for jump</strong>
-              button computes the tons needed for one jump at your ship's jump
-              rating and purchases them immediately.
+              The <strong>Port &gt; Services</strong> tab shows fuel
+              availability and price, which depend on the world's starport
+              class: refined fuel at Class A/B starports, unrefined at Class
+              C/D, and no commercial fuel at all at Class E/X. Purchases are
+              capped at the ship's remaining tank space; the
+              <strong>Fill for jump</strong> button computes the tons needed
+              for one jump at your ship's jump rating and purchases them
+              immediately.
             </p>
+          </section>
+
+          <section class="help-section">
+            <h3>Mail Contracts</h3>
             <p>
-              Mail contracts are accepted the same way — pick a destination (and,
-              for T5, a parsec count) and accept. There's no upfront payment;
-              like passengers, a mail contract pays out and clears itself
-              automatically the moment the ship arrives at its destination. The
-              Ship &gt; Aboard tab lists any contracts still in transit.
+              The <strong>Port &gt; Mail</strong> tab accepts mail — pick a
+              destination (and, for T5, a parsec count) and accept. There's no
+              upfront payment; like passengers, a mail contract pays out and
+              clears itself automatically the moment the ship arrives at its
+              destination. The Ship &gt; Aboard tab lists any contracts still
+              in transit.
             </p>
             <p>
               <strong>MgT2022 mail</strong> works differently: each tick, the
@@ -196,20 +210,21 @@
           <section class="help-section">
             <h3>Freight (MgT2022 only)</h3>
             <p>
-              MgT2022 campaigns get a fourth Port sub-tab, <strong>Freight</strong>,
-              for bulk cargo lots — Major, Minor, or Incidental — booked and paid
-              for like passengers/mail but priced per ton per parsec (smaller
-              lots pay a higher per-ton rate). Freight auto-delivers on arrival
-              like passengers and mail, but carries a deadline: delivering after
-              its due tick applies a randomized late-delivery penalty, clawed
-              back from the ship's credits at that time.
+              MgT2022 campaigns get an additional Port sub-tab,
+              <strong>Freight</strong>, for bulk cargo lots — Major, Minor, or
+              Incidental — booked and paid for like passengers/mail but priced
+              per ton per parsec (smaller lots pay a higher per-ton rate).
+              Freight auto-delivers on arrival like passengers and mail, but
+              carries a deadline: delivering after its due tick applies a
+              randomized late-delivery penalty, clawed back from the ship's
+              credits at that time.
             </p>
             <p>
               How many lots of each size — and how many passengers of each
               tier, and mail containers — are actually on offer at a world this
               tick is itself a deterministic per-tick roll (population and
               starport class driven), shown as an availability count next to
-              each option in the Passengers/Freight/Services forms.
+              each option in the Passengers/Mail/Freight forms.
             </p>
           </section>
 

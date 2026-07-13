@@ -152,7 +152,7 @@ assigning them to another.</p>
 <ol>
   <li>Players select worlds, open Port → Market, and buy cargo or book passengers</li>
   <li>Players purchase fuel at Port → Services if the tank is low</li>
-  <li>Players accept mail contracts at Port → Services for additional income</li>
+  <li>Players accept mail contracts at Port → Mail for additional income</li>
   <li>Players use the Jump tab to pick a profitable destination</li>
   <li>You advance the tick (<strong>Advance Tick ›</strong> in the header or press <kbd>T</kbd>)</li>
   <li>Prices shift; random events may fire on next world visits</li>
@@ -500,7 +500,9 @@ character name, and PIN.</p>
 <ul>
   <li><strong>Market</strong> — current buy/sell prices for all trade goods</li>
   <li><strong>Passengers</strong> — book passenger berths</li>
-  <li><strong>Services</strong> — purchase fuel and accept mail contracts</li>
+  <li><strong>Mail</strong> — accept mail contracts</li>
+  <li><strong>Services</strong> — purchase fuel</li>
+  <li><strong>Freight</strong> (MgT2022 only) — book bulk cargo lots</li>
 </ul>
 <p><strong>Ship sub-tabs</strong> (appear when Ship is selected)</p>
 <ul>
@@ -691,8 +693,8 @@ or shared ownership — in
   <li><strong>Fuel</strong> — purchased at starports to keep the ship running</li>
   <li><strong>Mail contracts</strong> — payment on delivery; low risk, predictable income</li>
 </ul>
-<p>All three are found under the <strong>Port</strong> top-level tab. Fuel and mail share the
-<strong>Services</strong> sub-tab; passengers have their own <strong>Passengers</strong> sub-tab.</p>
+<p>All three are found under the <strong>Port</strong> top-level tab: <strong>Passengers</strong>,
+<strong>Mail</strong>, and <strong>Services</strong> (fuel) each have their own sub-tab.</p>
 `
       },
       {
@@ -726,6 +728,9 @@ MgT2022 campaigns also cap each tier's count against that tick's rolled traffic 
 <p>Passengers are delivered automatically when the ship arrives at their destination world.
 Use <strong>Jump → Select</strong> on the destination to trigger auto-delivery, or ask
 your Referee to move the ship via the campaign management panel.</p>
+<p class="tut-note">ℹ Just browsing a world in the sidebar does not count as arriving — if
+you're looking at a world with a passenger, mail, or freight obligation still waiting for
+it, a small badge appears next to the zone indicator in the world header to remind you.</p>
 <p>After delivery, the passengers disappear from the Manifest tab. No extra action is
 required — the fare was already collected at boarding.</p>
 <p>If a passenger needs to disembark early, your Referee can issue a refund from the
@@ -759,9 +764,9 @@ uses 40 tons.</p>
         id: 'accept-mail',
         title: '4. Accept a Mail Contract',
         body: `
-<p>In <strong>Port → Services</strong>, scroll to the Mail Contract section.
+<p>Open <strong>Port → Mail</strong>.
 Mail is an Imperial obligation — once accepted it must be delivered.</p>
-<div class="tut-shot">📸 Services tab mail section showing destination fields and payment preview</div>
+<div class="tut-shot">📸 Mail tab showing destination fields and payment preview</div>
 <p>Enter the <strong>destination hex</strong> and <strong>sector</strong>.
 For T5 and MgT2022 campaigns, enter the <strong>parsecs</strong> (jump distance) — this sets the payment
 for T5. MgT2022 mail instead pays a flat rate per rolled container and is only offered when the

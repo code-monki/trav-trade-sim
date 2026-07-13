@@ -11,7 +11,7 @@ function makeRouter() {
   })
 }
 
-function mountMap(mapState = {}) {
+function mountMap(mapState = {}, shipState = {}) {
   return mount(MapView, {
     shallow: true,
     global: {
@@ -24,6 +24,10 @@ function mountMap(mapState = {}) {
               sectors: [], worlds: [], selectedWorld: null,
               usingCachedData: false, cachedAt: null, error: null,
               ...mapState,
+            },
+            ship: {
+              passengers: [], mailContracts: [], freight: [],
+              ...shipState,
             },
           },
           stubActions: true,
@@ -66,5 +70,76 @@ describe('MapView — Traveller Map cache notice', () => {
 
     await wrapper.find('.cache-notice button').trigger('click')
     expect(wrapper.find('.cache-notice').exists()).toBe(false)
+  })
+})
+
+describe('MapView — pending delivery indicator', () => {
+  const WORLD  = { Hex: '0101', UWP: 'A788899-C', Name: 'Testworld' }
+  const SECTOR = 'Spinward Marches'
+
+  it('is hidden when nothing is pending for the selected world', () => {
+    const wrapper = mountMap({ selectedWorld: WORLD, selectedSectorName: SECTOR })
+    expect(wrapper.find('.delivery-badge').exists()).toBe(false)
+  })
+
+  it('is hidden when a pending obligation targets a different world', () => {
+    const wrapper = mountMap(
+      { selectedWorld: WORLD, selectedSectorName: SECTOR },
+      { mailContracts: [{ id: 'm1', dest_world_hex: '0202', dest_sector: SECTOR }] }
+    )
+    expect(wrapper.find('.delivery-badge').exists()).toBe(false)
+  })
+
+  it('shows a singular count for one pending obligation at the selected world', () => {
+    const wrapper = mountMap(
+      { selectedWorld: WORLD, selectedSectorName: SECTOR },
+      { mailContracts: [{ id: 'm1', dest_world_hex: '0101', dest_sector: SECTOR }] }
+    )
+    const badge = wrapper.find('.delivery-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('1 pending delivery here')
+  })
+
+  it('sums pending obligations across passengers, mail, and freight, with plural wording', () => {
+    const wrapper = mountMap(
+      { selectedWorld: WORLD, selectedSectorName: SECTOR },
+      {
+        passengers:    [{ id: 'p1', dest_world_hex: '0101', dest_sector: SECTOR }],
+        mailContracts: [{ id: 'm1', dest_world_hex: '0101', dest_sector: SECTOR }],
+        freight:       [{ id: 'f1', dest_world_hex: '0101', dest_sector: SECTOR }],
+      }
+    )
+    const badge = wrapper.find('.delivery-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('3 pending deliveries here')
+  })
+})
+
+describe('MapView — dialog mutual exclusion', () => {
+  it('opening one dialog closes any other that was open', () => {
+    const wrapper = mountMap()
+
+    wrapper.vm.showThemes = true
+    expect(wrapper.vm.showThemes).toBe(true)
+    expect(wrapper.vm.showAbout).toBe(false)
+
+    wrapper.vm.showAbout = true
+    expect(wrapper.vm.showAbout).toBe(true)
+    expect(wrapper.vm.showThemes).toBe(false)
+  })
+
+  it('setting a dialog to false clears the shared active-dialog state', () => {
+    const wrapper = mountMap()
+
+    wrapper.vm.showHelp = true
+    expect(wrapper.vm.showHelp).toBe(true)
+
+    wrapper.vm.showHelp = false
+    expect(wrapper.vm.showHelp).toBe(false)
+    expect(wrapper.vm.showThemes).toBe(false)
+    expect(wrapper.vm.showAbout).toBe(false)
+    expect(wrapper.vm.showTutorials).toBe(false)
+    expect(wrapper.vm.showCharacter).toBe(false)
+    expect(wrapper.vm.showBuyDialog).toBe(false)
   })
 })

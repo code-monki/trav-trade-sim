@@ -137,6 +137,10 @@
               <span class="uwp-code">{{ map.selectedWorld.UWP }} ↗</span>
               <span class="zone-badge" :class="map.zoneBadgeClass">{{ map.travelZoneLabel }}</span>
             </a>
+            <span v-if="pendingDeliveryCount > 0" class="delivery-badge"
+                  title="Jump here (Jump tab → Select) or use Set Here on the Cargo tab to complete delivery">
+              {{ pendingDeliveryCount }} pending {{ pendingDeliveryCount > 1 ? 'deliveries' : 'delivery' }} here
+            </span>
           </div>
         </div>
 
@@ -320,6 +324,16 @@
           </div>
         </template>
 
+        <!-- ── Port: Mail tab ────────────────────────────────────────────── -->
+        <template v-if="topTab === 'port' && portTab === 'mail'">
+          <div class="subtab-wrap">
+            <MailPanel
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
+          </div>
+        </template>
+
         <!-- ── Port: Services tab ────────────────────────────────────────── -->
         <template v-if="topTab === 'port' && portTab === 'services'">
           <div class="subtab-wrap">
@@ -436,6 +450,7 @@ import CharacterDialog  from '../components/CharacterDialog.vue'
 import TutorialDialog   from '../components/TutorialDialog.vue'
 import RouteAnalysis    from '../components/RouteAnalysis.vue'
 import PassengersPanel  from '../components/PassengersPanel.vue'
+import MailPanel        from '../components/MailPanel.vue'
 import ShipServices     from '../components/ShipServices.vue'
 import FreightPanel     from '../components/FreightPanel.vue'
 import AboardPanel  from '../components/AboardPanel.vue'
@@ -460,13 +475,28 @@ const portTab      = ref('market')
 const shipTab      = ref('cargo')
 const selectedGood   = ref(null)
 const chartedGoods   = ref(new Set())
-const showAbout      = ref(false)
-const showHelp       = ref(false)
-const showThemes     = ref(false)
-const showTutorials  = ref(false)
-const showCharacter  = ref(false)
-const showBuyDialog  = ref(false)
 const buyLoading     = ref(false)
+
+// ── Dialog visibility ────────────────────────────────────────────────────────
+// Single source of truth so at most one dialog is ever open at a time (rather
+// than relying on each overlay incidentally covering the trigger for the
+// others) and so keyboard-shortcut suppression only has to check one thing
+// instead of enumerating every dialog and risking a new one being forgotten.
+const activeDialog = ref(null) // 'about' | 'help' | 'themes' | 'tutorials' | 'character' | 'buy' | null
+
+function dialogProxy(name) {
+  return computed({
+    get: () => activeDialog.value === name,
+    set: (val) => { activeDialog.value = val ? name : null },
+  })
+}
+
+const showAbout      = dialogProxy('about')
+const showHelp       = dialogProxy('help')
+const showThemes     = dialogProxy('themes')
+const showTutorials  = dialogProxy('tutorials')
+const showCharacter  = dialogProxy('character')
+const showBuyDialog  = dialogProxy('buy')
 
 // ── Traveller Map cache notice ────────────────────────────────────────────────
 const dismissedCacheNotice = ref(false)
@@ -488,6 +518,7 @@ const PORT_TABS = computed(() => {
   const tabs = [
     { key: 'market',     label: 'Market'     },
     { key: 'passengers', label: 'Passengers' },
+    { key: 'mail',       label: 'Mail'       },
     { key: 'services',   label: 'Services'   },
   ]
   if (auth.campaign?.trade_rules === 'MgT2022') tabs.push({ key: 'freight', label: 'Freight' })
@@ -522,6 +553,20 @@ const travellerMapUrl = computed(() => {
   const sector  = encodeURIComponent(map.selectedSectorName ?? '')
   const hex     = encodeURIComponent(map.selectedWorld?.Hex ?? '')
   return `https://travellermap.com/?milieu=${milieu}&sector=${sector}&hex=${hex}`
+})
+
+// Passengers/mail/freight are only removed from these lists once delivered
+// (see ship.js's autoDeliver), so anything still present whose destination
+// matches the world on screen hasn't been delivered yet — most often because
+// the player browsed here via the sidebar instead of Jump → Select, which is
+// the normal trigger. A passive nudge rather than the fix, since browsing
+// without committing to travel is deliberately allowed (see CargoHold).
+const pendingDeliveryCount = computed(() => {
+  if (!map.selectedWorld) return 0
+  const hex    = map.selectedWorld.Hex
+  const sector = map.selectedSectorName
+  const matches = (list) => list.filter(o => o.dest_world_hex === hex && o.dest_sector === sector).length
+  return matches(ship.passengers) + matches(ship.mailContracts) + matches(ship.freight)
 })
 
 // ── Chart resize ──────────────────────────────────────────────────────────────
@@ -596,7 +641,7 @@ onUnmounted(() => {
 function handleGlobalKey(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
       || e.target.isContentEditable) return
-  if (showAbout.value || showHelp.value || showTutorials.value) return   // dialogs handle Esc themselves
+  if (activeDialog.value) return   // any open dialog handles its own keyboard input (Esc, etc.)
 
   switch (e.key) {
     case '?': showHelp.value = true; break
@@ -692,8 +737,8 @@ async function doAdvanceTick() {
   }
 }
 
-function doLogout() {
-  auth.logout()
+async function doLogout() {
+  await auth.logout()
   router.push({ name: 'login' })
 }
 </script>

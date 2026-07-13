@@ -97,55 +97,12 @@
 
         <div v-if="fuelSuccess" class="success-flash">{{ fuelSuccess }}</div>
       </section>
-
-      <!-- ── Mail contracts section ────────────────────────────────────────── -->
-      <section class="service-section">
-        <h3>Mail Contract</h3>
-
-        <div v-if="tradeRules === 'MgT2022' && mailContainersAvailable <= 0" class="no-service">
-          No mail offered at this starport this tick — check back next tick.
-        </div>
-
-        <form v-else class="mail-form" @submit.prevent="submitMail">
-          <div class="form-row">
-            <label>Destination World</label>
-            <WorldPicker
-              v-model="mailDest"
-              :sector-name="props.sectorName" />
-          </div>
-          <div class="form-row" v-if="tradeRules === 'T5'">
-            <label for="mail-parsecs-input">Parsecs</label>
-            <input id="mail-parsecs-input" v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
-          </div>
-          <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
-            {{ mailContainersAvailable }} container(s) offered this tick — take all or none, per MgT2022 rules
-          </p>
-
-          <div class="fare-preview">
-            <span class="fare-label">Payment on delivery</span>
-            <span class="fare-amount">
-              <strong>Cr{{ mailPay.toLocaleString() }}</strong>
-            </span>
-          </div>
-
-          <p v-if="mailError" class="form-error">{{ mailError }}</p>
-
-          <div class="form-actions">
-            <button type="submit" class="btn-primary"
-                    :disabled="!canAcceptMail || ship.loading">
-              {{ ship.loading ? 'Accepting…' : 'Accept Mail Contract' }}
-            </button>
-          </div>
-        </form>
-
-        <div v-if="mailSuccess" class="success-flash">{{ mailSuccess }}</div>
-      </section>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
@@ -153,11 +110,8 @@ import {
   availableFuelTypes,
   jumpFuelTons,
   fuelCost,
-  mailPayment,
 } from '../lib/passengers.js'
 import { starportFromUWP } from '../lib/trade-engine-ct7.js'
-import { hexDistance }     from '../utils/hexDistance.js'
-import WorldPicker         from './WorldPicker.vue'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -168,7 +122,6 @@ const ship = useShipStore()
 const auth = useAuthStore()
 const tick = useTickStore()
 
-const tradeRules  = computed(() => auth.campaign?.trade_rules ?? 'CT7')
 const starportClass = computed(() => props.world?.UWP ? starportFromUWP(props.world.UWP) : null)
 const availableFuel = computed(() => availableFuelTypes(starportClass.value ?? ''))
 
@@ -253,64 +206,6 @@ function incFuelTons() {
   fuelForm.value.tons++
 }
 function decFuelTons() { if (fuelForm.value.tons > 1) fuelForm.value.tons-- }
-
-// ── Mail form ─────────────────────────────────────────────────────────────────
-
-const mailDest    = ref({ hex: '', name: '', sector: '' })
-const mailParsecs = ref(1)
-const mailError   = ref('')
-const mailSuccess = ref('')
-
-// Auto-compute parsecs when a world is picked (T5 fares are per-parsec)
-watch(() => mailDest.value.hex, (hex) => {
-  if (hex && props.world?.Hex) {
-    const d = hexDistance(props.world.Hex, hex)
-    if (d > 0) mailParsecs.value = d
-  }
-})
-
-// MgT2022 only — this tick's rolled mail container count (see traffic-tick.js).
-// Always null (unlimited) for CT7/T5.
-const mailContainersAvailable = computed(() => tick.trafficAvailability?.mail_containers ?? 0)
-
-const mailPay = computed(() =>
-  mailPayment(tradeRules.value, mailParsecs.value, mailContainersAvailable.value)
-)
-
-const canAcceptMail = computed(() => {
-  if (mailDest.value.hex.trim().length === 0) return false
-  if (mailDest.value.sector.trim().length === 0) return false
-  if (tradeRules.value === 'MgT2022') return mailContainersAvailable.value > 0
-  return true
-})
-
-async function submitMail() {
-  mailError.value   = ''
-  mailSuccess.value = ''
-
-  if (!props.world) { mailError.value = 'No world selected'; return }
-
-  const result = await ship.acceptMailContract({
-    campaignId:       auth.campaign.id,
-    playerId:         auth.player.id,
-    originWorldHex:   props.world.Hex,
-    originSector:     props.sectorName,
-    originWorldName:  props.world.Name ?? '',
-    destWorldHex:     mailDest.value.hex,
-    destSector:       mailDest.value.sector,
-    destWorldName:    mailDest.value.name,
-    parsecs:          mailParsecs.value,
-    payment:          mailPay.value,
-    tick:             tick.currentTick,
-  })
-
-  if (!result.ok) { mailError.value = result.error; return }
-
-  mailSuccess.value = `Mail contract accepted — Cr${mailPay.value.toLocaleString()} on delivery`
-  mailDest.value    = { hex: '', name: '', sector: '' }
-  mailParsecs.value = 1
-  setTimeout(() => { mailSuccess.value = '' }, 3500)
-}
 </script>
 
 <style scoped>
@@ -366,8 +261,7 @@ async function submitMail() {
 .fuel-badge.refined   { background: var(--bg-selected); color: var(--accent); border: 1px solid var(--accent-dim); }
 .fuel-badge.unrefined { background: var(--bg-panel);    color: var(--text-dim); border: 1px solid var(--border); }
 
-.fuel-form,
-.mail-form { display: flex; flex-direction: column; gap: 0.65rem; }
+.fuel-form { display: flex; flex-direction: column; gap: 0.65rem; }
 
 .form-row { display: flex; flex-direction: column; gap: 0.3rem; }
 .form-row label { font-size: 0.72rem; color: var(--text-dim); }
@@ -410,7 +304,6 @@ async function submitMail() {
 }
 .stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
 .count-input  { width: 52px; text-align: center; }
-.parsec-input { width: 60px; }
 
 .hint-row {
   display: flex;
@@ -431,8 +324,6 @@ async function submitMail() {
 }
 .fare-label  { color: var(--text-dim); }
 .fare-amount strong { color: var(--accent); }
-
-.traffic-note { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
 
 .form-actions { display: flex; justify-content: flex-end; }
 

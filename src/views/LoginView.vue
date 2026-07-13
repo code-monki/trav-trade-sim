@@ -313,6 +313,9 @@ async function doReset() {
     form.pin        = ''
     form.pinConfirm = ''
     form.recoveryCode = ''
+    // Brief pause so the success message is actually seen before the tab
+    // switches out from under it.
+    setTimeout(() => setMode('login'), 1500)
   }
 }
 </script>

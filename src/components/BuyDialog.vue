@@ -79,7 +79,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue:     { type: Boolean, required: true },
@@ -116,6 +116,10 @@ function decTons() { if (tons.value > 1)            tons.value-- }
 
 function close()   { emit('update:modelValue', false) }
 function confirm() { emit('confirm', { tons: tons.value }); close() }
+
+function onKey(e) { if (e.key === 'Escape') close() }
+onMounted(()   => document.addEventListener('keydown', onKey))
+onUnmounted(() => document.removeEventListener('keydown', onKey))
 
 function fmt(n) { return (n ?? 0).toLocaleString() }
 </script>

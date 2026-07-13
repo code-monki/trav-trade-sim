@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { useAuthStore } from '../../src/stores/auth.js'
 import LoginView from '../../src/views/LoginView.vue'
 
 function makeRouter() {
@@ -26,6 +27,21 @@ function mountLogin(authState = {}) {
       ],
     },
   })
+}
+
+// Separate helper (rather than extending mountLogin's signature) so the
+// existing call sites above stay untouched — this one needs the pinia
+// instance back too, to override a specific action's mocked resolution.
+function mountLoginWithPinia(authState = {}) {
+  const pinia = createTestingPinia({
+    initialState: {
+      auth: { error: null, loading: false, ...authState },
+    },
+    stubActions: true,
+    createSpy: vi.fn,
+  })
+  const wrapper = mount(LoginView, { global: { plugins: [pinia, makeRouter()] } })
+  return { wrapper, pinia }
 }
 
 describe('LoginView — mode tabs', () => {
@@ -64,6 +80,35 @@ describe('LoginView — mode tabs', () => {
     await wrapper.findAll('.tab')[2].trigger('click')
     const newPins = wrapper.findAll('input[type="password"]')
     expect(newPins[0].element.value).toBe('')
+  })
+})
+
+describe('LoginView — Reset PIN', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('auto-returns to the Sign In tab after a successful reset', async () => {
+    vi.useFakeTimers()
+    const { wrapper, pinia } = mountLoginWithPinia()
+    const auth = useAuthStore(pinia)
+    auth.resetPin.mockResolvedValue({ ok: true })
+
+    await wrapper.findAll('.tab')[3].trigger('click')
+    expect(wrapper.find('form').text()).toContain('Reset PIN')
+
+    await wrapper.find('input[placeholder*="SPINWARD"]').setValue('TEST-01')
+    await wrapper.find('input[placeholder*="whose PIN"]').setValue('Bob')
+    await wrapper.find('input[placeholder*="campaign creation"]').setValue('ABCD1234')
+    const pins = wrapper.findAll('input[type="password"]')
+    await pins[0].setValue('5678')
+    await pins[1].setValue('5678')
+    await wrapper.find('form').trigger('submit.prevent')
+    await vi.waitFor(() => expect(wrapper.find('.reset-success').exists()).toBe(true))
+
+    await vi.advanceTimersByTimeAsync(1500)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.tab')[0].classes()).toContain('active')
+    expect(wrapper.find('.reset-success').exists()).toBe(false)
   })
 })
 

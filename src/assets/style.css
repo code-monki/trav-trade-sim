@@ -340,6 +340,16 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 .zone-badge.zone-amber { background: rgba(232, 160, 32, 0.15); color: var(--amber); border: 1px solid var(--amber); }
 .zone-badge.zone-red   { background: rgba(217, 58, 58, 0.15);  color: var(--red);   border: 1px solid var(--red); }
 
+.delivery-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(232, 160, 32, 0.15);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+}
+
 /* ── Field groups ───────────────────────────────────────────────────────────── */
 .field-group {
   margin-bottom: 1.25rem;
