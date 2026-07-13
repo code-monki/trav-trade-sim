@@ -12,7 +12,8 @@
 --   - No RLS — authorization is enforced in the Worker.
 --   - D1 enables PRAGMA foreign_keys = ON for every connection.
 --   - players.ship_name / players.current_world are omitted;
---     they were deprecated in migration 011.
+--     they were deprecated in the old Supabase migration 011 (unrelated to
+--     this D1 project's own d1/011_schema_ledger.sql numbering below).
 -- ============================================================
 
 -- ── Campaigns ────────────────────────────────────────────────────────────────
@@ -52,6 +53,21 @@ CREATE TABLE IF NOT EXISTS players (
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, character_name)
 );
+
+-- ── Sessions ──────────────────────────────────────────────────────────────────
+-- Folded in from d1/002_sessions.sql — previously this baseline omitted the
+-- table entirely (a fresh install would be missing it until 002 was also run
+-- by hand), which the schema-drift ledger below would otherwise not catch
+-- since a hand-run 002 leaves no trace this file could detect.
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token       TEXT PRIMARY KEY,
+  player_id   TEXT NOT NULL REFERENCES players(id)   ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions (player_id);
 
 -- ── Ships ─────────────────────────────────────────────────────────────────────
 
@@ -585,3 +601,19 @@ WINDOW w AS (
   ORDER BY sell_tick
   ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
 );
+
+-- ── Schema-drift detection ledger ─────────────────────────────────────────────
+-- This baseline already contains the end-state of migrations 002-011 (see
+-- d1/011_schema_ledger.sql), so a fresh install's ledger starts fully caught
+-- up rather than empty. '001' represents this file itself.
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id         TEXT PRIMARY KEY,
+  applied_at INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
+  ('001', unixepoch()), ('002', unixepoch()), ('003', unixepoch()),
+  ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
+  ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
+  ('010', unixepoch()), ('011', unixepoch());

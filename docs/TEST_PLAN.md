@@ -368,6 +368,12 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 6. Visually confirm each color-coded indicator (market price deviation, travel-zone highlighting, ledger/trades/income net figures) also carries a non-color cue (text, icon, or symbol) — closed 2026-07-13: `MarketTable.vue` price cells show ▼/▲, world-list zones show an A/R badge, and `ReportsPanel.vue`/`RouteAnalysis.vue`'s previously sign-dropping (`Math.abs()`-only) profit/loss figures now always show an explicit +/− sign
 7. Spot-check text/UI contrast on all three theme variants (including the redesigned `dark-imperium` charcoal palette) against WCAG 2.2 AA thresholds (4.5:1 normal text, 3:1 large text/UI components) using a contrast-checker tool or `npx lighthouse` — the charcoal repaint's default `--accent-dim` button text initially failed at 3.71:1 until the new `--accent-text` token was introduced (see DD.md)
 
+### MTS-16: Schema-Drift Detection
+1. Against a local D1 database seeded from `d1/schema.sql` only (migration `011` already folded in), start the Worker (`wrangler dev`) and hit `GET /api/health` — verify `200` with `schema_ok: true`
+2. `wrangler d1 execute --local --command "DELETE FROM schema_migrations WHERE id='011'"` to simulate an unapplied migration, then re-hit `GET /api/health` — verify `503` with `schema_ok: false` and `missing_migrations` includes `'011'`
+3. Load the frontend against this drifted database — verify the app shows the blocking "database schema is out of date" screen (not the generic error-boundary message) instead of continuing into the app
+4. Re-apply `wrangler d1 execute --local --file=d1/011_schema_ledger.sql` (or re-run schema.sql) and reload — verify the app loads normally
+
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)
 2. Navigate to Manage Campaign → Campaign tab

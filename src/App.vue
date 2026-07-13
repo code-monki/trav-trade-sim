@@ -1,7 +1,10 @@
 <template>
   <div v-if="appError.fatalError" class="fatal-error">
     <h1>Traveller Trade Simulator</h1>
-    <p>Something went wrong and the app couldn't continue safely.</p>
+    <p v-if="appError.fatalError.kind === 'schema-drift'">
+      This app's database schema is out of date. Please contact your campaign referee or administrator.
+    </p>
+    <p v-else>Something went wrong and the app couldn't continue safely.</p>
     <button @click="reload">Reload page</button>
   </div>
   <router-view v-else />

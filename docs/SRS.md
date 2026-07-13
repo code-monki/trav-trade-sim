@@ -262,6 +262,7 @@
 | NFR-8 | **Reliability:** Loss of network connectivity during a trade operation shall not corrupt the ship's credit balance (atomic `db.batch()` design) |
 | NFR-9 | **Portability:** The application shall run in current versions of Chrome, Firefox, and Safari without plugins |
 | NFR-10 | **Maintainability:** All database schema changes shall be expressed as numbered migration files applied sequentially |
+| NFR-10a | **Maintainability:** The application shall detect at startup whether the connected database is missing an expected migration (schema drift) and block use with a clear message, rather than allowing confusing mid-action failures |
 
 ---
 

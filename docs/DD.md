@@ -7,7 +7,9 @@
 
 ## 1. Database Schema
 
-The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/010_mgt2022_trade_rules.sql`.
+The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/011_schema_ledger.sql`, both applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
+
+**Schema-drift detection:** as of migration `011`, a `schema_migrations` ledger table (`id`, `applied_at`) records every migration a given D1 database has actually received — `d1/schema.sql` seeds it fully caught-up for fresh installs, and every migration file from `011` onward ends with its own `INSERT` recording itself. `worker/src/lib/schema-version.js` holds the Worker's own `EXPECTED_MIGRATIONS` list (must be updated in the same commit as any new migration file) and is checked by `GET /api/health`, which returns `503` with `schema_ok: false` if the live database's ledger doesn't match — the frontend (`src/lib/health-check.js`, called once at startup from `main.js`) shows a blocking "database schema is out of date" screen instead of letting the app continue into confusing mid-action failures.
 
 ### 1.1 Tables
 
@@ -23,7 +25,7 @@ The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary key
 | `created_at` | TEXT | NOT NULL, default `datetime('now')` | |
 
 #### `sessions`
-*(defined in `d1/002_sessions.sql`; not yet folded into the consolidated `d1/schema.sql` baseline — a known gap, not a documentation error)*
+*(originally defined in `d1/002_sessions.sql`; folded into the consolidated `d1/schema.sql` baseline as part of the migration-011 schema-drift-ledger work, closing what had been a documented gap)*
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `token` | TEXT | PK | Bearer session token, issued on login |
@@ -427,6 +429,13 @@ Index: `idx_traffic_snapshots_lookup (campaign_id, world_hex, sector, tick)`
 
 Worker routes alias these columns back to the pre-refactor field names in SQL (`amount AS fare_total`, `origin_world_hex AS embark_world_hex`, `passenger_count AS count`, etc. — see `PASSENGER_SELECT`/`MAIL_SELECT` in `worker/src/routes/ships.js` and `referee.js`), so the frontend store (`useShipStore`'s `passengers`/`mailContracts` state, `bookPassengers`/`acceptMailContract` actions — §3) needed zero changes when the tables were unified.
 
+#### `schema_migrations`
+*(`d1/011_schema_ledger.sql`)* — schema-drift detection ledger; one row per migration ID this database has actually received. Not campaign-scoped — global to the database. See §1 intro and `worker/src/lib/schema-version.js`.
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PK | Migration filename's numeric prefix, e.g. `'011'` (`'001'` represents `schema.sql` itself) |
+| `applied_at` | INTEGER | NOT NULL | Unix timestamp (`unixepoch()`) |
+
 #### `realized_ohlcv` (view, not a table)
 Window functions over `trade_records`, partitioned by `(campaign_id, market_world_hex, market_sector, trade_good_die, year, month)` with `year`/`month` computed inline from `sell_tick` — SQLite has no stored functions, so the `1105 + tick/48` / `(tick/4)%12+1` arithmetic that a Postgres helper function used to encapsulate is inlined directly into the view's `SELECT`. Exposes `open_price`, `high_price`, `low_price`, `close_price`, `volume_tons`, `trade_count`.
 
@@ -444,6 +453,7 @@ D1 has no stored procedures — business logic that a Postgres-era design would 
 | `referee.js` | `/api/referee` | Ships, crew, players, skills, ship templates, ship debts, ship ownership (all `requireReferee`) |
 | `organizations.js` | `/api/organizations` | Organization CRUD, officers, members, equity, dues collection, disbursement, fleet report (all `requireAuth`; mutations additionally gated by `isOfficerOrReferee`) |
 | `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned) |
+| `health.js` | `/api/health` | Unauthenticated D1-aware readiness check — `checkSchemaVersion` against `schema_migrations`; `503` + `schema_ok: false` on drift. Distinct from the plain liveness check at `GET /` |
 
 Derived-value formulas (client-duplicated in `src/lib/market-tick.js` for display, computed server-side in `worker/src/lib/rollup.js`):
 

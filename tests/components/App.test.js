@@ -41,4 +41,22 @@ describe('App.vue error boundary', () => {
     expect(wrapper.find('.ok').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('Something went wrong')
   })
+
+  it('shows a schema-drift-specific message instead of the generic one', () => {
+    const wrapper = mount(App, {
+      global: {
+        plugins: [
+          createTestingPinia({
+            stubActions: false,
+            createSpy: vi.fn,
+            initialState: { appError: { fatalError: { kind: 'schema-drift', message: 'Database schema drift detected' } } },
+          }),
+        ],
+        stubs: { 'router-view': { template: '<div/>' } },
+      },
+    })
+
+    expect(wrapper.text()).toContain("database schema is out of date")
+    expect(wrapper.text()).not.toContain('Something went wrong')
+  })
 })

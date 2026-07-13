@@ -264,3 +264,4 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | NFR-8 | Atomic credit operations | Code review (`db.batch()` usage in `worker/src/routes/*.js`); ST-204–205 |
 | NFR-9 | Cross-browser support | Playwright test run in Chromium, Firefox, WebKit |
 | NFR-10 | Numbered migration files | File-naming convention in `d1/00X_*.sql` |
+| NFR-10a | Startup schema-drift detection | `schema_migrations` ledger (`d1/011_schema_ledger.sql`), `worker/src/lib/schema-version.js`'s `diffMigrations` (unit-tested, `tests/schema-version.test.js`), `GET /api/health` returns `503` on drift, frontend blocks with a clear message (`src/lib/health-check.js`, `App.vue`) instead of a confusing mid-action failure. Manually verified via `wrangler dev` |

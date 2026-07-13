@@ -101,4 +101,6 @@ d1/
   007_ownership.sql      # ship_ownership + organizations + organization_members tables
   008_org_officers.sql   # organization_officers table (multi-officer authorization)
   009_org_financials.sql # dues, disbursement, organization_ownership (Corp/Fleet Phase 2)
+  010_mgt2022_trade_rules.sql # MgT2022 ruleset (Basic Passage, Freight, traffic_snapshots)
+  011_schema_ledger.sql  # schema_migrations ledger — powers GET /api/health drift detection
 ```

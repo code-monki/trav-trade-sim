@@ -8,6 +8,7 @@ import ships     from './routes/ships.js'
 import referee   from './routes/referee.js'
 import reports   from './routes/reports.js'
 import organizations from './routes/organizations.js'
+import health    from './routes/health.js'
 
 const app = new Hono()
 
@@ -32,5 +33,6 @@ app.route('/api/ships',     ships)
 app.route('/api/referee',   referee)
 app.route('/api/reports',   reports)
 app.route('/api/organizations', organizations)
+app.route('/api/health',    health)
 
 export default app

@@ -44,3 +44,8 @@ app.mount('#app')
 import('./stores/theme.js').then(({ useThemeStore }) => {
   useThemeStore().init()
 })
+
+// One-time D1 schema-drift check. Import after mount so Pinia is ready.
+import('./lib/health-check.js').then(({ checkSchemaHealth }) => {
+  checkSchemaHealth()
+})
