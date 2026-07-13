@@ -13,7 +13,7 @@
 
         <div class="dialog-body">
           <p class="app-desc">
-            A speculative trade dashboard for Classic Traveller campaigns,
+            A speculative trade dashboard for Traveller campaigns,
             inspired by the market mechanics of M.U.L.E. Track commodity prices,
             analyse market events, and identify profitable trade routes across the
             Third Imperium.
