@@ -252,7 +252,12 @@
 | NFR-3 | **Security:** PINs shall be stored as PBKDF2-SHA256 hashes (Web Crypto API, salted); plaintext PINs shall never be stored or logged |
 | NFR-4 | **Security:** The recovery code shall be generated server-side, stored only as a PBKDF2 hash, and returned in plaintext exactly once |
 | NFR-5 | **Security:** All mutations shall be performed through Worker route handlers behind session authentication, never directly from client code |
-| NFR-6 | **Accessibility:** The application shall provide keyboard shortcuts for all primary navigation actions; focus traps shall be applied to all modal dialogs |
+| NFR-6 | **Accessibility:** The application shall target WCAG 2.2 Level AA conformance. Keyboard shortcuts shall be provided for all primary navigation actions; focus traps shall be applied to all modal dialogs |
+| NFR-6a | **Accessibility:** All interactive controls shall be reachable and operable via keyboard alone (no mouse-only interactions), with a visible focus indicator at all times |
+| NFR-6b | **Accessibility:** Color shall never be the sole means of conveying status or information (e.g. market price deviation, travel zone warnings, profit/loss) — every color-coded indicator shall be accompanied by a text label, icon, or other non-color cue |
+| NFR-6c | **Accessibility:** Text and meaningful UI component contrast ratios shall meet or exceed WCAG 2.2 AA thresholds (4.5:1 for normal text, 3:1 for large text and UI components) |
+| NFR-6d | **Accessibility:** Every routed top-level view shall provide a `<main id="main-content">` landmark matching the global skip-link's target, and a logical heading/landmark structure for assistive technology |
+| NFR-6e | **Accessibility:** Custom interactive controls without native semantics (e.g. tab bars, steppers, type-selector buttons) shall expose an accessible name and, where applicable, ARIA role/state matching their behavior |
 | NFR-7 | **Usability:** The application shall function at viewport widths from 1024px and above |
 | NFR-8 | **Reliability:** Loss of network connectivity during a trade operation shall not corrupt the ship's credit balance (atomic `db.batch()` design) |
 | NFR-9 | **Portability:** The application shall run in current versions of Chrome, Firefox, and Safari without plugins |
@@ -344,3 +349,9 @@
 - Collecting dues again before the configured period has elapsed is rejected
 - Marking a ship as owned outright by a second organization, when it is already owned by another, is rejected
 - A ship owned outright by an organization shows its Net Worth "Your Share" based on the player's organization equity, not ship ownership
+
+### AC-18: Accessibility
+- The skip-link on every routed view ("Skip to main content") moves keyboard focus to that view's `<main id="main-content">` landmark
+- Every primary interactive control (buttons, form fields, tab bars, steppers) can be reached and operated using only the keyboard, in a logical tab order, with a visible focus indicator
+- No status or data point (price deviation color, travel zone color, profit/loss color) is conveyed by color alone — each has an accompanying text or icon cue
+- Automated accessibility audit (Lighthouse or equivalent) reports no critical/serious violations on the Login, Map, and Referee views

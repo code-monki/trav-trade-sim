@@ -359,6 +359,15 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
 9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
 
+### MTS-15: Accessibility (WCAG 2.2 AA)
+1. On each routed view (Login, Map, Referee), press Tab once on page load; verify the "Skip to main content" link becomes visible and focused, and activating it (Enter) moves focus into that view's `<main>` landmark
+2. Using only the keyboard (Tab/Shift+Tab/Enter/Space/Arrow keys), complete a full trade: select a world, buy cargo, jump, sell — verify every control is reachable and a visible focus outline is present throughout
+3. Repeat for booking a passenger and (MgT2022 campaigns) a freight lot, including the passage-type/lot-size button groups
+4. Open and close a modal dialog (e.g. Recovery Code, Buy confirmation); verify focus is trapped inside while open and returns to the triggering control on close
+5. Run an automated audit (Lighthouse or equivalent) against the production build (`vite build && vite preview`) for Login, Map, and Referee; verify no critical/serious violations — record the accessibility score
+6. Visually confirm each color-coded indicator (market price deviation, travel-zone highlighting, cargo profit/loss) also carries a non-color cue (text, icon, or symbol); this is a known open gap as of 2026-07-13, expected to fail until addressed — track failures rather than silently passing
+7. Spot-check text/UI contrast on the darkest and lightest theme variants against WCAG 2.2 AA thresholds (4.5:1 normal text, 3:1 large text/UI components) using a contrast-checker tool
+
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)
 2. Navigate to Manage Campaign → Campaign tab

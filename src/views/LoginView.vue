@@ -1,5 +1,5 @@
 <template>
-  <div class="login-shell">
+  <main id="main-content" class="login-shell">
     <div class="login-card">
       <div class="login-header">
         <h1>Traveller Trade Simulator</h1>
@@ -205,7 +205,7 @@
     <p class="login-footer">
       Non-commercial use only · Traveller is a registered trademark of Mongoose Publishing Ltd. · Copyright 1977–Present
     </p>
-  </div>
+  </main>
 
   <TutorialDialog v-model="showTutorials" />
 </template>

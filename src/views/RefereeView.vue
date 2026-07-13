@@ -23,7 +23,7 @@
     </button>
   </nav>
 
-  <main class="ref-body">
+  <main id="main-content" class="ref-body">
 
     <!-- ════════════════════════════════════════════════════════════════════ -->
     <!-- SHIPS TAB                                                            -->

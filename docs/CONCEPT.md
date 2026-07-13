@@ -23,6 +23,7 @@ Speculative trade in Traveller is one of the game's most engaging subsystems, bu
 | **G-5** | Support multiple Traveller editions (Classic CT7, Traveller 5th Edition, Mongoose Traveller 2022) in a single tool |
 | **G-6** | Require no server infrastructure beyond a Cloudflare free-tier account (Workers + D1) |
 | **G-7** | Run entirely in a web browser with no installation |
+| **G-8** | Be usable by players relying on keyboard navigation or assistive technology, targeting WCAG 2.2 Level AA |
 
 ## Non-Goals
 

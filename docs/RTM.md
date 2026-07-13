@@ -254,7 +254,12 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | NFR-3 | PINs as strong salted hash | Code review of `worker/src/lib/hash.js` (PBKDF2-SHA256 via Web Crypto API); never appears in logs |
 | NFR-4 | Recovery code one-time display | CT-301–305; E2E-101; MTS-2 |
 | NFR-5 | Mutations only via Worker routes | Code review; no direct D1 access from client, all writes go through `worker/src/routes/*.js` behind `requireAuth`/`requireReferee` |
-| NFR-6 | Keyboard shortcuts + focus traps | Manual testing; `useFocusTrap.js` review |
+| NFR-6 | WCAG 2.2 AA target; keyboard shortcuts + focus traps | Manual testing; `useFocusTrap.js` review; Lighthouse accessibility audit (97/100 on the production build as of 2026-07-13) |
+| NFR-6a | Keyboard-operable, visible focus | MTS-15 (manual). **Partial** — verified for primary flows (Login, Passengers/Freight/Services forms, Referee panel tabs); not yet audited for every dialog/table row action |
+| NFR-6b | Color not the sole information channel | MTS-15 (manual). **Open gap** — `MarketTable.vue` price coloring, world-list travel-zone coloring, and `CargoHold.vue` profit/loss coloring are currently color-only; no text/icon pairing yet |
+| NFR-6c | WCAG 2.2 AA contrast ratios | MTS-15 (manual, no automated contrast-checker run yet). **Not yet verified** |
+| NFR-6d | `<main id="main-content">` on every routed view | Code review: `LoginView.vue`, `MapView.vue`, `RefereeView.vue` all confirmed (fixed 2026-07-13 — Login/Referee were previously missing the skip-link target) |
+| NFR-6e | Accessible names/ARIA on custom controls | Code review. **Partial** — ~10 of 25 components use `aria-`/`role` attributes (e.g. `WorldPicker.vue`'s listbox, resize handles); several interactive surfaces (`MarketTable.vue`, `CargoHold.vue`, `PassengersPanel.vue`, `FreightPanel.vue`, `ShipServices.vue`) have none yet |
 | NFR-7 | 1024px+ viewport | Manual testing at 1024px, 1280px, 1920px |
 | NFR-8 | Atomic credit operations | Code review (`db.batch()` usage in `worker/src/routes/*.js`); ST-204–205 |
 | NFR-9 | Cross-browser support | Playwright test run in Chromium, Firefox, WebKit |
