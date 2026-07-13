@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 700" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<rect x="0" y="0" width="1020" height="700" fill="#f4f4f4" stroke="none" stroke-width="1.5" rx="0"/>
+<rect x="30" y="20" width="960" height="220" fill="#eef2f7" stroke="#7d97b5" stroke-width="2" rx="8"/>
+<text x="46" y="44" font-size="15" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Browser (Vue 3 SPA)</text>
+<rect x="46" y="60" width="223.0" height="32" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="157.5" y="81" font-size="11.5" font-weight="600" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">LoginView</text>
+<rect x="281.0" y="60" width="223.0" height="32" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="392.5" y="81" font-size="11.5" font-weight="600" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">MapView</text>
+<rect x="516.0" y="60" width="223.0" height="32" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="627.5" y="81" font-size="11.5" font-weight="600" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">RefereeView</text>
+<rect x="751.0" y="60" width="223.0" height="32" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="862.5" y="81" font-size="11.5" font-weight="600" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Components</text>
+<line x1="157.5" y1="92" x2="157.5" y2="110" stroke="#333333" stroke-width="1.2"/>
+<line x1="392.5" y1="92" x2="392.5" y2="110" stroke="#333333" stroke-width="1.2"/>
+<line x1="627.5" y1="92" x2="627.5" y2="110" stroke="#333333" stroke-width="1.2"/>
+<line x1="862.5" y1="92" x2="862.5" y2="110" stroke="#333333" stroke-width="1.2"/>
+<rect x="46" y="114" width="928" height="34" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="510.0" y="130" font-size="11.5" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Pinia Stores</text>
+<text x="510.0" y="144" font-size="9.5" font-weight="normal" font-style="normal" fill="#8a8a8a" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">auth · map · tick · ship · referee · theme</text>
+<line x1="510.0" y1="148" x2="510.0" y2="162" stroke="#333333" stroke-width="1.6"/>
+<polygon points="505.0,162 515.0,162 510.0,170" fill="#333333"/>
+<rect x="46" y="170" width="928" height="34" fill="#ffffff" stroke="#9fb2c9" stroke-width="1.5" rx="5"/>
+<text x="510.0" y="186" font-size="11.5" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Trade Engine / Market Tick / Events</text>
+<text x="510.0" y="200" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="middle" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">pure JS — deterministic, no side effects</text>
+<line x1="260" y1="240" x2="260" y2="280" stroke="#333333" stroke-width="1.6"/>
+<polygon points="255,280 265,280 260,288" fill="#333333"/>
+<text x="270" y="264.0" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">src/lib/api.js — HTTPS JSON, Bearer token</text>
+<line x1="800" y1="240" x2="800" y2="280" stroke="#333333" stroke-width="1.6"/>
+<polygon points="795,280 805,280 800,288" fill="#333333"/>
+<text x="470" y="264.0" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">direct fetch, client-side — no Worker involved</text>
+<rect x="40" y="288" width="500" height="130" fill="#eae4d3" stroke="#b8a15a" stroke-width="2" rx="8"/>
+<text x="56" y="312" font-size="14" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Cloudflare Worker (Hono v4)</text>
+<rect x="56" y="326" width="468" height="74" fill="#ffffff" stroke="#cbb877" stroke-width="1.5" rx="5"/>
+<text x="68" y="346" font-size="10.5" font-weight="700" font-style="normal" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Routes</text>
+<text x="68" y="362" font-size="10" font-weight="normal" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">/api/auth  /api/campaigns  /api/ships</text>
+<text x="68" y="378" font-size="10" font-weight="normal" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">/api/market  /api/referee  /api/reports  /api/health</text>
+<line x1="290.0" y1="418" x2="290.0" y2="456" stroke="#333333" stroke-width="1.6"/>
+<polygon points="285.0,456 295.0,456 290.0,464" fill="#333333"/>
+<text x="298.0" y="441.0" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">D1 binding</text>
+<rect x="40" y="464" width="500" height="150" fill="#e4f3ea" stroke="#6fae8a" stroke-width="2" rx="8"/>
+<text x="56" y="488" font-size="14" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Cloudflare D1 (SQLite)</text>
+<text x="56" y="506" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">campaigns · players · sessions · ships · crew · obligations</text>
+<text x="56" y="520.5" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">cargo · market_snapshots · market_events · trade_records</text>
+<text x="56" y="535.0" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">market_monthly · market_annual · realized_ohlcv (view)</text>
+<text x="56" y="549.5" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">ship_templates · ship_debts · debt_payments</text>
+<text x="56" y="564.0" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">ship_ownership · organizations · organization_members</text>
+<text x="56" y="578.5" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">organization_officers · organization_ownership</text>
+<text x="56" y="593.0" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">dues_payments · disbursements · traffic_snapshots</text>
+<text x="56" y="607.5" font-size="9.7" font-weight="normal" font-style="normal" fill="#2f6b4d" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">schema_migrations</text>
+<rect x="600" y="288" width="380" height="130" fill="#f3e6e6" stroke="#c08a8a" stroke-width="2" rx="8"/>
+<text x="616" y="312" font-size="14" font-weight="700" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Traveller Map API</text>
+<text x="616" y="330" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">travellermap.com — third-party, not affiliated</text>
+<rect x="616" y="342" width="348" height="58" fill="#ffffff" stroke="#d3a8a8" stroke-width="1.5" rx="5"/>
+<text x="628" y="362" font-size="10" font-weight="normal" font-style="normal" fill="#2a2a2a" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">Sector lists, world data, route data, UWP decode</text>
+<text x="628" y="378" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Cached client-side in IndexedDB as a fallback</text>
+<text x="628" y="391" font-size="9.5" font-weight="normal" font-style="italic" fill="#8a8a8a" text-anchor="start" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">(see src/lib/travellermap-cache.js)</text>
+</svg>

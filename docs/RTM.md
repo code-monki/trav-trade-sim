@@ -160,7 +160,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-1301 | Accept mail at Port > Services | DD §2 `ShipServices` | `ShipServices.vue`, `ship.js:acceptMailContract`, `d1/004_obligations.sql` (kind='mail') | — | — | — | — |
+| FR-1301 | Accept mail at Port > Mail | DD §2 `MailPanel` | `MailPanel.vue`, `ship.js:acceptMailContract`, `d1/004_obligations.sql` (kind='mail') | — | — | — | — |
 | FR-1302 | CT7/T5/MgT2022 payment calculation | DD §2 | `passengers.js:mailPayment` | UT-511–512, UT-515 | — | — | — |
 | FR-1303 | Track in obligations table | DD §1.1 `obligations` | `d1/004_obligations.sql`, `ship.js:acceptMailContract` | — | — | — | — |
 | FR-1304 | Auto-deliver + credit on arrival | HLD §4 | `ship.js:updateLocation`, `worker/src/routes/ships.js` | — | — | — | — |

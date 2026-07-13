@@ -11,51 +11,9 @@ TTS is a single-page application (SPA) backed by a Cloudflare Worker API and a C
 
 The original backend was Supabase (PostgreSQL + PostgREST + SECURITY DEFINER RPCs). It was replaced in July 2026 because **Supabase free-tier projects are automatically paused after seven days of inactivity** and require a manual dashboard restore before users can log in again. Cloudflare D1 has no inactivity pause.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Browser (Vue 3 SPA)                                                │
-│                                                                     │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────────┐   │
-│  │ LoginView │  │  MapView  │  │RefereeView│  │  Components   │   │
-│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └───────┬───────┘   │
-│        │               │               │                │           │
-│  ┌─────▼───────────────▼───────────────▼────────────────▼───────┐  │
-│  │                   Pinia Stores                                │  │
-│  │  auth · map · tick · ship · referee · theme                  │  │
-│  └──────────────────────────┬────────────────────────────────────┘  │
-│                             │                                       │
-│  ┌──────────────────────────▼────────────────────────────────────┐  │
-│  │             Trade Engine / Market Tick / Events               │  │
-│  │    (pure JS — deterministic, no side effects)                 │  │
-│  └──────────────────────────┬────────────────────────────────────┘  │
-│                             │ src/lib/api.js (fetch + Bearer token) │
-└─────────────────────────────┼───────────────────────────────────────┘
-                              │ HTTPS JSON API
-┌─────────────────────────────▼───────────────────────────────────────┐
-│  Cloudflare Worker (Hono v4)                                        │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  Routes: /api/auth  /api/campaigns  /api/ships               │  │
-│  │          /api/market  /api/referee  /api/reports             │  │
-│  └────────────────────────────┬─────────────────────────────────┘  │
-│                               │ D1 binding                          │
-│  ┌────────────────────────────▼─────────────────────────────────┐  │
-│  │  Cloudflare D1 (SQLite)                                      │  │
-│  │  campaigns · players · sessions · ships · crew · obligations  │  │
-│  │  cargo · market_snapshots · market_events · trade_records     │  │
-│  │  market_monthly · market_annual · realized_ohlcv (view)       │  │
-│  │  ship_templates · ship_debts · debt_payments                  │  │
-│  │  ship_ownership · organizations · organization_members        │  │
-│  │  organization_officers · organization_ownership                │  │
-│  │  dues_payments · disbursements                                 │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-                              │ REST API
-┌─────────────────────────────▼───────────────────────────────────────┐
-│  Traveller Map API (travellermap.com)                               │
-│  Sector lists, world data, route data, UWP decode                   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Architecture overview: the browser SPA (views → Pinia stores → deterministic trade engine) makes two independent outbound calls — one to the Cloudflare Worker, which is the only thing that talks to D1, and a separate direct client-side call to the third-party Traveller Map API that never touches the Worker at all](wireframes/hld-architecture.svg)
+
+Two independent external dependencies, not one pipeline: the browser calls the Cloudflare Worker (which alone talks to D1) via `src/lib/api.js`, and separately fetches `travellermap.com` directly, client-side — the Worker never proxies or sees Traveller Map traffic. This matters operationally: a Traveller Map outage and a D1/Worker outage are unrelated failure modes (see `src/lib/travellermap-cache.js`'s IndexedDB fallback, which exists precisely because that dependency isn't behind the Worker's control).
 
 ## 2. Technology Stack
 
@@ -109,7 +67,8 @@ src/
 │   ├── PriceChart.vue        lightweight-charts chart — Weekly/Monthly/Annual/Realized tabs
 │   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow + live valuation
 │   ├── PassengersPanel.vue   Port > Passengers sub-tab: booking form, capacity check, fare preview
-│   ├── ShipServices.vue      Port > Services sub-tab: fuel purchase + mail contract booking
+│   ├── MailPanel.vue         Port > Mail sub-tab: mail contract booking, fare preview
+│   ├── ShipServices.vue      Port > Services sub-tab: fuel purchase
 │   ├── FreightPanel.vue      Port > Freight sub-tab (MgT2022 only): lot booking, cargo capacity check
 │   ├── AboardPanel.vue       Ship > Aboard sub-tab: composes PassengerManifest + ContractsPanel + Freight-in-transit
 │   ├── PassengerManifest.vue Occupancy + in-transit passengers
@@ -119,7 +78,7 @@ src/
 │   ├── BuyDialog.vue         Purchase quantity dialog
 │   ├── RouteAnalysis.vue     Jump range route table with profit projection
 │   ├── EventsHistory.vue     World event log
-│   ├── WorldPicker.vue       Destination picker (dropdown or manual hex), used by ShipServices
+│   ├── WorldPicker.vue       Destination picker (dropdown or manual hex), used by PassengersPanel/MailPanel/FreightPanel
 │   ├── RecoveryCodeDialog.vue One-time recovery code display (teleported)
 │   ├── CharacterDialog.vue   Character stats display
 │   ├── HamburgerMenu.vue     Navigation menu
@@ -340,15 +299,17 @@ MapView
     ├── TOP TAB: Overview — world data sections (UWP, trade codes, routes)
     │
     ├── TOP TAB: Port
-    │   ├── (sub-tab bar) [Market] [Passengers] [Services] [Freight — MgT2022 only]
+    │   ├── (sub-tab bar) [Market] [Passengers] [Mail] [Services] [Freight — MgT2022 only]
     │   ├── PORT SUB-TAB: Market
     │   │   ├── MarketTable (emits: select-good, toggle-chart, buy-good)
     │   │   ├── (resize handle)
     │   │   └── PriceChart (Weekly / Monthly / Annual / Realized)
     │   ├── PORT SUB-TAB: Passengers
     │   │   └── PassengersPanel
+    │   ├── PORT SUB-TAB: Mail
+    │   │   └── MailPanel
     │   ├── PORT SUB-TAB: Services
-    │   │   └── ShipServices (fuel + mail sections)
+    │   │   └── ShipServices (fuel only)
     │   └── PORT SUB-TAB: Freight (MgT2022 only)
     │       └── FreightPanel
     │

@@ -297,11 +297,12 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 3. Player purchases 20t refined fuel; verify ship credits decrease by Cr10,000 and fuel bar shows 20/40t
 4. Click "Fill for jump" (J-2 ship, hull 200t); verify stepper sets to min(40, 40-20) = 20t (fills to capacity)
 5. Player opens Port > Passengers; book 2 High passage to Efate (1705); verify staterooms show 2/4, credits increase by Cr20,000
-6. Player accepts a mail contract to Efate; verify Contracts tab shows pending payment Cr25,000
-7. Referee advances tick; player uses Jump tab to Select Efate
-8. Verify passengers auto-deliver (Manifest tab shows no in-transit passengers)
-9. Verify mail auto-delivers and ship credits increase by Cr25,000
-10. Return to Regina; referee issues refund on a second booked passenger; verify ship credits decrease by fare amount
+6. Player opens Port > Mail; accepts a mail contract to Efate; verify Contracts tab shows pending payment Cr25,000
+7. Without using Jump or "Set Here", select Efate directly in the sidebar; verify a "2 pending deliveries here" badge appears next to the zone indicator in the world header
+8. Referee advances tick; player uses Jump tab to Select Efate
+9. Verify passengers auto-deliver (Manifest tab shows no in-transit passengers) and the pending-delivery badge is gone
+10. Verify mail auto-delivers and ship credits increase by Cr25,000
+11. Return to Regina; referee issues refund on a second booked passenger; verify ship credits decrease by fare amount
 
 ### MTS-8: Ship Templates
 1. Referee opens Campaign Management → Ships → Templates
@@ -355,7 +356,7 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity)
 5. Open Port → Freight (visible only for MgT2022 campaigns); book a Major/Minor/Incidental lot; verify the charge is collected upfront and the lot appears in Ship → Aboard → Freight in Transit
 6. Advance the tick past the freight's due tick, then navigate the ship to its destination; verify a late-delivery penalty is deducted from credits at delivery and the obligation clears
-7. Open Port → Services → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
+7. Open Port → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
 8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
 9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
 

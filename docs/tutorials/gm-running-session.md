@@ -1,6 +1,7 @@
 # GM Tutorial: Running a Session
 
 **Prerequisites:** Campaign created and at least one ship assigned.
+
 See [Campaign Setup](./gm-campaign-setup.md) if you have not done that yet.
 
 **Related tutorials:**
@@ -16,7 +17,7 @@ Each session generally follows this rhythm:
 
 1. Players select worlds, open Port → Market, and buy cargo or book passengers
 2. Players purchase fuel at Port → Services if the tank is low
-3. Players accept mail contracts at Port → Services for additional income
+3. Players accept mail contracts at Port → Mail for additional income
 4. Players use the Jump tab to pick a profitable destination
 5. You advance the tick (**Advance Tick ›** in the header or press `T`)
 6. Prices shift; random events may fire on next world visits
@@ -54,16 +55,16 @@ Open the Referee panel → **Events** tab → **New Event**.
 
 ![New Event Form](screenshots/gm-events-new-event-form.png)
 
-| Field            | Notes                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| Scope            | *Local* — affects one world. *Subsector* — affects all worlds in the subsector.      |
-| World            | Which world (for Local scope)                                                        |
-| Trade Good       | Specific good affected, or *All Goods*                                               |
-| Buy modifier %   | Adjusts the *purchase* price — positive makes buying more expensive, negative cheaper. Leave blank for no effect on buying. |
+| Field            | Notes                                                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope            | *Local* — affects one world. *Subsector* — affects all worlds in the subsector.                                                         |
+| World            | Which world (for Local scope)                                                                                                           |
+| Trade Good       | Specific good affected, or *All Goods*                                                                                                  |
+| Buy modifier %   | Adjusts the *purchase* price — positive makes buying more expensive, negative cheaper. Leave blank for no effect on buying.             |
 | Sell modifier %  | Adjusts the *sale* price — positive means players receive more when selling, negative means less. Leave blank for no effect on selling. |
-| Severity         | Minor / Major / Crisis — controls the badge color and icon on the Market tab         |
-| Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick.                   |
-| Description      | Narrative text shown in the Market tab banner and Events history                     |
+| Severity         | Minor / Major / Crisis — controls the badge color and icon on the Market tab                                                            |
+| Duration (ticks) | How many ticks the event lasts. Closes automatically at that tick.                                                                      |
+| Description      | Narrative text shown in the Market tab banner and Events history                                                                        |
 
 Events fire automatically at random on a world's first Market tab visit each tick. Manual
 events stack on top of the automatic ones.

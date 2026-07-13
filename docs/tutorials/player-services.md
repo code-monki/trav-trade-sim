@@ -52,6 +52,10 @@ Passengers are **automatically delivered** when the ship arrives at their destin
 Use **Jump → Select** on the destination row to trigger auto-delivery and switch to the
 market at the new world simultaneously.
 
+> ℹ Just browsing a world in the sidebar does not count as arriving — if you're looking at
+> a world with a passenger, mail, or freight obligation still waiting for it, a small badge
+> appears next to the zone indicator in the world header to remind you.
+
 After delivery, passengers disappear from the Manifest tab. No extra action is required —
 fare was collected at boarding.
 
@@ -89,9 +93,9 @@ Your Referee manually reduces *Current Fuel* after each jump.
 
 ## 4. Accept a Mail Contract
 
-Scroll to the **Mail Contract** section in **Port → Services**.
+Open **Port → Mail**.
 
-![Services Mail Section](screenshots/player-services-mail.png)
+![Mail Tab](screenshots/player-mail-tab.png)
 
 | Field        | Notes                                                            |
 | ------------ | ---------------------------------------------------------------- |
@@ -114,7 +118,7 @@ Click **Accept Mail Contract**. The contract appears on **Ship → Contracts**.
 **No credits are transferred yet** — payment is on delivery only.
 
 > ℹ **MgT2022 Freight:** Bulk cargo lots (Major/Minor/Incidental) are a separate,
-> MgT2022-only system with their own **Port → Freight** tab, covered in section 6 below.
+> MgT2022-only system with their own **Port → Freight** tab, covered below.
 
 ---
 

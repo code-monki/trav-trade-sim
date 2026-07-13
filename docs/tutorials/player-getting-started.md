@@ -1,6 +1,7 @@
 # Player Tutorial: Getting Started
 
 This tutorial covers joining a campaign and learning to navigate the interface.
+
 Before you read this, ask your Referee for the campaign code.
 
 **Related tutorials:**
@@ -60,29 +61,31 @@ The main screen has two areas: a **left sidebar** and a **right detail panel**.
 
 **Right detail panel — top-level tabs**
 
-| Tab      | Shortcut | Content                                               |
-| -------- | -------- | ----------------------------------------------------- |
-| Overview | `O`      | World characteristics: UWP, trade codes, tech level   |
-| Port     | `M`      | Port services (sub-tabs below)                        |
-| Ship     | `C`      | Your ship (sub-tabs below)                            |
-| Events   | `E`      | Market event history for this world                   |
-| Jump     | `J`      | Worlds reachable within your ship's jump range        |
+| Tab      | Shortcut | Content                                             |
+| -------- | -------- | --------------------------------------------------- |
+| Overview | `O`      | World characteristics: UWP, trade codes, tech level |
+| Port     | `M`      | Port services (sub-tabs below)                      |
+| Ship     | `C`      | Your ship (sub-tabs below)                          |
+| Events   | `E`      | Market event history for this world                 |
+| Jump     | `J`      | Worlds reachable within your ship's jump range      |
 
 **Port sub-tabs** (visible when Port is selected)
 
-| Sub-tab    | Content                                                      |
-| ---------- | ------------------------------------------------------------ |
-| Market     | Current buy/sell prices for all trade goods; price chart     |
-| Passengers | Book High, Middle, or Low passage                            |
-| Services   | Purchase fuel; accept mail contracts                         |
+| Sub-tab                | Content                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| Market                 | Current buy/sell prices for all trade goods; price chart |
+| Passengers             | Book High, Middle, or Low passage                        |
+| Mail                   | Accept mail contracts                                    |
+| Services               | Purchase fuel                                            |
+| Freight (MgT2022 only) | Book bulk cargo lots                                     |
 
 **Ship sub-tabs** (visible when Ship is selected)
 
-| Sub-tab   | Content                                      |
-| --------- | -------------------------------------------- |
-| Cargo     | Ship's hold and running trade ledger         |
-| Manifest  | Passengers currently in transit              |
-| Contracts | Mail contracts in transit + pending payment  |
+| Sub-tab   | Content                                     |
+| --------- | ------------------------------------------- |
+| Cargo     | Ship's hold and running trade ledger        |
+| Manifest  | Passengers currently in transit             |
+| Contracts | Mail contracts in transit + pending payment |
 
 Keyboard shortcuts switch tabs when no input field is focused. Press `?` to open Help.
 
@@ -97,7 +100,7 @@ from its **UWP** (Universal World Profile). Key fields for traders:
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Starport    | A/B = full facilities; C/D = limited; E = frontier; X = none. Better starports generally yield better prices and larger quantities available. |
 | Tech Level  | Higher-tech worlds produce and consume different goods.                                                                                       |
-| Trade Codes | Ag, In, Ri, Po, etc. These drive price modifiers per the CT7/T5/MgT2022 tables.                                                                |
+| Trade Codes | Ag, In, Ri, Po, etc. These drive price modifiers per the CT7/T5/MgT2022 tables.                                                               |
 | Travel Zone | Amber = caution; Red = interdicted. The world list highlights these in colour.                                                                |
 
 The UWP badge in the world header is a link to the Traveller Map website for additional

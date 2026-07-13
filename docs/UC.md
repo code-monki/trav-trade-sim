@@ -497,7 +497,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Actor:** Player (accepts); delivery is system-triggered on arrival
 **Related Requirements:** FR-1301, FR-1302, FR-1303, FR-1304, FR-1305, FR-907
-**Trigger:** Player opens Port > Services tab and accepts a mail contract
+**Trigger:** Player opens Port > Mail tab and accepts a mail contract
 
 **Preconditions:**
 - Player's character has `can_trade`
@@ -901,7 +901,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Actor:** Player, Referee
 **Related Requirements:** FR-2006, FR-2007, FR-2008
-**Trigger:** Player opens the Passengers, Freight, or Services (Mail) tab on an MgT2022 campaign
+**Trigger:** Player opens the Passengers, Mail, or Freight tab on an MgT2022 campaign
 
 **Preconditions:**
 - Campaign's `trade_rules` is `MgT2022`
