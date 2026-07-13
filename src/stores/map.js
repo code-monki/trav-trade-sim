@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { MILIEUS, BASE_CODES, TRAVEL_ZONE, FIELD_LABELS } from '../lib/traveller-data.js'
 import { parseSectorRoutes, decodeUWP, parseTabDelimited } from '../lib/traveller-helpers.js'
+import { cacheGetUniverse, cacheSaveUniverse, cacheGetSector, cacheSaveSector } from '../lib/travellermap-cache.js'
 
 const API = 'https://travellermap.com'
 
@@ -19,6 +20,12 @@ export const useMapStore = defineStore('map', () => {
   const error            = ref(null)
   const searchQuery      = ref('')
   const showRaw          = ref(false)
+
+  // Traveller Map is an external dependency with no server-side caching of
+  // its own — these flags let the UI show "using cached data" instead of a
+  // hard error when a cached copy exists but the live refresh failed.
+  const usingCachedData  = ref(false)
+  const cachedAt         = ref(null)
 
   // ── Computed ─────────────────────────────────────────────────────────────────
   const selectedSectorInfo = computed(() =>
@@ -103,14 +110,33 @@ export const useMapStore = defineStore('map', () => {
   })
 
   // ── Actions ──────────────────────────────────────────────────────────────────
+
+  // Traveller Map has no offline fallback of its own, so every load here is
+  // "cache-first, then revalidate": a cached copy (if any) paints instantly
+  // with no blocking spinner, then a live fetch either refreshes it silently
+  // or — if the network/API is down — leaves the cached copy on screen with
+  // a soft notice instead of the hard error banner.
   async function loadSectors() {
-    loading.value = true
-    error.value   = null
+    error.value = null
+
+    let cached = null
+    try {
+      cached = await cacheGetUniverse(selectedMilieu.value)
+    } catch { /* IndexedDB unavailable — proceed network-only */ }
+
+    if (cached?.sectors?.length) {
+      sectors.value          = cached.sectors
+      usingCachedData.value  = true
+      cachedAt.value         = cached.fetchedAt
+    } else {
+      loading.value = true
+    }
+
     try {
       const res = await fetch(`${API}/api/universe?milieu=${selectedMilieu.value}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const data = await res.json()
-      sectors.value = (data.Sectors || [])
+      const parsed = (data.Sectors || [])
         .filter(s => s.Names?.length)
         .map(s => ({
           name:         s.Names[0].Text,
@@ -120,8 +146,16 @@ export const useMapStore = defineStore('map', () => {
           tags: s.Tags || '',
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
+
+      sectors.value         = parsed
+      usingCachedData.value = false
+      cachedAt.value        = null
+      try { await cacheSaveUniverse(selectedMilieu.value, parsed) } catch { /* cache write is best-effort */ }
     } catch (e) {
-      error.value = `Failed to load sectors: ${e.message}`
+      if (!(cached?.sectors?.length)) {
+        error.value = `Failed to load sectors: ${e.message}`
+      }
+      // else: keep showing the cached list; usingCachedData/cachedAt stay set
     } finally {
       loading.value = false
     }
@@ -135,14 +169,31 @@ export const useMapStore = defineStore('map', () => {
     selectedWorld.value = null
     searchQuery.value   = ''
     showRaw.value       = false
+    error.value         = null
 
     if (!selectedSectorName.value) return
 
-    loading.value = true
-    error.value   = null
+    const mil = selectedMilieu.value
+    const sectorName = selectedSectorName.value
+
+    let cached = null
     try {
-      const enc = encodeURIComponent(selectedSectorName.value)
-      const mil = selectedMilieu.value
+      cached = await cacheGetSector(mil, sectorName)
+    } catch { /* IndexedDB unavailable — proceed network-only */ }
+
+    if (cached) {
+      worldHeaders.value     = cached.worldHeaders
+      worlds.value           = cached.worlds
+      sectorRoutes.value     = cached.sectorRoutes
+      subsectorNames.value   = cached.subsectorNames
+      usingCachedData.value  = true
+      cachedAt.value         = cached.fetchedAt
+    } else {
+      loading.value = true
+    }
+
+    try {
+      const enc = encodeURIComponent(sectorName)
       const [worldRes, metaRes] = await Promise.all([
         fetch(`${API}/api/sec?sector=${enc}&type=TabDelimited&milieu=${mil}`),
         fetch(`${API}/api/metadata?sector=${enc}&milieu=${mil}`),
@@ -151,18 +202,18 @@ export const useMapStore = defineStore('map', () => {
       if (!worldRes.ok) throw new Error(`HTTP ${worldRes.status}: ${worldRes.statusText}`)
       const text = await worldRes.text()
       const { headers, worlds: parsed } = parseTabDelimited(text)
-      worldHeaders.value = headers
-      worlds.value       = parsed
 
+      let parsedSubsectorNames = {}
+      let parsedRoutes = []
       if (metaRes.ok) {
         const metaText = await metaRes.text()
         try {
           // API returns JSON; extract subsector names and routes from it
           const meta = JSON.parse(metaText)
-          subsectorNames.value = Object.fromEntries(
+          parsedSubsectorNames = Object.fromEntries(
             (meta.Subsectors || []).map(s => [s.Index, s.Name])
           )
-          sectorRoutes.value = (meta.Routes || []).map(r => ({
+          parsedRoutes = (meta.Routes || []).map(r => ({
             start:        r.Start        || '',
             end:          r.End          || '',
             allegiance:   r.Allegiance   || '',
@@ -176,11 +227,28 @@ export const useMapStore = defineStore('map', () => {
           }))
         } catch {
           // Fallback: try legacy XML format
-          sectorRoutes.value = parseSectorRoutes(metaText)
+          parsedRoutes = parseSectorRoutes(metaText)
         }
       }
+
+      worldHeaders.value    = headers
+      worlds.value          = parsed
+      subsectorNames.value  = parsedSubsectorNames
+      sectorRoutes.value    = parsedRoutes
+      usingCachedData.value = false
+      cachedAt.value        = null
+
+      try {
+        await cacheSaveSector(mil, sectorName, {
+          worldHeaders: headers, worlds: parsed,
+          subsectorNames: parsedSubsectorNames, sectorRoutes: parsedRoutes,
+        })
+      } catch { /* cache write is best-effort */ }
     } catch (e) {
-      error.value = `Failed to load sector data: ${e.message}`
+      if (!cached) {
+        error.value = `Failed to load sector data: ${e.message}`
+      }
+      // else: keep showing the cached sector; usingCachedData/cachedAt stay set
     } finally {
       loading.value = false
     }
@@ -196,6 +264,8 @@ export const useMapStore = defineStore('map', () => {
     selectedWorld.value      = null
     searchQuery.value        = ''
     showRaw.value            = false
+    usingCachedData.value    = false
+    cachedAt.value           = null
     await loadSectors()
   }
 
@@ -211,6 +281,7 @@ export const useMapStore = defineStore('map', () => {
     sectors, selectedMilieu, selectedSectorName,
     worlds, worldHeaders, sectorRoutes, subsectorNames,
     selectedWorld, loading, error, searchQuery, showRaw,
+    usingCachedData, cachedAt,
     // computed
     selectedSectorInfo, filteredWorlds, decodedUWP,
     travelZoneLabel, zoneBadgeClass, decodedBases,

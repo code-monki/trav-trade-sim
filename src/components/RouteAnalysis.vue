@@ -183,6 +183,9 @@ async function selectWorld(w) {
     ship.$patch({ error: result.error })
     return
   }
+  if (result.deliveryError) {
+    ship.$patch({ error: result.deliveryError })
+  }
 
   map.selectWorld(w.worldObj)
   emit('select-world')

@@ -182,11 +182,16 @@ const isCurrentLocation = computed(() =>
 
 async function setLocation() {
   // No fuel cost for manual location set (not a jump)
-  await ship.updateLocation(props.world.Hex, props.sectorName, {
+  const result = await ship.updateLocation(props.world.Hex, props.sectorName, {
     tick:       tick.currentTick,
     campaignId: auth.campaign?.id,
     playerId:   auth.player?.id,
   })
+  if (!result.ok) {
+    ship.$patch({ error: result.error })
+  } else if (result.deliveryError) {
+    ship.$patch({ error: result.deliveryError })
+  }
 }
 
 // Ensure market snapshots are loaded for the selected world (to display sell prices)

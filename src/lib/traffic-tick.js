@@ -8,8 +8,10 @@
  * ever invoked for MgT2022 campaigns — CT7/T5 campaigns never call this.
  *
  * Same deterministic-seeding discipline as market-tick.js: seed key is
- * `${campaignId}:${worldHex}:traffic:${tick}` so every client produces
- * identical availability counts for the same inputs.
+ * `${campaignId}:${worldHex}:traffic:${tick}:v1` so every client produces
+ * identical availability counts for the same inputs. The trailing version
+ * segment lets a future algorithm change bump to :v2 without colliding
+ * with not-yet-generated ticks under the old seed space.
  */
 
 import { makeRng } from './market-tick.js'
@@ -48,7 +50,7 @@ export function generateTrafficSnapshot({ world, sectorName, campaignId, tick })
   const starport    = starportFromUWP(uwp)
   const dm          = populationDM(popDigit) + starportDM(starport)
 
-  const rng = makeRng(`${campaignId}:${world.Hex}:traffic:${tick}`)
+  const rng = makeRng(`${campaignId}:${world.Hex}:traffic:${tick}:v1`)
 
   const highPassages   = trafficCount(twoD6(rng), dm)
   const middlePassages = trafficCount(twoD6(rng), dm)

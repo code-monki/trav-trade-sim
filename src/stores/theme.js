@@ -6,9 +6,17 @@ import { dbGetAllThemes, dbSaveTheme, dbDeleteTheme } from '../lib/theme-db.js'
 
 const LS_KEY = 'tts-theme-id'
 
+function loadThemeId() {
+  try {
+    return localStorage.getItem(LS_KEY) ?? 'dark-imperium'
+  } catch {
+    return 'dark-imperium'
+  }
+}
+
 export const useThemeStore = defineStore('theme', () => {
 
-  const currentId  = ref(localStorage.getItem(LS_KEY) ?? 'dark-imperium')
+  const currentId  = ref(loadThemeId())
   const userThemes = ref([])
   const revision   = ref(0)   // incremented on every applyTheme(); watch this to react to init()
 
@@ -33,7 +41,7 @@ export const useThemeStore = defineStore('theme', () => {
     const theme = allThemes.value.find(t => t.id === id)
     if (!theme) return
     currentId.value = id
-    localStorage.setItem(LS_KEY, id)
+    try { localStorage.setItem(LS_KEY, id) } catch { /* storage-restricted browser — preference stays in-memory only */ }
     applyTheme(theme)
   }
 

@@ -116,21 +116,28 @@ export const useShipStore = defineStore('ship', () => {
       patchBody.fuel_current = available - fuelCost
     }
 
-    const { error: err } = await api.patch(`/api/ships/${ship.value.id}`, patchBody)
-    if (err) return { ok: false, error: err }
+    try {
+      const { error: err } = await api.patch(`/api/ships/${ship.value.id}`, patchBody)
+      if (err) return { ok: false, error: err }
 
-    ship.value = {
-      ...ship.value,
-      current_world:  worldHex,
-      current_sector: sector,
-      ...(patchBody.fuel_current !== undefined ? { fuel_current: patchBody.fuel_current } : {}),
+      ship.value = {
+        ...ship.value,
+        current_world:  worldHex,
+        current_sector: sector,
+        ...(patchBody.fuel_current !== undefined ? { fuel_current: patchBody.fuel_current } : {}),
+      }
+
+      if (tick != null && campaignId && playerId) {
+        const delivery = await autoDeliver(ship.value.id, worldHex, sector, tick, campaignId, playerId)
+        if (delivery.errors.length) {
+          return { ok: true, deliveryError: delivery.errors.join('; ') }
+        }
+      }
+
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message ?? 'Failed to update location' }
     }
-
-    if (tick != null && campaignId && playerId) {
-      await autoDeliver(ship.value.id, worldHex, sector, tick, campaignId, playerId)
-    }
-
-    return { ok: true }
   }
 
   // ── autoDeliver ───────────────────────────────────────────────────────────
@@ -149,13 +156,15 @@ export const useShipStore = defineStore('ship', () => {
       f => f.dest_world_hex === worldHex && f.dest_sector === sector
     )
 
+    const errors = []
     const tasks = []
 
     if (passengerIds.length) {
       tasks.push(
         api.post(`/api/ships/${shipId}/deliver-passengers`, {
           ids: passengerIds, tick, campaign_id: campaignId,
-        }).then(() => {
+        }).then(({ error: err }) => {
+          if (err) { errors.push(`Passenger delivery failed: ${err}`); return }
           passengers.value = passengers.value.filter(p => !passengerIds.includes(p.id))
         })
       )
@@ -166,7 +175,8 @@ export const useShipStore = defineStore('ship', () => {
         api.post(`/api/ships/${shipId}/deliver-mail`, {
           contracts: mailToDeliver, world_hex: worldHex, sector,
           tick, campaign_id: campaignId, player_id: playerId,
-        }).then(({ data }) => {
+        }).then(({ data, error: err }) => {
+          if (err) { errors.push(`Mail delivery failed: ${err}`); return }
           const deliveredIds = mailToDeliver.map(m => m.id)
           mailContracts.value = mailContracts.value.filter(m => !deliveredIds.includes(m.id))
           if (data && ship.value) {
@@ -182,7 +192,8 @@ export const useShipStore = defineStore('ship', () => {
         api.post(`/api/ships/${shipId}/deliver-freight`, {
           lots: freightToDeliver, world_hex: worldHex, sector,
           tick, campaign_id: campaignId, player_id: playerId,
-        }).then(({ data }) => {
+        }).then(({ data, error: err }) => {
+          if (err) { errors.push(`Freight delivery failed: ${err}`); return }
           const deliveredIds = freightToDeliver.map(f => f.id)
           freight.value = freight.value.filter(f => !deliveredIds.includes(f.id))
           // Freight was already credited at booking time; only a late-delivery
@@ -195,6 +206,7 @@ export const useShipStore = defineStore('ship', () => {
     }
 
     await Promise.all(tasks)
+    return { errors }
   }
 
   // ── buyCargo ──────────────────────────────────────────────────────────────

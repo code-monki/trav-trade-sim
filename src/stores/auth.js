@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '../lib/api.js'
+import { api, setUnauthorizedHandler } from '../lib/api.js'
 import { useShipStore } from './ship.js'
+import router from '../router/index.js'
 
 const SESSION_KEY = 'tts_session'
 
@@ -13,11 +14,15 @@ function loadSession() {
 }
 
 function saveSession(campaign, player, token) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ campaign, player, token }))
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ campaign, player, token }))
+  } catch { /* storage-restricted browser — session stays in-memory only for this tab */ }
 }
 
 function clearSession() {
-  localStorage.removeItem(SESSION_KEY)
+  try {
+    localStorage.removeItem(SESSION_KEY)
+  } catch { /* storage-restricted browser — nothing to clear */ }
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -172,6 +177,14 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession()
     useShipStore().clear()
   }
+
+  // A 401 on an authenticated request (expired/invalid session token) logs
+  // out and redirects once, centrally, instead of every store surfacing its
+  // own "Unauthorized" error forever.
+  setUnauthorizedHandler(async () => {
+    await logout()
+    router.push({ name: 'login' })
+  })
 
   return {
     campaign, player, loading, error,

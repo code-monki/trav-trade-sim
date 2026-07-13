@@ -1,23 +1,11 @@
 /**
  * Minimal IndexedDB wrapper for persisting user-defined themes.
- * Database: traveller-trade-sim  v1
- * Store:    user-themes  (keyPath: id)
+ * Database/store definition lives in `./idb.js` (shared across consumers).
  */
 
-const DB_NAME    = 'traveller-trade-sim'
-const DB_VERSION = 1
-const STORE      = 'user-themes'
+import { openDB } from './idb.js'
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = e => {
-      e.target.result.createObjectStore(STORE, { keyPath: 'id' })
-    }
-    req.onsuccess = e => resolve(e.target.result)
-    req.onerror   = e => reject(e.target.error)
-  })
-}
+const STORE = 'user-themes'
 
 export async function dbGetAllThemes() {
   const db = await openDB()

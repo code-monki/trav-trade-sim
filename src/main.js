@@ -28,6 +28,12 @@ app.config.errorHandler = (err, instance, info) => {
   console.error('[vue]', info, err)
 }
 
+// Catches rejected promises nobody awaited/caught — otherwise invisible
+// even with the handlers above, since they only cover Vue-render-tree errors.
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[unhandled rejection]', event.reason)
+})
+
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)

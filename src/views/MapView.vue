@@ -402,6 +402,13 @@
   <HelpDialog      v-model="showHelp"       />
   <CharacterDialog v-model="showCharacter"  />
 
+  <!-- Cached Traveller Map data notice -->
+  <div v-if="map.usingCachedData && !dismissedCacheNotice" class="cache-notice" role="status">
+    Showing cached Traveller Map data{{ cachedAtLabel ? ` from ${cachedAtLabel}` : '' }} — couldn't reach travellermap.com.
+    <span v-if="cacheIsStale"> Traveller Map is updated periodically, so this cached copy may be missing recent additions.</span>
+    <button @click="dismissedCacheNotice = true">✕</button>
+  </div>
+
   <!-- Error banner -->
   <div v-if="map.error || tick.error || ship.error" class="error-banner">
     {{ map.error || tick.error || ship.error }}
@@ -415,6 +422,7 @@ import { useRouter } from 'vue-router'
 import { useMapStore }  from '../stores/map.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
+import { isStale }      from '../lib/travellermap-cache.js'
 import MarketTable      from '../components/MarketTable.vue'
 import PriceChart       from '../components/PriceChart.vue'
 import EventsHistory    from '../components/EventsHistory.vue'
@@ -459,6 +467,14 @@ const showTutorials  = ref(false)
 const showCharacter  = ref(false)
 const showBuyDialog  = ref(false)
 const buyLoading     = ref(false)
+
+// ── Traveller Map cache notice ────────────────────────────────────────────────
+const dismissedCacheNotice = ref(false)
+const cachedAtLabel = computed(() =>
+  map.cachedAt ? new Date(map.cachedAt).toLocaleString() : ''
+)
+const cacheIsStale = computed(() => isStale(map.cachedAt))
+watch(() => map.usingCachedData, (using) => { if (using) dismissedCacheNotice.value = false })
 
 const TOP_TABS = [
   { key: 'overview', label: 'Overview' },

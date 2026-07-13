@@ -110,12 +110,14 @@ export const useTickStore = defineStore('tick', () => {
     if (!ev) return null
 
     // Check for an existing event at the same (campaign, tick, world_hex) first
-    const { data: dupCheck } = await api.post(`/api/campaigns/${campaignId}/events`, {
+    const { data: dupCheck, error: dupErr } = await api.post(`/api/campaigns/${campaignId}/events`, {
       ...ev, check_duplicate: true,
     })
+    if (dupErr) throw new Error(dupErr)
     if (dupCheck?.count > 0) return ev
 
-    const { data: inserted } = await api.post(`/api/campaigns/${campaignId}/events`, ev)
+    const { data: inserted, error: insErr } = await api.post(`/api/campaigns/${campaignId}/events`, ev)
+    if (insErr) throw new Error(insErr)
     return inserted ?? ev
   }
 
@@ -190,10 +192,12 @@ export const useTickStore = defineStore('tick', () => {
           }
 
           if (backfillRows.length) {
-            await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows: backfillRows })
+            const { error: backfillErr } = await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows: backfillRows })
+            if (backfillErr) throw new Error(backfillErr)
           }
           for (const t of boundariesToRepair) {
-            await api.post(`/api/campaigns/${campaignId}/rollup-repair`, { tick: t })
+            const { error: repairErr } = await api.post(`/api/campaigns/${campaignId}/rollup-repair`, { tick: t })
+            if (repairErr) throw new Error(repairErr)
           }
         }
 

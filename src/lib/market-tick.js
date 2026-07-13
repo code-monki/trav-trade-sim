@@ -138,7 +138,7 @@ function generateCT7Snapshot({ world, sectorName, campaignId, tick, activeEvents
 
   const rows = []
   for (const good of CT2_TRADE_GOODS) {
-    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}`)
+    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}:v1`)
 
     const purchaseDM = sumCT2DMs(good.purchaseDMs, codes)
     const saleDM     = sumCT2DMs(good.resaleDMs,   codes)
@@ -187,7 +187,7 @@ function generateT5Snapshot({ world, sectorName, campaignId, tick, activeEvents 
 
   const rows = []
   for (const good of CT2_TRADE_GOODS) {
-    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}`)
+    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}:v1`)
 
     const purchaseDM = sumCT2DMs(good.purchaseDMs, codes)
     const saleDM     = sumCT2DMs(good.resaleDMs,   codes)
@@ -238,7 +238,7 @@ function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEv
 
   const rows = []
   for (const good of MGT2022_TRADE_GOODS) {
-    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}`)
+    const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}:v1`)
 
     const purchaseDM = sumTradeCodeDMs(good.purchaseDMs, codes)
     const saleDM     = sumTradeCodeDMs(good.saleDMs,     codes)
