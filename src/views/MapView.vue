@@ -1,19 +1,25 @@
 <template>
   <header>
     <div class="header-left">
-      <h1>Traveller Trade Simulator</h1>
+      <h1 class="app-title">
+        <span class="title-full">Traveller Trade Simulator</span>
+        <span class="title-short" aria-hidden="true">TTS</span>
+      </h1>
       <span class="campaign-label">{{ auth.campaign?.label }}</span>
     </div>
     <div class="header-center">
       <div class="imperial-date">
         <span class="date-value">{{ tick.imperialDate }}</span>
-        <span class="date-sub">Tick {{ tick.currentTick }} · {{ auth.campaign?.trade_rules }}</span>
+        <span class="date-sub">Tick {{ tick.currentTick }}<span class="date-rules"> · {{ auth.campaign?.trade_rules }}</span></span>
       </div>
       <button v-if="auth.isReferee"
               class="advance-btn"
               :disabled="tick.loading"
               @click="doAdvanceTick">
-        {{ tick.loading ? 'Advancing…' : 'Advance Tick ›' }}
+        <template v-if="tick.loading">Advancing…</template>
+        <template v-else>
+          <span class="advance-full">Advance Tick ›</span><span class="advance-short" aria-hidden="true">Advance ›</span>
+        </template>
       </button>
     </div>
     <div class="header-right">
@@ -42,7 +48,29 @@
           @manage-character="showCharacter = true"
           @manage-campaign="router.push({ name: 'referee' })"
           @signout="doLogout"
-        />
+        >
+          <!-- On narrow screens the header hides the milieu picker and session
+               readout; the menu carries them instead so nothing overflows. -->
+          <template #mobile-extras>
+            <div class="hm-session">
+              <span class="hm-session-char">{{ auth.player?.character_name }}</span>
+              <span class="hm-session-campaign">{{ auth.campaign?.code }}</span>
+              <span v-if="auth.isReferee" class="hm-role-badge">REF</span>
+            </div>
+            <div class="hm-milieu">
+              <label for="milieu-select-mobile">Milieu</label>
+              <select
+                id="milieu-select-mobile"
+                class="milieu-select"
+                v-model="map.selectedMilieu"
+                @change="map.onMilieuChange"
+                :disabled="map.loading"
+              >
+                <option v-for="m in map.MILIEUS" :key="m.code" :value="m.code">{{ m.label }}</option>
+              </select>
+            </div>
+          </template>
+        </HamburgerMenu>
       </div>
     </div>
   </header>
@@ -836,6 +864,115 @@ header {
   padding: 1px 5px;
   border-radius: 4px;
   letter-spacing: 0.06em;
+}
+
+/* Narrow-screen swaps: the short title and short advance label only appear
+   inside the responsive block below. */
+.title-short   { display: none; }
+.advance-short { display: none; }
+
+/* ── Menu-carried session/milieu controls (visible on narrow screens only;
+      HamburgerMenu hides its extras section on desktop) ─────────────────────── */
+.hm-session {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.hm-session-char     { color: var(--text); font-weight: 500; }
+.hm-session-campaign { color: var(--text-dim); font-family: monospace; }
+
+.hm-role-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+
+.hm-milieu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.2rem 1rem 0.6rem;
+}
+
+.hm-milieu label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hm-milieu .milieu-select {
+  min-width: 0;
+  width: 100%;
+}
+
+/* ── Responsive: compact single-row header on narrow screens ───────────────── */
+@media (max-width: 640px) {
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  /* Abbreviate the title visually but keep the full name for screen readers. */
+  .title-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .title-short { display: inline; }
+
+  .header-left {
+    flex: 1;
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .campaign-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-center {
+    flex-shrink: 0;
+    gap: 0.6rem;
+  }
+
+  /* Date and tick collapse onto one line; the trade-rules tag is dropped. */
+  .imperial-date {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+  .date-value { font-size: 0.78rem; }
+  .date-rules { display: none; }
+
+  .advance-btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.72rem;
+  }
+  .advance-full  { display: none; }
+  .advance-short { display: inline; }
+
+  .header-right { gap: 0; }
+
+  /* Milieu picker and session readout move into the hamburger menu. */
+  .milieu-control  { display: none; }
+  .session-char,
+  .session-campaign,
+  .role-badge { display: none; }
 }
 
 

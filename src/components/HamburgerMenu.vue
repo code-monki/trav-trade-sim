@@ -8,6 +8,10 @@
     </button>
 
     <div v-if="isOpen" class="hm-dropdown" role="menu">
+      <div v-if="$slots['mobile-extras']" class="hm-mobile-extras">
+        <slot name="mobile-extras" />
+        <div class="hm-divider" role="separator" />
+      </div>
       <button class="hm-item" role="menuitem" @click="select('themes')">Themes</button>
       <button class="hm-item" role="menuitem" @click="select('about')">About</button>
       <button class="hm-item" role="menuitem" @click="select('tutorials')">Tutorials</button>
@@ -124,5 +128,13 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
   height: 1px;
   background: var(--border);
   margin: 0.3rem 0;
+}
+
+/* Controls the header hands off to the menu on narrow screens. Desktop keeps
+   them in the header, so the handed-off copies stay hidden there. */
+.hm-mobile-extras { display: none; }
+
+@media (max-width: 640px) {
+  .hm-mobile-extras { display: block; }
 }
 </style>

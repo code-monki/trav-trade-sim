@@ -11,14 +11,19 @@ function makeRouter() {
   })
 }
 
-function mountMap(mapState = {}, shipState = {}) {
+function mountMap(mapState = {}, shipState = {}, { authState = {}, stubs = {} } = {}) {
   return mount(MapView, {
     shallow: true,
     global: {
+      stubs,
       plugins: [
         createTestingPinia({
           initialState: {
-            auth: { campaign: { label: 'Test Campaign', trade_rules: 'CT7' }, player: {} },
+            auth: {
+              campaign: { label: 'Test Campaign', trade_rules: 'CT7' },
+              player: {},
+              ...authState,
+            },
             tick: { currentTick: 1 },
             map: {
               sectors: [], worlds: [], selectedWorld: null,
@@ -112,6 +117,55 @@ describe('MapView — pending delivery indicator', () => {
     const badge = wrapper.find('.delivery-badge')
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('3 pending deliveries here')
+  })
+})
+
+describe('MapView — decluttered header (mobile)', () => {
+  // Renders the mobile-extras slot so the menu-carried controls are testable
+  // even under shallow mounting.
+  const menuStub = {
+    HamburgerMenu: { template: '<div class="hm-stub"><slot name="mobile-extras" /></div>' },
+  }
+
+  it('renders the full title plus a short variant for narrow screens', () => {
+    const wrapper = mountMap()
+    expect(wrapper.find('.app-title .title-full').text()).toBe('Traveller Trade Simulator')
+    expect(wrapper.find('.app-title .title-short').text()).toBe('TTS')
+  })
+
+  it('splits the tick readout so the trade-rules tag can drop on narrow screens', () => {
+    const wrapper = mountMap()
+    expect(wrapper.find('.date-sub').text()).toContain('Tick 1')
+    expect(wrapper.find('.date-rules').text()).toContain('CT7')
+  })
+
+  it('gives referees both wide and narrow advance-button labels', () => {
+    const wrapper = mountMap({}, {}, { authState: { player: { role: 'referee' } } })
+    const btn = wrapper.find('.advance-btn')
+    expect(btn.exists()).toBe(true)
+    expect(btn.find('.advance-full').text()).toBe('Advance Tick ›')
+    expect(btn.find('.advance-short').text()).toBe('Advance ›')
+  })
+
+  it('keeps the milieu select in the header and mirrors it into the menu', () => {
+    const wrapper = mountMap({}, {}, { stubs: menuStub })
+    expect(wrapper.find('#milieu-select').exists()).toBe(true)
+    expect(wrapper.find('.hm-stub #milieu-select-mobile').exists()).toBe(true)
+  })
+
+  it('hands the session readout to the menu', () => {
+    const wrapper = mountMap({}, {}, {
+      stubs: menuStub,
+      authState: {
+        player: { character_name: 'Zho Baraki', role: 'referee' },
+        campaign: { label: 'Test Campaign', trade_rules: 'CT7', code: 'ABC123' },
+      },
+    })
+    const session = wrapper.find('.hm-stub .hm-session')
+    expect(session.exists()).toBe(true)
+    expect(session.text()).toContain('Zho Baraki')
+    expect(session.text()).toContain('ABC123')
+    expect(session.find('.hm-role-badge').exists()).toBe(true)
   })
 })
 
