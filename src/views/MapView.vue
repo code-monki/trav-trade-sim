@@ -272,19 +272,23 @@
 
         <!-- ── Port: Market tab ──────────────────────────────────────────── -->
         <template v-if="topTab === 'port' && portTab === 'market'">
-          <div class="market-layout" ref="marketLayoutEl">
+          <div class="market-layout" ref="marketLayoutEl"
+               :style="isNarrow && chartSheetOpen ? { paddingBottom: sheetInset + 'px' } : {}">
             <MarketTable
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
               :charted-dies="[...chartedGoods]"
               :show-buy-button="ship.hasShip && ship.canTrade"
+              :mobile="isNarrow"
               @select-good="onGoodSelect"
               @toggle-chart="onToggleChart"
               @buy-good="onBuyGoodDirect"
+              @view-chart="chartSheetOpen = true"
+              @clear-chart="clearChartedGoods"
             />
 
-            <!-- Chart: shown when any goods are checked -->
-            <template v-if="chartedGoods.size > 0">
+            <!-- Desktop: inline resizable split below the table -->
+            <template v-if="!isNarrow && chartedGoods.size > 0">
               <div class="resize-handle"
                    role="separator" tabindex="0"
                    aria-label="Resize chart panel — use arrow keys"
@@ -302,6 +306,25 @@
               />
             </template>
           </div>
+
+          <!-- Mobile: chart rides in a detented bottom sheet so the table
+               keeps the screen; dismissing keeps the plotted selection -->
+          <ChartSheet
+            v-if="isNarrow && chartSheetOpen && chartedGoods.size > 0"
+            @dismiss="chartSheetOpen = false"
+            @inset-change="sheetInset = $event"
+          >
+            <template #default="{ paused }">
+              <PriceChart
+                :world-hex="map.selectedWorld.Hex"
+                :sector-name="map.selectedSectorName"
+                :goods="chartedGoodsArray"
+                :paused="paused"
+                :sheet-mode="true"
+                style="height: 100%"
+              />
+            </template>
+          </ChartSheet>
 
           <BuyDialog
             v-if="selectedGood"
@@ -439,6 +462,7 @@ import { useTickStore } from '../stores/tick.js'
 import { isStale }      from '../lib/travellermap-cache.js'
 import MarketTable      from '../components/MarketTable.vue'
 import PriceChart       from '../components/PriceChart.vue'
+import ChartSheet       from '../components/ChartSheet.vue'
 import EventsHistory    from '../components/EventsHistory.vue'
 import CargoHold        from '../components/CargoHold.vue'
 import BuyDialog        from '../components/BuyDialog.vue'
@@ -476,6 +500,31 @@ const shipTab      = ref('cargo')
 const selectedGood   = ref(null)
 const chartedGoods   = ref(new Set())
 const buyLoading     = ref(false)
+
+// ── Narrow-viewport (mobile) detection ───────────────────────────────────────
+// ≤640px the chart moves from the inline split into a bottom sheet and the
+// market table switches to contextual Compare selection.
+const NARROW_VIEWPORT_QUERY = '(max-width: 640px)'
+const narrowMq = typeof window.matchMedia === 'function'
+  ? window.matchMedia(NARROW_VIEWPORT_QUERY)
+  : null
+const isNarrow = ref(narrowMq?.matches ?? false)
+function onNarrowChange(e) { isNarrow.value = e.matches }
+narrowMq?.addEventListener('change', onNarrowChange)
+
+const chartSheetOpen = ref(false)
+const sheetInset     = ref(0)   // visible sheet height, so the table can pad past it
+
+function clearChartedGoods() {
+  chartedGoods.value  = new Set()
+  chartSheetOpen.value = false
+}
+
+// Un-plotting the last good (e.g. one by one in compare mode) closes the
+// sheet for good — it shouldn't spring back on the next selection.
+watch(() => chartedGoods.value.size, (n) => {
+  if (n === 0) chartSheetOpen.value = false
+})
 
 // ── Dialog visibility ────────────────────────────────────────────────────────
 // Single source of truth so at most one dialog is ever open at a time (rather
@@ -635,6 +684,7 @@ onUnmounted(() => {
   document.removeEventListener('touchmove', doResizeTouch)
   document.removeEventListener('touchend',  stopResizeTouch)
   document.removeEventListener('keydown',  handleGlobalKey)
+  narrowMq?.removeEventListener('change', onNarrowChange)
 })
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
@@ -686,6 +736,7 @@ const stopShipNav = watch(() => ship.ship, async (s) => {
 watch(() => map.selectedWorld, (world) => {
   selectedGood.value  = null
   chartedGoods.value  = new Set()
+  chartSheetOpen.value = false
   if (world) tick.loadWorldEventHistory(world.Hex, map.selectedSectorName)
 })
 

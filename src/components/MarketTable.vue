@@ -25,13 +25,22 @@
         <input v-model="filter" type="search" placeholder="Filter goods…" class="market-search"
                aria-label="Filter trade goods" />
         <span class="row-count">{{ filteredRows.length }} / {{ rows.length }} goods</span>
+        <button v-if="mobile" class="compare-btn"
+                :class="{ active: compareMode }"
+                :aria-pressed="compareMode"
+                @click="toggleCompareMode">
+          Compare
+        </button>
       </div>
 
       <div class="table-scroll">
         <table class="market-table">
           <thead>
             <tr>
-              <th class="chart-col">Plot</th>
+              <th v-if="!mobile" class="chart-col">Plot</th>
+              <th v-else-if="compareMode" class="chart-col compare-col">
+                <span class="sr-only">Plotted</span>
+              </th>
               <th @click="setSort('trade_good_name')" @keydown.enter.space.prevent="setSort('trade_good_name')"
                   class="sortable" tabindex="0" :aria-sort="ariaSort('trade_good_name')">
                 Good {{ sortIcon('trade_good_name') }}
@@ -61,19 +70,34 @@
           </thead>
           <tbody>
             <tr v-for="row in filteredRows" :key="row.trade_good_die"
-                :class="['market-row', { 'row-selected': selectedDie === row.trade_good_die, 'row-event': row.hasEvent }]"
+                :class="['market-row', {
+                  'row-selected': !inCompare && selectedDie === row.trade_good_die,
+                  'row-charted':  inCompare && isCharted(row),
+                  'row-event':    row.hasEvent,
+                }]"
                 tabindex="0" role="button"
-                :aria-pressed="selectedDie === row.trade_good_die"
-                :aria-label="`Select ${row.trade_good_name} for purchase`"
-                @click="selectRow(row)"
-                @keydown.enter.space.prevent="selectRow(row)">
-              <td class="chart-col" @click.stop>
+                :aria-pressed="inCompare ? isCharted(row) : selectedDie === row.trade_good_die"
+                :aria-label="inCompare
+                  ? `Plot ${row.trade_good_name} on the price chart`
+                  : `Select ${row.trade_good_name} for purchase`"
+                @click="activateRow(row)"
+                @keydown.enter.space.prevent="activateRow(row)"
+                @keydown="rowNavKeys"
+                @touchstart="rowTouchStart(row)"
+                @touchmove="rowTouchCancel"
+                @touchend="rowTouchCancel">
+              <td v-if="!mobile" class="chart-col" @click.stop>
                 <input type="checkbox"
-                       :checked="chartedDies.includes(row.trade_good_die)"
+                       :checked="isCharted(row)"
                        class="chart-check"
                        :aria-label="`Plot ${row.trade_good_name} on the price chart`"
                        @change="$emit('toggle-chart', row.trade_good_die)"
                        @keydown.stop />
+              </td>
+              <td v-else-if="compareMode" class="chart-col compare-col">
+                <span class="compare-mark" :class="{ on: isCharted(row) }" aria-hidden="true">
+                  {{ isCharted(row) ? '✓' : '' }}
+                </span>
               </td>
               <td class="good-name">{{ row.trade_good_name }}</td>
               <td class="ctr mono">{{ row.trade_good_die }}</td>
@@ -102,6 +126,24 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile compare toolbar: selection count + chart access -->
+      <div v-if="mobile && (compareMode || chartedDies.length > 0)" class="compare-toolbar">
+        <span class="compare-count" aria-live="polite">
+          {{ chartedDies.length }} plotted
+        </span>
+        <button v-if="chartedDies.length" class="toolbar-btn" @click="$emit('clear-chart')">
+          Clear
+        </button>
+        <button class="toolbar-btn primary"
+                :disabled="!chartedDies.length"
+                @click="$emit('view-chart')">
+          View chart
+        </button>
+        <button v-if="compareMode" class="toolbar-btn" @click="compareMode = false">
+          Done
+        </button>
+      </div>
     </template>
   </div>
 </template>
@@ -116,15 +158,29 @@ const props = defineProps({
   sectorName:    { type: String,  required: true },
   chartedDies:   { type: Array,   default: () => [] },
   showBuyButton: { type: Boolean, default: false },
+  // Narrow-viewport mode: the permanent Plot checkbox column is replaced by a
+  // contextual Compare mode (header toggle or long-press) with a toolbar.
+  mobile:        { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select-good', 'toggle-chart', 'buy-good'])
+const emit = defineEmits(['select-good', 'toggle-chart', 'buy-good', 'view-chart', 'clear-chart'])
 
 const tick        = useTickStore()
 const filter      = ref('')
 const sortKey     = ref('trade_good_die')
 const sortAsc     = ref(true)
 const selectedDie = ref(null)
+const compareMode = ref(false)
+
+const inCompare = computed(() => props.mobile && compareMode.value)
+
+function isCharted(row) { return props.chartedDies.includes(row.trade_good_die) }
+
+function toggleCompareMode() { compareMode.value = !compareMode.value }
+
+// Leaving mobile (rotation / resize to desktop) exits compare mode — the
+// checkbox column takes over again.
+watch(() => props.mobile, (m) => { if (!m) compareMode.value = false })
 
 // Lookup map: goodDie → goodName
 const goodNameMap = Object.fromEntries(CT2_TRADE_GOODS.map(g => [g.die, g.name]))
@@ -190,10 +246,46 @@ const filteredRows = computed(() => {
   })
 })
 
-// ── Row selection (for buying) ────────────────────────────────────────────────
+// ── Row activation ────────────────────────────────────────────────────────────
+// Normal mode: select the good for purchase. Compare mode (mobile): the whole
+// row is a tap target that toggles the good on the price chart.
+function activateRow(row) {
+  if (longPressFired) { longPressFired = false; return }
+  if (inCompare.value) { emit('toggle-chart', row.trade_good_die); return }
+  selectRow(row)
+}
+
 function selectRow(row) {
   selectedDie.value = row.trade_good_die
   emit('select-good', row)
+}
+
+// Long-press on a row (mobile, outside compare mode) enters compare mode and
+// plots that row's good.
+let longPressTimer = null
+let longPressFired = false
+
+function rowTouchStart(row) {
+  longPressFired = false
+  if (!props.mobile || compareMode.value) return
+  clearTimeout(longPressTimer)
+  longPressTimer = setTimeout(() => {
+    longPressFired    = true
+    compareMode.value = true
+    emit('toggle-chart', row.trade_good_die)
+  }, 500)
+}
+
+function rowTouchCancel() { clearTimeout(longPressTimer) }
+
+// Arrow keys move focus between rows (keyboard parity with the tap targets).
+function rowNavKeys(e) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+  e.preventDefault()
+  const sibling = e.key === 'ArrowDown'
+    ? e.currentTarget.nextElementSibling
+    : e.currentTarget.previousElementSibling
+  sibling?.focus()
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
@@ -401,4 +493,94 @@ function priceInfo(price, base) {
 
 .buy-row-btn:hover:not(:disabled) { background: var(--accent); }
 .buy-row-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Mobile compare mode ────────────────────────────────────────────────────── */
+.compare-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.7rem;
+  min-height: 2rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.1s;
+}
+
+.compare-btn.active {
+  background: var(--bg-selected);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.compare-col { width: 2rem; }
+
+.compare-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--accent-text);
+  margin: 0 auto;
+}
+
+.compare-mark.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.row-charted { background: var(--bg-selected); }
+
+.compare-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0.4rem 0.2rem;
+}
+
+.compare-count {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 0.5rem 0.9rem;
+  min-height: 44px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.toolbar-btn.primary {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.toolbar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Bigger row tap targets while selecting on a touch screen */
+@media (max-width: 640px) {
+  .market-table td { padding: 0.65rem 0.75rem; }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 </style>

@@ -18,7 +18,7 @@ const SNAPS = {
   '13': snap('13', 'Liquor',   10000,  8000,  5),
 }
 
-function mountTable(snapshots = SNAPS, loading = false) {
+function mountTable(snapshots = SNAPS, loading = false, props = {}, mountOpts = {}) {
   const pinia = createTestingPinia({
     initialState: {
       tick: {
@@ -38,8 +38,9 @@ function mountTable(snapshots = SNAPS, loading = false) {
   tickStore.eventsForWorld.mockReturnValue([])
 
   return mount(MarketTable, {
-    props: { world: WORLD, sectorName: SECTOR },
+    props: { world: WORLD, sectorName: SECTOR, ...props },
     global: { plugins: [pinia] },
+    ...mountOpts,
   })
 }
 
@@ -123,6 +124,91 @@ describe('MarketTable — filter', () => {
     await wrapper.find('.market-search').setValue('tex')
     await wrapper.find('.market-search').setValue('')
     expect(wrapper.findAll('.market-row')).toHaveLength(3)
+  })
+})
+
+describe('MarketTable — desktop Plot column', () => {
+  it('shows the Plot checkbox column by default', () => {
+    const wrapper = mountTable()
+    expect(wrapper.find('.chart-check').exists()).toBe(true)
+    expect(wrapper.find('.compare-btn').exists()).toBe(false)
+    expect(wrapper.find('.compare-toolbar').exists()).toBe(false)
+  })
+
+  it('emits toggle-chart when a Plot checkbox is changed', async () => {
+    const wrapper = mountTable()
+    await wrapper.find('.chart-check').setValue(true)
+    expect(wrapper.emitted()['toggle-chart'][0]).toEqual(['11'])
+  })
+})
+
+describe('MarketTable — mobile compare mode', () => {
+  it('hides the Plot checkbox column and shows the Compare toggle', () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true })
+    expect(wrapper.find('.chart-check').exists()).toBe(false)
+    expect(wrapper.find('.compare-btn').exists()).toBe(true)
+  })
+
+  it('row clicks still select for purchase while compare mode is off', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true })
+    await wrapper.find('.market-row').trigger('click')
+    expect(wrapper.emitted()['select-good']).toBeTruthy()
+    expect(wrapper.emitted()['toggle-chart']).toBeFalsy()
+  })
+
+  it('in compare mode, row clicks toggle the chart instead of selecting', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true })
+    await wrapper.find('.compare-btn').trigger('click')
+    await wrapper.find('.market-row').trigger('click')
+    expect(wrapper.emitted()['toggle-chart'][0]).toEqual(['11'])
+    expect(wrapper.emitted()['select-good']).toBeFalsy()
+  })
+
+  it('compare mode marks charted rows with a visible checkmark and aria-pressed', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true, chartedDies: ['11'] })
+    await wrapper.find('.compare-btn').trigger('click')
+    const row = wrapper.find('.market-row')
+    expect(row.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('.compare-mark.on').exists()).toBe(true)
+  })
+
+  it('toolbar appears with plotted count and emits view-chart / clear-chart', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true, chartedDies: ['11', '12'] })
+    const toolbar = wrapper.find('.compare-toolbar')
+    expect(toolbar.exists()).toBe(true)
+    expect(toolbar.text()).toContain('2 plotted')
+
+    await toolbar.find('.toolbar-btn.primary').trigger('click')
+    expect(wrapper.emitted()['view-chart']).toBeTruthy()
+
+    const clearBtn = toolbar.findAll('.toolbar-btn').find(b => b.text() === 'Clear')
+    await clearBtn.trigger('click')
+    expect(wrapper.emitted()['clear-chart']).toBeTruthy()
+  })
+
+  it('toolbar is hidden when nothing is plotted and compare mode is off', () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true })
+    expect(wrapper.find('.compare-toolbar').exists()).toBe(false)
+  })
+
+  it('Done exits compare mode', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true })
+    await wrapper.find('.compare-btn').trigger('click')
+    const done = wrapper.findAll('.toolbar-btn').find(b => b.text() === 'Done')
+    await done.trigger('click')
+    expect(wrapper.find('.compare-mark').exists()).toBe(false)
+    // rows are back to purchase selection
+    await wrapper.find('.market-row').trigger('click')
+    expect(wrapper.emitted()['select-good']).toBeTruthy()
+  })
+
+  it('ArrowDown moves focus to the next row', async () => {
+    const wrapper = mountTable(SNAPS, false, { mobile: true }, { attachTo: document.body })
+    const rows = wrapper.findAll('.market-row')
+    rows[0].element.focus()
+    await rows[0].trigger('keydown', { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(rows[1].element)
+    wrapper.unmount()
   })
 })
 
