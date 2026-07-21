@@ -72,6 +72,36 @@ test.describe('Login page — static rendering', () => {
   })
 })
 
+// ── Randomizable campaign defaults (no Supabase required) ─────────────────────
+
+test.describe('New Campaign — randomizable defaults', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+    await page.locator('.tab', { hasText: 'New Campaign' }).click()
+  })
+
+  test('form comes pre-filled with a generated name, code, and character', async ({ page }) => {
+    await expect(page.locator('input[placeholder*="Spinward Marches"]')).not.toHaveValue('')
+    await expect(page.locator('input[placeholder*="Referee"]')).not.toHaveValue('')
+    await expect(page.locator('input[placeholder*="SPINWARD"]')).toHaveValue(/^[A-Z-]+-\d{1,2}$/)
+  })
+
+  test('🎲 Randomize fills the form but leaves the PIN fields empty', async ({ page }) => {
+    await page.locator('.randomize-btn').click()
+
+    await expect(page.locator('input[placeholder*="Spinward Marches"]')).not.toHaveValue('')
+    await expect(page.locator('input[placeholder*="SPINWARD"]')).toHaveValue(/^[A-Z-]+-\d{1,2}$/)
+
+    const day = Number(await page.locator('input[type="number"][min="1"][max="365"]').inputValue())
+    expect(day).toBeGreaterThanOrEqual(1)
+    expect(day).toBeLessThanOrEqual(365)
+
+    const pins = page.locator('input[type="password"]')
+    await expect(pins.nth(0)).toHaveValue('')
+    await expect(pins.nth(1)).toHaveValue('')
+  })
+})
+
 // ── Form validation tests (no Supabase required) ──────────────────────────────
 
 test.describe('Login page — client-side validation', () => {
