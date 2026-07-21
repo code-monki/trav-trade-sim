@@ -510,7 +510,7 @@ const narrowMq = typeof window.matchMedia === 'function'
   : null
 const isNarrow = ref(narrowMq?.matches ?? false)
 function onNarrowChange(e) { isNarrow.value = e.matches }
-narrowMq?.addEventListener('change', onNarrowChange)
+narrowMq?.addEventListener?.('change', onNarrowChange)
 
 const chartSheetOpen = ref(false)
 const sheetInset     = ref(0)   // visible sheet height, so the table can pad past it
@@ -684,7 +684,7 @@ onUnmounted(() => {
   document.removeEventListener('touchmove', doResizeTouch)
   document.removeEventListener('touchend',  stopResizeTouch)
   document.removeEventListener('keydown',  handleGlobalKey)
-  narrowMq?.removeEventListener('change', onNarrowChange)
+  narrowMq?.removeEventListener?.('change', onNarrowChange)
 })
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
