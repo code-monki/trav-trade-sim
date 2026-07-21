@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -141,5 +141,64 @@ describe('MapView — dialog mutual exclusion', () => {
     expect(wrapper.vm.showTutorials).toBe(false)
     expect(wrapper.vm.showCharacter).toBe(false)
     expect(wrapper.vm.showBuyDialog).toBe(false)
+  })
+})
+
+describe('MapView — collapsible sidebar (mobile)', () => {
+  const realMatchMedia = window.matchMedia
+
+  afterEach(() => { window.matchMedia = realMatchMedia })
+
+  function setViewport({ narrow }) {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: narrow })
+  }
+
+  it('starts expanded on wide viewports', () => {
+    setViewport({ narrow: false })
+    const wrapper = mountMap()
+    expect(wrapper.find('.sidebar').classes()).not.toContain('collapsed')
+    expect(wrapper.find('.sidebar-toggle').attributes('aria-expanded')).toBe('true')
+  })
+
+  it('starts collapsed on narrow viewports', () => {
+    setViewport({ narrow: true })
+    const wrapper = mountMap()
+    expect(wrapper.find('.sidebar').classes()).toContain('collapsed')
+    expect(wrapper.find('.sidebar-toggle').attributes('aria-expanded')).toBe('false')
+  })
+
+  it('toggle button expands and re-collapses the sidebar', async () => {
+    setViewport({ narrow: true })
+    const wrapper = mountMap()
+
+    await wrapper.find('.sidebar-toggle').trigger('click')
+    expect(wrapper.find('.sidebar').classes()).not.toContain('collapsed')
+    expect(wrapper.find('.sidebar-toggle').attributes('aria-expanded')).toBe('true')
+
+    await wrapper.find('.sidebar-toggle').trigger('click')
+    expect(wrapper.find('.sidebar').classes()).toContain('collapsed')
+  })
+
+  it('selecting a world on a narrow viewport collapses the sidebar', async () => {
+    setViewport({ narrow: true })
+    const wrapper = mountMap({
+      selectedSectorName: 'Spinward Marches',
+      worlds: [{ Hex: '0101', Name: 'Testworld' }],
+    })
+
+    await wrapper.find('.sidebar-toggle').trigger('click')
+    await wrapper.find('.world-list li').trigger('click')
+    expect(wrapper.find('.sidebar').classes()).toContain('collapsed')
+  })
+
+  it('selecting a world on a wide viewport leaves the sidebar expanded', async () => {
+    setViewport({ narrow: false })
+    const wrapper = mountMap({
+      selectedSectorName: 'Spinward Marches',
+      worlds: [{ Hex: '0101', Name: 'Testworld' }],
+    })
+
+    await wrapper.find('.world-list li').trigger('click')
+    expect(wrapper.find('.sidebar').classes()).not.toContain('collapsed')
   })
 })

@@ -48,8 +48,19 @@
   </header>
 
   <div class="layout">
+    <!-- Mobile-only toggle for the sector/world sidebar (hidden on desktop via CSS) -->
+    <button
+      class="sidebar-toggle"
+      :aria-expanded="sidebarOpen"
+      aria-controls="map-sidebar"
+      @click="sidebarOpen = !sidebarOpen"
+    >
+      <span aria-hidden="true">{{ sidebarOpen ? '▾' : '▸' }}</span>
+      Sectors &amp; Worlds
+    </button>
+
     <!-- Left sidebar -->
-    <aside class="sidebar">
+    <aside id="map-sidebar" class="sidebar" :class="{ collapsed: !sidebarOpen }">
       <section class="panel">
         <h2>Sector</h2>
         <div v-if="map.loading && !map.sectors.length" class="loading">Loading sectors…</div>
@@ -464,6 +475,16 @@ const tick   = useTickStore()
 const ship   = useShipStore()
 const router = useRouter()
 
+// The sidebar is always visible on desktop (the toggle only renders at narrow
+// widths, and `.collapsed` only takes effect there). On mobile it starts
+// collapsed so the world detail gets the screen.
+const NARROW_VIEWPORT_QUERY = '(max-width: 640px)'
+function isNarrowViewport() {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia(NARROW_VIEWPORT_QUERY).matches
+}
+const sidebarOpen = ref(!isNarrowViewport())
+
 const sectorFilter   = ref('')
 const filteredSectors = computed(() => {
   const q = sectorFilter.value.trim().toLowerCase()
@@ -691,6 +712,10 @@ watch(() => map.selectedWorld, (world) => {
 
 function onWorldSelect(world) {
   map.selectWorld(world)
+  // On mobile the sidebar covers the detail area, so picking a world implies
+  // "show me that world" — collapse to reveal it. Checked live (not the value
+  // cached at mount) so rotations/resizes are respected.
+  if (isNarrowViewport()) sidebarOpen.value = false
 }
 
 function onGoodSelect(row) {
