@@ -13,12 +13,13 @@ test.describe('Login page — static rendering', () => {
     await expect(page.locator('h1')).toContainText('Traveller Trade Simulator')
   })
 
-  test('shows three mode tabs', async ({ page }) => {
+  test('shows four mode tabs', async ({ page }) => {
     const tabs = page.locator('.tab')
-    await expect(tabs).toHaveCount(3)
+    await expect(tabs).toHaveCount(4)
     await expect(tabs.nth(0)).toContainText('Sign In')
     await expect(tabs.nth(1)).toContainText('Join Campaign')
     await expect(tabs.nth(2)).toContainText('New Campaign')
+    await expect(tabs.nth(3)).toContainText('Reset PIN')
   })
 
   test('Sign In is the active tab on load', async ({ page }) => {
