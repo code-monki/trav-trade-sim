@@ -311,6 +311,32 @@ Closes out `docs/financial-model-gap-analysis.md`'s last deferred section. User 
 
 ---
 
+## 2026-07-23 — Mobile-responsive UI + one-click campaign setup (external contribution, PRs #1–#4)
+
+### Rationale
+
+Four community PRs from an external contributor (gavmor) landed together: a New Campaign form that pre-fills/randomizes itself instead of requiring four hand-typed fields, and a three-part mobile pass (collapsible sidebar, decluttered header, bottom-sheet price chart) addressing the fact that the app was effectively unusable on a phone — the sidebar crushed the world detail pane, the header overflowed and wrapped onto three lines, and checking "Plot" mounted the price chart as a fixed panel that crushed the market table.
+
+### What changed
+
+**Campaign quick-start** (`src/lib/campaign-generator.js`, `LoginView.vue`): New Campaign now seeds campaign name, code, and referee character name with generated Traveller-flavored values on first visit (never clobbering anything already typed), plus a 🎲 Randomize button that re-rolls every field including a starting date consistent with the chosen milieu's canonical era. The PIN is deliberately never generated.
+
+**Mobile sidebar** (`MapView.vue`, `style.css`, ≤640px only): the sector/world sidebar becomes a collapsible panel (starts collapsed so the world detail gets the full screen), auto-collapsing again after picking a world.
+
+**Mobile header** (`MapView.vue`, ≤640px only): collapses to one row — title abbreviates to "TTS" (full name kept for screen readers via a clip-based visually-hidden span, not `display:none`), date+tick share a line, "Advance Tick ›" shrinks to "Advance ›", and the milieu picker + session readout move into the hamburger menu via a new generic `mobile-extras` slot.
+
+**Mobile price chart** (`ChartSheet.vue`, new; `MarketTable.vue`, `PriceChart.vue`, ≤640px only): the chart moves into a bottom sheet with three drag-to-resize detents (peek/half/full), velocity-aware snapping, and gesture disambiguation so vertical drags move the sheet while horizontal drags still pan the chart. The market table's checkbox column is replaced on mobile by a "Compare" selection mode (header toggle or long-press) so plotting a good doesn't take a permanent column. Desktop is untouched in all three of these.
+
+**Cross-PR bug found and fixed while merging:** PRs #2 and #4 each independently added a `NARROW_VIEWPORT_QUERY`/mobile-viewport-detection block to `MapView.vue`'s script setup, in non-overlapping line ranges. Git (and GitHub's merge check) auto-merged both with no conflict markers, but the result was a duplicate `const` declaration — invalid JS that broke the Vite build and made `MapView.test.js` fail to collect any tests at all. Neither PR could have caught this in isolation. Fixed by consolidating onto #4's reactive `isNarrow`/`narrowMq` implementation (it already tracks resize/rotation via a `matchMedia` change listener) and pointing #2's `sidebarOpen`/`onWorldSelect` at it instead of re-declaring their own one-shot check.
+
+**Accessibility bug found and fixed:** #3's mobile header shrank "Advance Tick ›" to "Advance ›" by hiding the full label with `display:none` and marking the short label `aria-hidden="true"` — leaving the button with no accessible name at all on narrow screens (not caught by the PR's own tests, since jsdom doesn't apply media queries). Fixed by mirroring the title's clip-based visually-hidden technique instead of `display:none`, so "Advance Tick" stays the accessible name while "Advance ›" is what's shown.
+
+### Verified
+
+Each PR was checked out into an isolated worktree and independently build+test+e2e verified before merging, plus a full four-way test-merge to catch cross-PR interactions ahead of time (this is where the duplicate-const bug above was actually caught, before it ever reached `master`). Post-merge, with both fixes applied: `npm run build` clean, `npx vitest run` 448/454 (the 6 failures are pre-existing, in `api.test.js`/`health-check.test.js`, reproduce identically on the pre-PR `master`, and are unrelated to any of these changes — a local-env issue, not a regression), and `npx playwright test` 16/16 non-skipped tests passing. All four PRs merged via merge commit (#1–#4); the two fixes above shipped as a single direct follow-up commit immediately after, to minimize how long `master` sat in a broken state.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

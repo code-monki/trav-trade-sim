@@ -25,9 +25,11 @@ Prices shift every jump-week based on world trade codes, active market events, a
 - **Fuel** — Buy refined or unrefined fuel priced by starport class, with a fill-level bar and a one-click "fill for jump."
 - **Aboard & Reports** — See everything currently aboard your ship in one place, plus a full ledger, trade history, and income breakdown filterable by date range.
 - **Fleet & organizations** — Track ship debts, ownership shares, and net worth; found or join an organization to pool dues and disburse funds across a fleet.
+- **Mobile-friendly** — On a phone, the sector/world sidebar collapses out of the way, the header stays to one compact row, and the price chart moves into a drag-to-resize bottom sheet with a tap-to-select Compare mode for plotting multiple goods — no more crushed tables or off-screen controls. Desktop is unaffected.
 
 ## For Referees
 
+- **One-click campaign setup** — New Campaign pre-fills with generated Traveller-flavored defaults (name, code, referee name) so you can start playing without typing anything, or tap 🎲 to randomize everything — including a starting date consistent with the milieu's canonical era. The PIN is always yours to choose.
 - **Market events** — Create narrative price events (shortage, trade fair, pirate blockade) with independent buy-side and sell-side modifiers, scoped to a single world or an entire subsector. Events fire automatically at random (M.U.L.E.-style), stack with manual ones, and draw from a 20-entry catalogue.
 - **Tick control** — Advance the in-game clock with a single button. Prices recalculate, random events may fire, and monthly/annual OHLC rollups happen automatically.
 - **Ship & fleet tools** — Manage ships, crew assignments, skills, and PIN resets, plus reusable ship templates, per-ship debts, and joint ownership shares.

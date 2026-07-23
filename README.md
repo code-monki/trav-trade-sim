@@ -13,6 +13,8 @@ A Morningstar-style speculative trade dashboard for Classic Traveller, built on 
 - **Campaign management** — multi-player campaigns with a short campaign code + mandatory PIN (no email, no PII stored)
 - **Market events** — M.U.L.E.-style local and subsector events with independent buy/sell modifiers; 20-entry referee catalogue
 - **Imperial Calendar** — DDD-YYYY format; 1 tick = 1 jump-week; auto-delivery of passengers and mail on ship arrival
+- **Mobile-responsive** — collapsible world browser, compact header, and a gesture-driven bottom-sheet price chart with Compare selection on phones; desktop layout is unchanged
+- **One-click campaign setup** — New Campaign pre-fills with generated Traveller-flavored defaults, or tap 🎲 to randomize everything (referee's PIN excluded)
 
 ## License & Copyright Notice
 
