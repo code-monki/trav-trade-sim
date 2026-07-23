@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 ---
 
@@ -76,6 +76,8 @@ src/
 │   ├── ReportsPanel.vue      Ship > Reports sub-tab: Ledger/Trades/Income/Debts/Net Worth
 │   ├── OrganizationsPanel.vue Ship > Organizations sub-tab: player-facing org browse/found/manage
 │   ├── BuyDialog.vue         Purchase quantity dialog
+│   ├── ChartSheet.vue        Mobile-only (≤640px) bottom sheet hosting PriceChart: peek/half/full
+│   │                         detents, velocity-aware snap, gesture disambiguation vs. chart pan
 │   ├── RouteAnalysis.vue     Jump range route table with profit projection
 │   ├── EventsHistory.vue     World event log
 │   ├── WorldPicker.vue       Destination picker (dropdown or manual hex), used by PassengersPanel/MailPanel/FreightPanel
@@ -95,6 +97,9 @@ src/
 │   ├── market-events.js      Event table, probability engine, active event filter
 │   ├── passengers.js         passengerFare, passageCapacityNeeded, availableFuelTypes,
 │   │                         jumpFuelTons, fuelCost, mailPayment (all pure functions)
+│   ├── campaign-generator.js Pre-fill/randomize New Campaign form (name, code, milieu-consistent
+│   │                         starting date, referee name) — pure functions, injected rng, same
+│   │                         pattern as market-tick.js. Never generates a PIN.
 │   ├── traveller-data.js         CT2 trade goods, CT7 lookup tables, milieu list, trade ruleset list
 │   ├── traveller-data-mgt2022.js MgT2022 D66 trade goods, price/fare/freight/traffic tables
 │   ├── traveller-helpers.js  UWP decode, hex distance, subsector helpers
@@ -290,9 +295,11 @@ GET /api/reports/ownership?ship_id=X
 
 ```
 MapView
-├── (header)
-│   └── HamburgerMenu
-├── (sidebar)
+├── (header) — ≤640px: collapses to one row (title→"TTS", short advance label);
+│   │           milieu picker + session readout move into HamburgerMenu's mobile-extras slot
+│   └── HamburgerMenu (mobile-extras slot: milieu select + session readout, ≤640px only)
+├── (sidebar) — ≤640px: collapsible via a "Sectors & Worlds" toggle, starts collapsed,
+│   │           auto-collapses again after a world is selected
 │   ├── sector select + filter
 │   └── world list
 └── (detail panel)
@@ -301,9 +308,14 @@ MapView
     ├── TOP TAB: Port
     │   ├── (sub-tab bar) [Market] [Passengers] [Mail] [Services] [Freight — MgT2022 only]
     │   ├── PORT SUB-TAB: Market
-    │   │   ├── MarketTable (emits: select-good, toggle-chart, buy-good)
-    │   │   ├── (resize handle)
-    │   │   └── PriceChart (Weekly / Monthly / Annual / Realized)
+    │   │   ├── MarketTable (emits: select-good, toggle-chart, buy-good, view-chart, clear-chart)
+    │   │   │     — desktop: permanent Plot checkbox column
+    │   │   │     — ≤640px (`mobile` prop): Plot column replaced by a Compare toggle /
+    │   │   │       long-press selection mode with a plotted-count toolbar
+    │   │   ├── (resize handle) — desktop only
+    │   │   ├── PriceChart (Weekly / Monthly / Annual / Realized) — desktop: inline split
+    │   │   └── ChartSheet — ≤640px only: hosts PriceChart in a bottom sheet instead of
+    │   │         the inline split (emits: dismiss, inset-change)
     │   ├── PORT SUB-TAB: Passengers
     │   │   └── PassengersPanel
     │   ├── PORT SUB-TAB: Mail

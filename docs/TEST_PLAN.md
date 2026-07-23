@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 ---
 
@@ -140,6 +140,23 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 | UT-403 | `hexDistance('0101', '0201')` | 1 |
 | UT-404 | Known 3-hex diagonal | 3 |
 
+### 3.7 `src/lib/campaign-generator.js`
+
+Pre-fill/randomize generators for the New Campaign form (`tests/campaign-generator.test.js`, 10 cases). Pure functions, injected `rng` — same pattern as `market-tick.js`, so results are deterministic under test.
+
+| TC-ID | Function | Input | Expected Output |
+|-------|----------|-------|-----------------|
+| UT-701 | `randomLabel` | seeded rng | Non-empty, multi-word phrase |
+| UT-702 | `campaignCodeFrom(label)` | e.g. "Spinward Marches Run" | `SPINWARD-42`-style: label's first word, uppercased, `-` + 1–99 suffix |
+| UT-703 | `campaignCodeFrom(label)` | any generated label | Output already satisfies the form's uppercase/no-spaces input transform unchanged |
+| UT-704 | `randomLabel` / `campaignCodeFrom` | same seed twice | Identical output (deterministic) |
+| UT-705 | `yearForMilieu` | `'M1105'`, `'M990'`, etc. | Numeric year extracted from the `Mxxxx` code |
+| UT-706 | `yearForMilieu` | `'IW'` | `2170` (Interstellar Wars dated in AD, not milieu-relative) |
+| UT-707 | `yearForMilieu` | unrecognized code | Falls back to the Classic Era year |
+| UT-708 | `yearForMilieu` | every defined milieu | Result stays within the form's 0–2500 bounds |
+| UT-709 | `randomCampaignDefaults` | seeded rng | Every field is a value the form already accepts (valid milieu/trade-rules/day/year) |
+| UT-710 | `randomCampaignDefaults` | any seed | Return object has no `pin` key — a PIN is never generated |
+
 ---
 
 ## 4. Component Test Cases
@@ -159,6 +176,12 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 | CT-109 | showBuyButton=false | No Buy column |
 | CT-110 | showBuyButton=true, qty=0 | Buy button disabled |
 | CT-111 | showBuyButton=true, qty>0 | Buy button enabled; click emits `buy-good` |
+| CT-112 | `mobile=false` (default) | Plot checkbox column visible, as above |
+| CT-113 | `mobile=true`, compare mode off | Plot column hidden; row click still emits `select-good` (for purchase), not `toggle-chart` |
+| CT-114 | `mobile=true`, Compare toggle pressed (or 500ms long-press on a row) | Enters compare mode: rows become full-width tap targets; charted rows show a checkmark + `aria-pressed="true"` |
+| CT-115 | `mobile=true`, in compare mode, tap a row | Emits `toggle-chart`, not `select-good` |
+| CT-116 | `mobile=true`, ≥1 good plotted | Toolbar shows plotted count; "View chart"/"Clear" emit `view-chart`/`clear-chart`; toolbar hidden when nothing plotted and compare mode is off |
+| CT-117 | `mobile=true`, compare mode, `ArrowDown`/`ArrowUp` on a row | Focus moves to the next/previous row; Space/Enter toggles it |
 
 ### 4.2 `BuyDialog`
 
@@ -178,6 +201,57 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 | CT-303 | Check acknowledgement | Continue button enabled |
 | CT-304 | Click Continue | `close` emitted |
 | CT-305 | Click backdrop | No dismiss (must use Continue) |
+
+### 4.4 `LoginView` — randomizable campaign defaults
+
+Covers only the pre-fill/randomize behavior (`tests/components/LoginView.test.js`, "randomizable campaign defaults" block); the rest of `LoginView`'s existing test suite (mode tabs, PIN validation, derived week, etc.) predates this catalogue.
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-401 | First visit to the Create tab | Name, code, and character name fields are pre-filled with generated values |
+| CT-402 | Pre-fill on first visit | Static defaults (starting date, milieu, trade rules) are left at their normal defaults, untouched |
+| CT-403 | User types over the campaign name, navigates away and back to the Create tab | Typed value is not clobbered by pre-fill |
+| CT-404 | Click 🎲 Randomize | Every field re-rolls (name, code, milieu, rules, referee name, starting date) except both PIN fields, which stay empty |
+| CT-405 | Click 🎲 Randomize | Form is not submitted |
+
+### 4.5 `ChartSheet`
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-501 | Render (default) | `role="dialog"` + `aria-labelledby`; a ≥44px drag handle; slotted chart content renders |
+| CT-502 | Render (default) | Opens at the `half` detent; focus moves to the drag handle |
+| CT-503 | `initialDetent="peek"` (or `full`) | Sheet honours the prop on open |
+| CT-504 | Arrow keys on the focused handle | Steps between detents (`peek`/`half`/`full`) |
+| CT-505 | `ArrowDown` while already at `peek` | Dismisses the sheet |
+| CT-506 | `Escape` | Dismisses the sheet |
+| CT-507 | Detent = `full` vs. `peek`/`half` | Scrim renders only at `full`; clicking it dismisses |
+| CT-508 | Mount / settle / unmount | Emits `inset-change` with the sheet's visible height; emits `0` on unmount |
+
+### 4.6 `HamburgerMenu` — `mobile-extras` slot
+
+Extends the pre-existing `HamburgerMenu` suite (menu open/close, six items, outside-click dismiss) with the new slot.
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-601 | Open dropdown with `mobile-extras` slot content provided | Slot content renders inside the open dropdown |
+| CT-602 | Open dropdown with no `mobile-extras` slot content | The extras section is omitted entirely |
+
+### 4.7 `MapView` — mobile responsiveness
+
+Covers only the new mobile header/sidebar behavior (`tests/components/MapView.test.js`, "decluttered header (mobile)" and "collapsible sidebar (mobile)" blocks); `MapView`'s broader test suite predates this catalogue.
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-701 | Render | Full title and a short ("TTS") variant both render; only one is visible per breakpoint |
+| CT-702 | Render | Tick readout is split so the trade-rules tag can be dropped independently on narrow screens |
+| CT-703 | Render, referee session | Both the wide ("Advance Tick ›") and narrow ("Advance ›") button labels are present |
+| CT-704 | Render | Milieu `<select>` stays in the header and is mirrored into `HamburgerMenu`'s `mobile-extras` slot |
+| CT-705 | Render | Session readout (character, campaign code, REF badge) is handed to `HamburgerMenu` |
+| CT-706 | Mount at a wide viewport | Sidebar starts expanded |
+| CT-707 | Mount at a narrow (`matchMedia` ≤640px) viewport | Sidebar starts collapsed |
+| CT-708 | Click the sidebar toggle | Sidebar expands, then re-collapses on a second click; `aria-expanded` reflects state |
+| CT-709 | Select a world at a narrow viewport | Sidebar auto-collapses |
+| CT-710 | Select a world at a wide viewport | Sidebar stays expanded (no auto-collapse) |
 
 ---
 
@@ -217,6 +291,8 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 | E2E-104 | Wrong PIN | Enter wrong PIN 5× | "account locked" message; no further attempts |
 | E2E-105 | Reset PIN | Use Reset PIN form with recovery code | Success message; can sign in with new PIN |
 | E2E-106 | Session restore | Sign in; reload page | Map view still shown (session from localStorage) |
+| E2E-109 | Pre-filled Create form | Open New Campaign tab on first visit | Name, code, and character name fields are already filled in |
+| E2E-110 | Randomize | Click 🎲 Randomize on the New Campaign tab | All fields re-roll; both PIN fields stay empty |
 
 ### 6.2 Market
 
@@ -374,6 +450,15 @@ Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engin
 2. `wrangler d1 execute --local --command "DELETE FROM schema_migrations WHERE id='011'"` to simulate an unapplied migration, then re-hit `GET /api/health` — verify `503` with `schema_ok: false` and `missing_migrations` includes `'011'`
 3. Load the frontend against this drifted database — verify the app shows the blocking "database schema is out of date" screen (not the generic error-boundary message) instead of continuing into the app
 4. Re-apply `wrangler d1 execute --local --file=d1/011_schema_ledger.sql` (or re-run schema.sql) and reload — verify the app loads normally
+
+### MTS-17: Mobile Responsiveness (≤640px)
+1. Load the app in a 390×844 (phone-class) viewport; verify the header collapses to one row with no text wrapping or horizontal overflow, the title reads "TTS", and the milieu picker + session readout appear inside the hamburger menu instead of the header
+2. Verify the sector/world sidebar starts collapsed; tap the "Sectors & Worlds" toggle to expand it, select a world, and verify the sidebar auto-collapses again to reveal the world detail
+3. On the Market tab, check Plot on a good; verify the chart opens as a bottom sheet (not a fixed inline panel) at the `half` detent, and the market table's top rows remain visible above it
+4. Drag the sheet's handle to `peek` and to `full`; verify a fast downward fling on the handle dismisses the sheet without clearing the plotted selection (re-opening "View chart" shows the same good still charted)
+5. On the chart canvas, drag horizontally — verify the chart pans; drag vertically — verify the sheet moves instead (no fighting between the two gestures)
+6. Tap the Compare toggle (or long-press a market row); verify rows become full-width tap targets with checkmarks and a toolbar shows the plotted count, with no permanent Plot checkbox column visible
+7. Reload at 1440×900 (desktop) and verify all of the above is absent: full app title, inline chart split with a resize handle, permanent Plot checkbox column, and milieu/session controls back in the header
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

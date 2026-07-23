@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0  
+**Version:** 0.5.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -22,15 +22,15 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-1: Create a New Campaign
 
 **Actor:** Referee
-**Related Requirements:** FR-101, FR-102, FR-108
+**Related Requirements:** FR-101, FR-102, FR-108, FR-111, FR-112
 **Trigger:** A prospective referee opens the Login view and selects "Create Campaign"
 
 **Preconditions:**
 - No existing session
 
 **Main Flow:**
-1. Referee opens the Create Campaign form
-2. Referee supplies a label, campaign code, milieu, trade rules, starting year/day, referee character name, and PIN
+1. Referee opens the Create Campaign form; the campaign name, campaign code, and referee character name arrive pre-filled with generated Traveller-flavored defaults (milieu, trade rules, and starting date keep their static defaults; the PIN is left blank)
+2. Referee supplies or edits a label, campaign code, milieu, trade rules, starting year/day, referee character name, and PIN
 3. System validates the campaign code is unique
 4. System creates the campaign and the referee's player record
 5. System generates a one-time recovery code and displays it to the referee
@@ -39,6 +39,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Alternate / Exception Flows:**
 - **A1 — Campaign code already in use:** System rejects the form with an error; no campaign is created
+- **A2 — Randomize:** At any point before submitting, the referee presses 🎲 Randomize; the system re-rolls the name, code, milieu, trade rules, referee name, and a starting date consistent with the chosen milieu's canonical era. The PIN is never touched by this action
 
 **Postconditions:**
 - Campaign and referee player record exist

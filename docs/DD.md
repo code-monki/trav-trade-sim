@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 ---
 
@@ -501,12 +501,15 @@ tickDay(tick)   = (tick % 48) * 7 + 1
 | `sectorName` | String | required | |
 | `chartedDies` | Array | `[]` | Die codes currently checked for charting |
 | `showBuyButton` | Boolean | `false` | |
+| `mobile` | Boolean | `false` | Narrow-viewport mode: replaces the permanent Plot checkbox column with a contextual Compare mode (header toggle or 500ms long-press), full-width tappable rows, and a toolbar |
 
 | Emit | Payload | Description |
 |------|---------|-------------|
 | `select-good` | snapshot row | |
 | `toggle-chart` | die string | |
 | `buy-good` | snapshot row | |
+| `view-chart` | — | Mobile only: Compare toolbar's "View chart" pressed |
+| `clear-chart` | — | Mobile only: Compare toolbar's "Clear" pressed |
 
 ### `PriceChart`
 
@@ -515,8 +518,25 @@ tickDay(tick)   = (tick % 48) * 7 + 1
 | `worldHex` | String | |
 | `sectorName` | String | |
 | `goods` | Array | `[{ die, name }]` — goods to plot |
+| `paused` | Boolean | While true (bottom sheet dragging/animating), chart gestures are disabled and the canvas isn't resized; a single `applyOptions({width,height})` fires once it flips back false |
+| `sheetMode` | Boolean | Mobile bottom-sheet mode: vertical touch drags belong to the sheet (chart pans horizontally only), and the crosshair snaps to data points (magnet mode) |
 
 Single good → candlestick (monthly/annual) or line (weekly). Multiple goods → always line, one series per good.
+
+### `ChartSheet`
+
+Mobile-only (≤640px) bottom sheet that hosts `PriceChart` in place of the desktop inline split. Renders via a default slot (the caller passes `<PriceChart>` in).
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `initialDetent` | String | `'half'` | One of `peek` (~18%) / `half` (~46%) / `full` (~90%, 64px top safe zone) |
+
+| Emit | Payload | Description |
+|------|---------|-------------|
+| `dismiss` | — | Escape, scrim click, or a hard downward fling below `peek`; never clears the caller's plotted-goods selection |
+| `inset-change` | pixel height | Current visible sheet height, so `MarketTable` can pad the table past it |
+
+Drag release snaps to the nearest detent, with velocity awareness: a fling skips to the next detent in that direction. Directional lock over the first ~8px of touch travel decides whether the gesture belongs to the sheet (vertical) or the chart's own pan (horizontal). `role="dialog"` + `aria-labelledby`, `aria-modal` only at the `full` detent; the drag handle is `role="separator"` with `aria-valuenow`/`aria-valuetext` and arrow-key detent stepping; the canvas is `aria-hidden` with a `sr-only` live-region text summary of what's plotted.
 
 ### `CargoHold`
 
@@ -625,7 +645,7 @@ No props beyond world/sector context, no emits. Renders the active-events banner
 Embedded in `PassengersPanel.vue`, `MailPanel.vue`, and `FreightPanel.vue` for destination selection. Dropdown-with-filter mode plus a manual hex-entry fallback mode.
 
 ### `HamburgerMenu`
-No props. Emits one event per menu item selected: `themes`, `about`, `tutorials`, `help`, `manage-character`, `manage-campaign` (referee-only), `signout`.
+No props. Emits one event per menu item selected: `themes`, `about`, `tutorials`, `help`, `manage-character`, `manage-campaign` (referee-only), `signout`. Exposes a `mobile-extras` named slot, rendered inside the open dropdown only when slot content is provided — kept generic on purpose (the component has no store/prop dependency on what goes in it) so callers can carry over whatever controls don't fit their own narrow-viewport header. `MapView.vue` uses it to relocate the milieu picker and session readout (character, campaign code, REF badge) out of the header at ≤640px.
 
 ### `HelpDialog` / `AboutDialog` / `ThemeDialog` / `CharacterDialog` / `TutorialDialog`
 All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`). `HelpDialog`/`TutorialDialog` content is static/hardcoded (see `src/lib/tutorials.js` for tutorial step data); both are known to be stale relative to the financial-model feature set and are flagged for a separate revisit.
