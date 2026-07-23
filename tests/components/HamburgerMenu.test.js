@@ -57,6 +57,20 @@ describe('HamburgerMenu', () => {
     expect(wrapper.find('.hm-dropdown').exists()).toBe(false)
   })
 
+  it('renders mobile-extras slot content inside the open dropdown', async () => {
+    const wrapper = mount(HamburgerMenu, {
+      slots: { 'mobile-extras': '<div class="test-extra">Milieu picker</div>' },
+    })
+    await wrapper.find('.hm-btn').trigger('click')
+    expect(wrapper.find('.hm-mobile-extras .test-extra').exists()).toBe(true)
+  })
+
+  it('omits the mobile-extras section when no slot content is provided', async () => {
+    const wrapper = mount(HamburgerMenu)
+    await wrapper.find('.hm-btn').trigger('click')
+    expect(wrapper.find('.hm-mobile-extras').exists()).toBe(false)
+  })
+
   it('closes the dropdown on mousedown outside the component', async () => {
     const wrapper = mount(HamburgerMenu, { attachTo: document.body })
     await wrapper.find('.hm-btn').trigger('click')
