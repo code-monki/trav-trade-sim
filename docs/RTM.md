@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0
+**Version:** 0.5.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -37,6 +37,8 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-108 | Session persistence | HLD §4.1 | `auth.js` (localStorage `tts_session`), `d1/002_sessions.sql` | — | — | E2E-106 | — |
 | FR-109 | Referee deletes campaign with PIN | HLD §6, DD §1.1 | `auth.js:deleteCampaign`, `worker/src/routes/auth.js`, `RefereeView.vue` Campaign tab Danger Zone, `ON DELETE CASCADE` (`d1/schema.sql`) | — | — | E2E-107 | MTS-6 |
 | FR-110 | Referee edits campaign label | DD §7 | `worker/src/routes/campaigns.js`, `RefereeView.vue` Campaign tab inline edit | — | — | — | — |
+| FR-111 | Pre-fill New Campaign form on first visit | — | `src/lib/campaign-generator.js`, `LoginView.vue` (`setMode` guard on empty label/code/characterName) | `tests/campaign-generator.test.js` | `tests/components/LoginView.test.js` | e2e/login.spec.js ("form comes pre-filled…") | — |
+| FR-112 | Randomize control re-rolls campaign fields | — | `src/lib/campaign-generator.js:randomCampaignDefaults`, `LoginView.vue:randomizeCampaign` | `tests/campaign-generator.test.js` | `tests/components/LoginView.test.js` | e2e/login.spec.js ("Randomize fills the form but leaves the PIN fields empty") | — |
 
 ## 2.2 Imperial Calendar
 
@@ -261,6 +263,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | NFR-6d | `<main id="main-content">` on every routed view | Code review: `LoginView.vue`, `MapView.vue`, `RefereeView.vue` all confirmed (fixed 2026-07-13 — Login/Referee were previously missing the skip-link target) |
 | NFR-6e | Accessible names/ARIA on custom controls | Code review. **Closed 2026-07-13** for the five previously-flagged components: `MarketTable.vue` (sortable headers get `aria-sort`/keyboard support, chart checkboxes and rows get `aria-label`/`aria-pressed`), `CargoHold.vue` (per-row Sell/Confirm/Cancel buttons get descriptive `aria-label`s, source-world sector exposed via `sr-only` text), `PassengersPanel.vue`/`FreightPanel.vue`/`ShipServices.vue` (passage-type/lot-size/fuel-type toggle-button groups get `role="group"` + `aria-pressed`; stepper +/− buttons get `aria-label`; every form label gets an explicit `for`/`id` pair). The shared `WorldPicker.vue` (used by all three of the latter) had the same missing-label gap and was fixed once for all three call sites using Vue 3.5's `useId()` |
 | NFR-7 | 1024px+ viewport | Manual testing at 1024px, 1280px, 1920px |
+| NFR-7a | Dedicated mobile layout at ≤640px, desktop unmodified 641px+ | `MapView.vue` (collapsible sidebar, single-row header, `mobile-extras` slot on `HamburgerMenu.vue`), `ChartSheet.vue`, `MarketTable.vue` Compare mode, `PriceChart.vue` sheet-mode gestures — all gated on `matchMedia('(max-width: 640px)')`. `tests/components/MapView.test.js`, `tests/components/HamburgerMenu.test.js`, `tests/components/ChartSheet.test.js`, `tests/components/MarketTable.test.js`; manual testing at 390×844 and 1440×900 |
 | NFR-8 | Atomic credit operations | Code review (`db.batch()` usage in `worker/src/routes/*.js`); ST-204–205 |
 | NFR-9 | Cross-browser support | Playwright test run in Chromium, Firefox, WebKit |
 | NFR-10 | Numbered migration files | File-naming convention in `d1/00X_*.sql` |

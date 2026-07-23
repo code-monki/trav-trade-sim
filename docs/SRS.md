@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.4.0  
+**Version:** 0.5.0  
 **Status:** Active development
 
 ---
@@ -36,6 +36,8 @@
 | FR-108 | Session state (campaign, player) shall be persisted to localStorage and restored on page reload |
 | FR-109 | The referee shall be able to permanently delete their campaign; deletion shall require PIN confirmation and shall cascade-delete all associated data |
 | FR-110 | The referee shall be able to edit the campaign display label at any time; trade rules, milieu, and campaign code shall remain locked after creation |
+| FR-111 | On first visit, the New Campaign form shall pre-fill the campaign name, campaign code, and referee character name with generated Traveller-flavored defaults, without overwriting any field the user has already edited; the PIN shall never be pre-filled |
+| FR-112 | The New Campaign form shall provide a Randomize control that re-rolls the campaign name, code, milieu, trade rules, referee name, and starting date (consistent with the selected milieu's canonical era); it shall never generate a PIN |
 
 ### 2.2 Imperial Calendar
 
@@ -259,6 +261,7 @@
 | NFR-6d | **Accessibility:** Every routed top-level view shall provide a `<main id="main-content">` landmark matching the global skip-link's target, and a logical heading/landmark structure for assistive technology |
 | NFR-6e | **Accessibility:** Custom interactive controls without native semantics (e.g. tab bars, steppers, type-selector buttons) shall expose an accessible name and, where applicable, ARIA role/state matching their behavior |
 | NFR-7 | **Usability:** The application shall function at viewport widths from 1024px and above |
+| NFR-7a | **Usability:** The login, map, and market screens shall additionally provide a dedicated mobile layout — collapsible world browser, single-row header, and a gesture-driven bottom-sheet price chart with contextual multi-good selection — at viewport widths of 640px and below, with full feature parity to the desktop layout. Viewport widths from 641px to 1023px use the desktop layout unmodified |
 | NFR-8 | **Reliability:** Loss of network connectivity during a trade operation shall not corrupt the ship's credit balance (atomic `db.batch()` design) |
 | NFR-9 | **Portability:** The application shall run in current versions of Chrome, Firefox, and Safari without plugins |
 | NFR-10 | **Maintainability:** All database schema changes shall be expressed as numbered migration files applied sequentially |
@@ -273,6 +276,8 @@
 - A second user can join the campaign with a different character name and PIN
 - Both users see the same tick value and market prices for the same world
 - Referee can edit the campaign label without affecting trade rules or campaign code
+- The New Campaign form arrives pre-filled with a generated name, code, and referee name; typing over a field before Randomize is pressed is never clobbered
+- Pressing Randomize re-rolls every field, including a starting date consistent with the chosen milieu's era, but never fills in a PIN
 
 ### AC-2: PIN recovery
 - Entering an incorrect PIN 5 times locks the account for 15 minutes
@@ -356,3 +361,10 @@
 - Every primary interactive control (buttons, form fields, tab bars, steppers) can be reached and operated using only the keyboard, in a logical tab order, with a visible focus indicator
 - No status or data point (price deviation color, travel zone color, profit/loss color) is conveyed by color alone — each has an accompanying text or icon cue
 - Automated accessibility audit (Lighthouse or equivalent) reports no critical/serious violations on the Login, Map, and Referee views
+
+### AC-19: Mobile responsiveness (≤640px)
+- At a phone-width viewport, the sector/world sidebar starts collapsed so the world detail pane gets the full screen, and re-collapses automatically after a world is selected
+- The header collapses to a single row with no overflow or wrapped text; the full app title and full "Advance Tick" label remain each screen reader's accessible name even though the visible text is abbreviated
+- Checking a good for Plot opens the price chart in a bottom sheet (not a fixed inline panel); dragging the sheet's handle resizes it and a horizontal drag over the chart still pans the chart instead of moving the sheet
+- Selecting multiple goods to compare uses a Compare toggle or long-press instead of a permanent per-row checkbox column
+- None of the above applies above 640px; desktop retains the inline chart split, resize handle, and checkbox column unchanged
