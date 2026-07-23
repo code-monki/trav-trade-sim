@@ -161,29 +161,45 @@ Pre-fill/randomize generators for the New Campaign form (`tests/campaign-generat
 
 ## 4. Component Test Cases
 
+Every subsection below fully catalogues its component's actual test file (`tests/components/*.test.js`) as of this pass — not a representative sample. Where a component's real coverage doesn't match what an earlier version of this document claimed, that's noted explicitly rather than silently carried forward.
+
 ### 4.1 `MarketTable`
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
-| CT-101 | Render with loading=true | Shows "Generating market data…" |
-| CT-102 | Render with empty rows | Shows "No market data" |
-| CT-103 | Render with 36 rows | All rows present; columns: Plot, Good, Die, Buy, Sell, Spread, Qty |
-| CT-104 | Click column header `Die` | Rows reorder by die code ascending |
-| CT-105 | Click column header `Die` again | Rows reorder descending |
-| CT-106 | Type in filter box | Visible rows reduce to those matching |
-| CT-107 | Click a row | `select-good` emitted with snapshot row |
-| CT-108 | Check Plot checkbox | `toggle-chart` emitted with die string |
-| CT-109 | showBuyButton=false | No Buy column |
-| CT-110 | showBuyButton=true, qty=0 | Buy button disabled |
-| CT-111 | showBuyButton=true, qty>0 | Buy button enabled; click emits `buy-good` |
-| CT-112 | `mobile=false` (default) | Plot checkbox column visible, as above |
-| CT-113 | `mobile=true`, compare mode off | Plot column hidden; row click still emits `select-good` (for purchase), not `toggle-chart` |
-| CT-114 | `mobile=true`, Compare toggle pressed (or 500ms long-press on a row) | Enters compare mode: rows become full-width tap targets; charted rows show a checkmark + `aria-pressed="true"` |
-| CT-115 | `mobile=true`, in compare mode, tap a row | Emits `toggle-chart`, not `select-good` |
-| CT-116 | `mobile=true`, ≥1 good plotted | Toolbar shows plotted count; "View chart"/"Clear" emit `view-chart`/`clear-chart`; toolbar hidden when nothing plotted and compare mode is off |
-| CT-117 | `mobile=true`, compare mode, `ArrowDown`/`ArrowUp` on a row | Focus moves to the next/previous row; Space/Enter toggles it |
+| CT-101 | Render with `tick.loading = true` | Shows "Generating market data…" placeholder |
+| CT-102 | Render with no snapshot rows | Shows "No market data" placeholder |
+| CT-103 | Render with snapshots present | Neither placeholder shown |
+| CT-104 | Render with 3 snapshot rows | One `.market-row` per snapshot |
+| CT-105 | Render | Good names appear in the table body |
+| CT-106 | Render | Row-count label reads "3 / 3" |
+| CT-107 | Click a row | `select-good` emitted with the snapshot row (`trade_good_die`, `purchase_price` present) |
+| CT-108 | Type "tex" in the filter box | Rows narrow to the one matching good (case-insensitive) |
+| CT-109 | Type a die code ("13") in the filter box | Rows narrow to the one matching die |
+| CT-110 | Type an uppercase query ("POLY") | Still matches (case-insensitive) |
+| CT-111 | Type a non-matching query | Zero rows shown; row-count reads "0 / 3" |
+| CT-112 | Clear the filter after typing | All rows restored |
+| CT-113 | Default render (desktop) | Plot checkbox column (`.chart-check`) visible; no Compare button or toolbar |
+| CT-114 | Check a Plot checkbox (desktop) | `toggle-chart` emitted with the die string |
+| CT-115 | `mobile=true` | Plot checkbox column hidden; Compare toggle (`.compare-btn`) shown instead |
+| CT-116 | `mobile=true`, compare mode off, click a row | `select-good` emitted, `toggle-chart` not emitted |
+| CT-117 | `mobile=true`, Compare toggle pressed, click a row | `toggle-chart` emitted, `select-good` not emitted |
+| CT-118 | `mobile=true`, compare mode, a good already charted | That row shows `aria-pressed="true"` and a visible checkmark (`.compare-mark.on`) |
+| CT-119 | `mobile=true`, two goods charted | Toolbar shows "2 plotted"; its primary button emits `view-chart`, its Clear button emits `clear-chart` |
+| CT-120 | `mobile=true`, nothing plotted, compare mode off | Toolbar (`.compare-toolbar`) not rendered |
+| CT-121 | `mobile=true`, compare mode, click Done | Compare mode exits (no checkmarks); a subsequent row click goes back to emitting `select-good` |
+| CT-122 | `mobile=true`, compare mode, focus a row, press `ArrowDown` | Focus moves to the next row |
+| CT-123 | Default render | Sort is die-ascending (die `11` first) |
+| CT-124 | Click the Good column header | Rows reorder by name ascending |
+| CT-125 | Click the Buy column header | Rows reorder by purchase price ascending (lowest first) |
+| CT-126 | Click the Buy column header twice | Reorders descending (highest first) |
+| CT-127 | Click a different sortable header after sorting by another | Resets to ascending on the new column |
+
+**Known gap:** the `showBuyButton` prop and `buy-good` emit still exist in `MarketTable.vue` (used by `MapView.vue`'s Market sub-tab), but have no dedicated test coverage in the current suite — the CT-1xx block above is a complete catalogue of what's actually tested, and neither is in it.
 
 ### 4.2 `BuyDialog`
+
+**No dedicated component test file currently exists** (`tests/components/BuyDialog.test.js` is not present in the repo, and has no prior git history — this table was written when the test was planned, not after it was implemented). The CT-2xx IDs below are retained as the intended coverage, not verified-passing tests; `MapView.test.js` only asserts that `showBuyDialog` defaults to `false`, which doesn't exercise `BuyDialog.vue` itself.
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
@@ -194,6 +210,8 @@ Pre-fill/randomize generators for the New Campaign form (`tests/campaign-generat
 
 ### 4.3 `RecoveryCodeDialog`
 
+**No dedicated component test file currently exists**, same situation as `BuyDialog` above (`tests/components/RecoveryCodeDialog.test.js` has no git history in this repo). Coverage of this dialog's actual behavior today is indirect, via `E2E-101` (Create Campaign) confirming it appears and can be dismissed — not a component-level test of its Copy/acknowledgement/backdrop behavior.
+
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
 | CT-301 | Render | Code displayed; Continue button disabled |
@@ -202,17 +220,27 @@ Pre-fill/randomize generators for the New Campaign form (`tests/campaign-generat
 | CT-304 | Click Continue | `close` emitted |
 | CT-305 | Click backdrop | No dismiss (must use Continue) |
 
-### 4.4 `LoginView` — randomizable campaign defaults
-
-Covers only the pre-fill/randomize behavior (`tests/components/LoginView.test.js`, "randomizable campaign defaults" block); the rest of `LoginView`'s existing test suite (mode tabs, PIN validation, derived week, etc.) predates this catalogue.
+### 4.4 `LoginView`
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
-| CT-401 | First visit to the Create tab | Name, code, and character name fields are pre-filled with generated values |
-| CT-402 | Pre-fill on first visit | Static defaults (starting date, milieu, trade rules) are left at their normal defaults, untouched |
-| CT-403 | User types over the campaign name, navigates away and back to the Create tab | Typed value is not clobbered by pre-fill |
-| CT-404 | Click 🎲 Randomize | Every field re-rolls (name, code, milieu, rules, referee name, starting date) except both PIN fields, which stay empty |
-| CT-405 | Click 🎲 Randomize | Form is not submitted |
+| CT-401 | Default render | Sign In tab is active; other tabs are not |
+| CT-402 | Default render | Sign In form shows an "Enter" button |
+| CT-403 | Click the Join Campaign tab | Form switches to "Join Campaign" |
+| CT-404 | Click the New Campaign tab | Form switches to "Create Campaign" |
+| CT-405 | Set a PIN on Join, then switch to Create | PIN fields are reset to empty |
+| CT-406 | Submit a valid Reset PIN form | Shows a success message, then auto-returns to Sign In after a delay |
+| CT-407 | `auth.error` is set | Error banner shows the message |
+| CT-408 | `auth.error` is null | Error banner not rendered |
+| CT-409–CT-415 | Starting day = 1, 7, 8, 14, 15, 336, 365 on the Create tab | Derived week reads 1, 1, 2, 2, 3, 48, 48 (clamped at 365) respectively |
+| CT-416 | Create tab | Derived week is a read-only `<span>`, not an input |
+| CT-417 | Create tab, default state | Year input has bounds 0–2500 and defaults to 1105 |
+| CT-418 | First visit to the Create tab | Name, code, and character name fields are pre-filled; generated code already matches the input's transform pattern |
+| CT-419 | First visit to the Create tab | Static defaults (starting year 1105, starting day 1) are left untouched by pre-fill |
+| CT-420 | Type a campaign name, leave the tab, and return | Typed value is not clobbered by pre-fill |
+| CT-421 | Set both PIN fields, then click 🎲 Randomize | Name/code/character/day/year all re-roll within valid bounds; both PIN fields keep their original values |
+| CT-422 | Click 🎲 Randomize | `auth.createCampaign` is not called (no submit) |
+| CT-423 | Join Campaign, mismatched PINs, submit | An error is surfaced |
 
 ### 4.5 `ChartSheet`
 
@@ -227,31 +255,72 @@ Covers only the pre-fill/randomize behavior (`tests/components/LoginView.test.js
 | CT-507 | Detent = `full` vs. `peek`/`half` | Scrim renders only at `full`; clicking it dismisses |
 | CT-508 | Mount / settle / unmount | Emits `inset-change` with the sheet's visible height; emits `0` on unmount |
 
-### 4.6 `HamburgerMenu` — `mobile-extras` slot
-
-Extends the pre-existing `HamburgerMenu` suite (menu open/close, six items, outside-click dismiss) with the new slot.
+### 4.6 `HamburgerMenu`
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
-| CT-601 | Open dropdown with `mobile-extras` slot content provided | Slot content renders inside the open dropdown |
-| CT-602 | Open dropdown with no `mobile-extras` slot content | The extras section is omitted entirely |
+| CT-601 | Render | Menu button (`.hm-btn`) present |
+| CT-602 | Default render | Dropdown not rendered |
+| CT-603 | Click the menu button | Dropdown opens |
+| CT-604 | Click the menu button twice | Dropdown closes again |
+| CT-605 | Open dropdown, non-referee | Exactly six menu items |
+| CT-606 | Click each of the themes/about/help/signout items in turn | Corresponding event (`themes`/`about`/`help`/`signout`) is emitted |
+| CT-607 | Click any menu item | Dropdown closes |
+| CT-608 | Provide `mobile-extras` slot content, open dropdown | Slot content renders inside the open dropdown |
+| CT-609 | Open dropdown with no `mobile-extras` slot content | The extras section is omitted entirely |
+| CT-610 | Open dropdown, then `mousedown` outside the component | Dropdown closes |
 
-### 4.7 `MapView` — mobile responsiveness
-
-Covers only the new mobile header/sidebar behavior (`tests/components/MapView.test.js`, "decluttered header (mobile)" and "collapsible sidebar (mobile)" blocks); `MapView`'s broader test suite predates this catalogue.
+### 4.7 `MapView`
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
-| CT-701 | Render | Full title and a short ("TTS") variant both render; only one is visible per breakpoint |
-| CT-702 | Render | Tick readout is split so the trade-rules tag can be dropped independently on narrow screens |
-| CT-703 | Render, referee session | Both the wide ("Advance Tick ›") and narrow ("Advance ›") button labels are present |
-| CT-704 | Render | Milieu `<select>` stays in the header and is mirrored into `HamburgerMenu`'s `mobile-extras` slot |
-| CT-705 | Render | Session readout (character, campaign code, REF badge) is handed to `HamburgerMenu` |
-| CT-706 | Mount at a wide viewport | Sidebar starts expanded |
-| CT-707 | Mount at a narrow (`matchMedia` ≤640px) viewport | Sidebar starts collapsed |
-| CT-708 | Click the sidebar toggle | Sidebar expands, then re-collapses on a second click; `aria-expanded` reflects state |
-| CT-709 | Select a world at a narrow viewport | Sidebar auto-collapses |
-| CT-710 | Select a world at a wide viewport | Sidebar stays expanded (no auto-collapse) |
+| CT-701 | `usingCachedData=false` | Cache notice not shown |
+| CT-702 | `usingCachedData=true`, recent `cachedAt` | Notice shown, mentions travellermap.com being unreachable |
+| CT-703 | `usingCachedData=true`, recent `cachedAt` | No staleness warning |
+| CT-704 | `usingCachedData=true`, `cachedAt` 31+ days old | Staleness warning ("missing recent additions") shown |
+| CT-705 | Click the cache notice's close button | Notice dismisses |
+| CT-706 | Selected world, no pending obligations | Delivery badge not shown |
+| CT-707 | A pending obligation targets a different world | Delivery badge not shown |
+| CT-708 | One pending obligation targets the selected world | Badge reads "1 pending delivery here" |
+| CT-709 | Pending passenger + mail + freight all target the selected world | Badge reads "3 pending deliveries here" (summed, pluralized) |
+| CT-710 | Render | Full title and a short ("TTS") variant both render (only one visible per breakpoint via CSS) |
+| CT-711 | Render | Tick readout is split so the trade-rules tag can drop independently on narrow screens |
+| CT-712 | Render, referee session | Both the wide ("Advance Tick ›") and narrow ("Advance ›") button labels are present |
+| CT-713 | Render | Milieu `<select>` stays in the header and is mirrored into `HamburgerMenu`'s `mobile-extras` slot |
+| CT-714 | Render, referee session with character/campaign code | Session readout (character, campaign code, REF badge) is handed to `HamburgerMenu` |
+| CT-715 | Open one dialog (e.g. Themes), then another (About) | First dialog closes when the second opens |
+| CT-716 | Open a dialog, then set it to false | Shared active-dialog state clears; no other dialog is left open |
+| CT-717 | Mount at a wide viewport (`matchMedia` false) | Sidebar starts expanded; toggle's `aria-expanded="true"` |
+| CT-718 | Mount at a narrow viewport (`matchMedia` true) | Sidebar starts collapsed; toggle's `aria-expanded="false"` |
+| CT-719 | Click the sidebar toggle twice | Expands, then re-collapses |
+| CT-720 | Select a world at a narrow viewport | Sidebar auto-collapses |
+| CT-721 | Select a world at a wide viewport | Sidebar stays expanded (no auto-collapse) |
+
+### 4.8 `HelpDialog`
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-801 | `modelValue=false` | Dialog not rendered |
+| CT-802 | `modelValue=true` | Dialog rendered |
+| CT-803 | Default render | Shows User Manual / Overview content |
+| CT-804 | Default render, non-referee | Five tabs, including "Getting Started", "Fleet & Finance", "Shortcuts" |
+| CT-805 | Default render | Getting Started tab active; Shortcuts tab is not |
+| CT-806 | Click the Shortcuts tab | Shows the shortcuts table (e.g. "Esc") |
+| CT-807 | Click Shortcuts, then Getting Started | Shortcuts table hides; Overview content returns |
+| CT-808 | Click the Fleet & Finance tab | Shows Net Worth / Organizations content |
+| CT-809 | Click the header close button | Emits `update:modelValue` with `false` |
+| CT-810 | Click the footer Close button | Emits `update:modelValue` with `false` |
+| CT-811 | Press `Escape` | Emits `update:modelValue` with `false` |
+| CT-812 | Click the Market Tab section | Shows the column-definitions table (Buy, Qty, "expired") |
+| CT-813 | Default render | Imperial Calendar section mentions the referee's starting year |
+
+### 4.9 `App` (root component / error boundary)
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-901 | A descendant of `router-view` throws during render | Fallback UI ("Something went wrong", a "Reload page" button) shown instead of a blank screen |
+| CT-902 | Nothing throws | `router-view` renders normally; no fallback UI |
+| CT-903 | `appError.fatalError.kind === 'schema-drift'` | Schema-drift-specific message ("database schema is out of date") shown instead of the generic fallback |
 
 ---
 
