@@ -527,15 +527,22 @@ const tick   = useTickStore()
 const ship   = useShipStore()
 const router = useRouter()
 
+// ── Narrow-viewport (mobile) detection ───────────────────────────────────────
+// ≤640px the sidebar starts collapsed, the chart moves from the inline split
+// into a bottom sheet, and the market table switches to contextual Compare
+// selection. Reactive so rotations/resizes are respected everywhere it's used.
+const NARROW_VIEWPORT_QUERY = '(max-width: 640px)'
+const narrowMq = typeof window.matchMedia === 'function'
+  ? window.matchMedia(NARROW_VIEWPORT_QUERY)
+  : null
+const isNarrow = ref(narrowMq?.matches ?? false)
+function onNarrowChange(e) { isNarrow.value = e.matches }
+narrowMq?.addEventListener?.('change', onNarrowChange)
+
 // The sidebar is always visible on desktop (the toggle only renders at narrow
 // widths, and `.collapsed` only takes effect there). On mobile it starts
 // collapsed so the world detail gets the screen.
-const NARROW_VIEWPORT_QUERY = '(max-width: 640px)'
-function isNarrowViewport() {
-  return typeof window.matchMedia === 'function'
-    && window.matchMedia(NARROW_VIEWPORT_QUERY).matches
-}
-const sidebarOpen = ref(!isNarrowViewport())
+const sidebarOpen = ref(!isNarrow.value)
 
 const sectorFilter   = ref('')
 const filteredSectors = computed(() => {
@@ -549,17 +556,6 @@ const shipTab      = ref('cargo')
 const selectedGood   = ref(null)
 const chartedGoods   = ref(new Set())
 const buyLoading     = ref(false)
-
-// ── Narrow-viewport (mobile) detection ───────────────────────────────────────
-// ≤640px the chart moves from the inline split into a bottom sheet and the
-// market table switches to contextual Compare selection.
-const NARROW_VIEWPORT_QUERY = '(max-width: 640px)'
-const narrowMq = typeof window.matchMedia === 'function'
-  ? window.matchMedia(NARROW_VIEWPORT_QUERY)
-  : null
-const isNarrow = ref(narrowMq?.matches ?? false)
-function onNarrowChange(e) { isNarrow.value = e.matches }
-narrowMq?.addEventListener?.('change', onNarrowChange)
 
 const chartSheetOpen = ref(false)
 const sheetInset     = ref(0)   // visible sheet height, so the table can pad past it
@@ -794,7 +790,7 @@ function onWorldSelect(world) {
   // On mobile the sidebar covers the detail area, so picking a world implies
   // "show me that world" — collapse to reveal it. Checked live (not the value
   // cached at mount) so rotations/resizes are respected.
-  if (isNarrowViewport()) sidebarOpen.value = false
+  if (isNarrow.value) sidebarOpen.value = false
 }
 
 function onGoodSelect(row) {
@@ -1040,7 +1036,16 @@ header {
     padding: 0.3rem 0.6rem;
     font-size: 0.72rem;
   }
-  .advance-full  { display: none; }
+  /* Shrink the label visually but keep the full text as the button's
+     accessible name, same technique as the title above. */
+  .advance-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   .advance-short { display: inline; }
 
   .header-right { gap: 0; }
