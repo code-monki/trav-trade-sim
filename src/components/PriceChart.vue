@@ -25,13 +25,17 @@
       <template v-if="activeTab === 'realized'">No realized trades at this world yet.</template>
       <template v-else>No history yet — visit this world each tick to record prices.</template>
     </div>
-    <div ref="chartEl" class="chart-el" v-show="props.goods.length && hasData && !tick.loading"></div>
+    <div ref="chartEl" class="chart-el" aria-hidden="true"
+         v-show="props.goods.length && hasData && !tick.loading"></div>
+    <p class="sr-only" aria-live="polite">
+      {{ chartSummary }}
+    </p>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { createChart, ColorType } from 'lightweight-charts'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { createChart, ColorType, CrosshairMode } from 'lightweight-charts'
 import { useTickStore }  from '../stores/tick.js'
 import { useThemeStore } from '../stores/theme.js'
 import { useAuthStore }  from '../stores/auth.js'
@@ -42,6 +46,12 @@ const props = defineProps({
   worldHex:   { type: String,  required: true },
   sectorName: { type: String,  required: true },
   goods:      { type: Array,   default: () => [] },  // [{ die, name }]
+  // While true (bottom sheet dragging/animating), chart gestures are disabled
+  // and the canvas is not resized; a single resize happens when it flips back.
+  paused:     { type: Boolean, default: false },
+  // Mobile bottom-sheet mode: vertical touch drags belong to the sheet, so the
+  // chart only pans horizontally, and the crosshair snaps to data points.
+  sheetMode:  { type: Boolean, default: false },
 })
 
 const tick       = useTickStore()
@@ -104,6 +114,7 @@ function chartOpts() {
     crosshair: {
       vertLine: { color: cssVar('--border') },
       horzLine: { color: cssVar('--border') },
+      ...(props.sheetMode ? { mode: CrosshairMode.Magnet } : {}),
     },
     rightPriceScale: { borderColor: cssVar('--border') },
     timeScale: {
@@ -139,21 +150,44 @@ let chart     = null
 let seriesMap = new Map()   // die → series
 let ro        = null
 
+function interactionOpts() {
+  const on = !props.paused
+  return {
+    handleScroll: {
+      horzTouchDrag:    on,
+      vertTouchDrag:    on && !props.sheetMode,
+      mouseWheel:       on,
+      pressedMouseMove: on,
+    },
+    handleScale: {
+      pinch:                on,
+      mouseWheel:           on,
+      axisPressedMouseMove: on,
+    },
+  }
+}
+
+function applySize() {
+  if (!chart || !chartEl.value) return
+  chart.applyOptions({
+    width:  chartEl.value.clientWidth  || 400,
+    height: chartEl.value.clientHeight || 200,
+  })
+}
+
 function initChart() {
   if (!chartEl.value) return
   destroyChart()
   const w = chartEl.value.clientWidth  || 400
   const h = chartEl.value.clientHeight || 200
-  chart = createChart(chartEl.value, { ...chartOpts(), width: w, height: h })
-
-  ro = new ResizeObserver(() => {
-    if (chartEl.value) {
-      chart?.applyOptions({
-        width:  chartEl.value.clientWidth  || 400,
-        height: chartEl.value.clientHeight || 200,
-      })
-    }
+  chart = createChart(chartEl.value, {
+    ...chartOpts(),
+    ...interactionOpts(),
+    width:  w,
+    height: h,
   })
+
+  ro = new ResizeObserver(() => { if (!props.paused) applySize() })
   ro.observe(chartEl.value)
 }
 
@@ -333,6 +367,22 @@ watch(
 
 watch(() => tick.worldEventHistory.length, reapplyEventMarkers)
 watch(() => themeStore.revision, applyThemeToChart)
+
+// Sheet drag/animation lifecycle: gestures off while moving, then a single
+// canvas resize once the sheet has settled (the ResizeObserver callback is a
+// no-op while paused).
+watch(() => props.paused, (paused) => {
+  chart?.applyOptions(interactionOpts())
+  if (!paused) applySize()
+})
+
+// ── Accessible summary of what the canvas shows ──────────────────────────────
+const chartSummary = computed(() => {
+  if (!props.goods.length) return ''
+  const names = props.goods.map(g => g.name).join(', ')
+  const tab   = TABS.find(t => t.key === activeTab.value)?.label ?? activeTab.value
+  return `${tab} price history chart for ${names}.`
+})
 </script>
 
 <style scoped>
@@ -421,5 +471,14 @@ watch(() => themeStore.revision, applyThemeToChart)
   color: var(--text-dim);
   font-size: 0.85rem;
   min-height: 120px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 </style>
