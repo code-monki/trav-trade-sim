@@ -177,6 +177,74 @@ describe('LoginView — derivedStartWeek', () => {
   })
 })
 
+describe('LoginView — randomizable campaign defaults', () => {
+  async function openCreateTab(wrapper) {
+    await wrapper.findAll('.tab')[2].trigger('click')
+  }
+
+  it('pre-fills name, code, and character name on first visit to the create tab', async () => {
+    const wrapper = mountLogin()
+    await openCreateTab(wrapper)
+    const label     = wrapper.find('input[placeholder*="Spinward Marches"]')
+    const code      = wrapper.find('input[placeholder*="SPINWARD"]')
+    const character = wrapper.find('input[placeholder*="Referee"]')
+    expect(label.element.value).not.toBe('')
+    expect(character.element.value).not.toBe('')
+    // Generated code already satisfies the input transform
+    expect(code.element.value).toMatch(/^[A-Z-]+-\d{1,2}$/)
+  })
+
+  it('pre-fill leaves the static defaults (date, milieu, rules) alone', async () => {
+    const wrapper = mountLogin()
+    await openCreateTab(wrapper)
+    expect(wrapper.find('input[type="number"][min="0"][max="2500"]').element.value).toBe('1105')
+    expect(wrapper.find('input[type="number"][min="1"][max="365"]').element.value).toBe('1')
+  })
+
+  it('does not clobber a user-typed campaign name when revisiting the tab', async () => {
+    const wrapper = mountLogin()
+    await openCreateTab(wrapper)
+    const label = wrapper.find('input[placeholder*="Spinward Marches"]')
+    await label.setValue('My Handcrafted Campaign')
+    await wrapper.findAll('.tab')[0].trigger('click')
+    await openCreateTab(wrapper)
+    expect(wrapper.find('input[placeholder*="Spinward Marches"]').element.value)
+      .toBe('My Handcrafted Campaign')
+  })
+
+  it('🎲 Randomize fills every field except the PINs', async () => {
+    const wrapper = mountLogin()
+    await openCreateTab(wrapper)
+    const pins = wrapper.findAll('input[type="password"]')
+    await pins[0].setValue('1234')
+    await pins[1].setValue('1234')
+
+    await wrapper.find('.randomize-btn').trigger('click')
+
+    expect(wrapper.find('input[placeholder*="Spinward Marches"]').element.value).not.toBe('')
+    expect(wrapper.find('input[placeholder*="SPINWARD"]').element.value)
+      .toMatch(/^[A-Z-]+-\d{1,2}$/)
+    expect(wrapper.find('input[placeholder*="Referee"]').element.value).not.toBe('')
+    const day = Number(wrapper.find('input[type="number"][min="1"][max="365"]').element.value)
+    expect(day).toBeGreaterThanOrEqual(1)
+    expect(day).toBeLessThanOrEqual(365)
+    const year = Number(wrapper.find('input[type="number"][min="0"][max="2500"]').element.value)
+    expect(year).toBeGreaterThanOrEqual(0)
+    expect(year).toBeLessThanOrEqual(2500)
+    // PINs stay the referee's own choice
+    expect(pins[0].element.value).toBe('1234')
+    expect(pins[1].element.value).toBe('1234')
+  })
+
+  it('the randomize button never submits the form', async () => {
+    const { wrapper, pinia } = mountLoginWithPinia()
+    const auth = useAuthStore(pinia)
+    await openCreateTab(wrapper)
+    await wrapper.find('.randomize-btn').trigger('click')
+    expect(auth.createCampaign).not.toHaveBeenCalled()
+  })
+})
+
 describe('LoginView — PIN mismatch validation', () => {
   it('shows PINs do not match error when PINs differ on join submit', async () => {
     const wrapper = mountLogin()

@@ -88,6 +88,12 @@
 
       <!-- ── New Campaign ── -->
       <form v-else-if="mode === 'create'" @submit.prevent="doCreate" class="auth-form">
+        <div class="randomize-row">
+          <button type="button" class="randomize-btn" @click="randomizeCampaign"
+                  title="Fill the form with randomly generated values — the PIN stays yours to choose">
+            🎲 Randomize
+          </button>
+        </div>
         <div class="field-row">
           <label>Campaign Name</label>
           <input v-model="form.label" type="text" placeholder="e.g. Spinward Marches Run"
@@ -215,6 +221,10 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { MILIEUS, TRADE_RULESETS } from '../lib/traveller-data.js'
+import {
+  randomCampaignDefaults, randomCampaignLabel,
+  campaignCodeFrom, randomCharacterName,
+} from '../lib/campaign-generator.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
 import TutorialDialog     from '../components/TutorialDialog.vue'
 
@@ -253,6 +263,26 @@ function setMode(m) {
   form.pin           = ''
   form.pinConfirm    = ''
   form.recoveryCode  = ''
+  // First visit to the create tab: pre-fill the text fields so the form works
+  // with zero typing. Selects and dates already have static defaults; the 🎲
+  // button re-rolls everything. Never clobbers values the user has typed.
+  if (m === 'create' && !form.label && !form.code && !form.characterName) {
+    form.label         = randomCampaignLabel()
+    form.code          = campaignCodeFrom(form.label)
+    form.characterName = randomCharacterName()
+  }
+}
+
+function randomizeCampaign() {
+  const d = randomCampaignDefaults()
+  form.label         = d.label
+  form.code          = d.code
+  form.milieu        = d.milieu
+  form.tradeRules    = d.tradeRules
+  form.startYear     = d.startYear
+  form.startDay      = d.startDay
+  form.characterName = d.characterName
+  // PIN is deliberately untouched — the referee picks their own.
 }
 
 function pinsMatch() {
@@ -428,6 +458,23 @@ async function doReset() {
 }
 
 .auth-form { display: flex; flex-direction: column; gap: 0.85rem; }
+
+.randomize-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -0.35rem;
+}
+.randomize-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.randomize-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
 
 .field-row { display: flex; flex-direction: column; gap: 0.3rem; }
 
