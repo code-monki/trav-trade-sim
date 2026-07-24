@@ -337,6 +337,142 @@ Each PR was checked out into an isolated worktree and independently build+test+e
 
 ---
 
+## 2026-07-24 — Reusable event definitions; deploy orchestration; stale test env fixed
+
+### Rationale
+
+Started as a one-line bug report: a referee-created custom market event didn't
+show up on the Events tab without a manual refresh. The fix for that turned
+out to be trivial (`submitEvent()` created the row via the API but never
+touched the local Pinia cache backing the list — a one-line patch mirroring
+the existing `doExpireEvent()` pattern). But testing it live surfaced the
+real problem: the Events tab's "Active Events" list and the player-facing
+`EventsHistory.vue` are two *separate* caches, each scoped to a specific
+world/sector, so a freshly created event for an unvisited world was
+invisible regardless of refresh — you had to already be looking at the right
+world on the map.
+
+Talking through the actual UX gap led to a bigger, deliberate redesign: today,
+creating an event always means hand-typing a one-off row with free-text
+World Hex/Sector fields, and the 20 built-in "Quick Events" are just a
+client-side pre-fill, not a first-class concept. The decision was to decouple
+"what an event does" (description, modifiers, duration, trade good die,
+scope, severity) from "where/when it's applied" (world/sector/tick), and —
+since scope/severity now live on the definition — let the same definitions
+feed the deterministic per-tick auto-generator too, not just manual
+assignment. "All events are just events; any event can be manually assigned
+to a specific location" was the guiding statement for the whole redesign.
+
+### What changed
+
+**`event_definitions` table** (`d1/013_event_definitions.sql`, per-campaign,
+mirrors `ship_templates`' shape): description, scope, severity, buy/sell
+modifiers, duration, trade good die — no world/sector/tick fields, those stay
+assignment-time-only on `market_events`. The built-in Quick Events catalogue
+stays a static, hardcoded list in `RefereeView.vue` rather than being seeded
+into the table — it's merged into the same picker at the UI level, but stays
+fixed/uneditable, since seeding it would mean managing per-campaign seed
+logic for no real benefit.
+
+**`market_events.source`** (`d1/012_market_event_source.sql`, `'auto'` /
+`'manual'`, default `'auto'`): needed first, since there was previously no
+way to tell a referee-created event apart from an auto-generated one — both
+go through the same table via the same insert path. The Referee's new events
+grid filters to `source: 'manual'` only; the "show every event" alternative
+was rejected because it would also surface auto-generated noise and hit the
+existing 200-row API cap sooner in a long campaign.
+
+**Custom definitions join the auto-generator's pool**
+(`maybeGenerateEvent` in `src/lib/market-events.js`): now takes an optional
+`customDefinitions` array (default `[]`, so every existing call site is
+unaffected) and merges it into the same severity-tiered weighted pool as the
+built-in `MARKET_EVENTS` table, normalized to the same shape. Custom
+definitions don't get trade-code relevance weighting (no `affectsCodes`
+field) — a deliberate simplification to avoid a trade-code multi-select in
+the definition form. `tick.js` fetches the campaign's definitions once per
+session/backfill run (not per tick) to keep the seeded-RNG generation pure
+and fast. **Accepted tradeoff, written down so it isn't rediscovered as a
+surprise later:** editing or deleting a definition after some ticks have
+rolled against it can change what a *fresh recompute* would produce for that
+historical tick — but the row already written to `market_events` never
+changes, since `maybeInsertEvent`'s duplicate-check means a given tick is
+only ever rolled once for real.
+
+**`RefereeView.vue` Events tab, rebuilt in place:** the old single "Active
+Events" card list is now a full grid of manual events (`tick.allEvents`)
+with Sector/World filters sourced from the loaded rows themselves (not the
+full Traveller universe, since that keeps the filter option lists small and
+needs no extra network calls). "Create Event" became "Assign Event to
+World": pick a definition (custom + built-in, merged into one dropdown) to
+fill the form, then Sector/World dropdowns instead of free text. A third
+new "Manage Event Definitions" panel does CRUD on the reusable library.
+The Sector/World dropdowns are deliberately **not** built on the existing
+`WorldPicker.vue`/`map.selectedSectorName` pattern used by `MapView.vue` —
+that shared state is a single global selection, and the Events tab now
+needs two independent pickers (grid filter, assign form) at once, which
+would clobber each other and the player's own map browsing state if they
+shared it. Solved with one small additive, non-mutating `map` store helper
+(`fetchWorldsForSector`) instead of touching the shared component.
+
+**Deploy orchestration (`Makefile`):** applying the two new migrations
+surfaced that this project has no backend CI at all —
+`.github/workflows/deploy.yml` only builds/deploys the frontend to GitHub
+Pages; the Worker has always been deployed by hand. That's exactly how a
+step gets missed: migrations were applied to remote D1 directly via
+`wrangler d1 execute`, but the Worker itself — carrying the updated
+`EXPECTED_MIGRATIONS` list the schema-drift check compares against — never
+got redeployed, so the live app briefly showed "database schema is out of
+date" even though the database was actually fine. New `worker-install`,
+`worker-dev`, `migrate-status`, `migrate`, and `worker-deploy` targets, plus
+a `deploy` target that chains `test` → `migrate` → `worker-deploy` so
+shipping a backend change is one command. `migrate`/`migrate-status` diff
+`d1/*.sql` against the remote `schema_migrations` ledger rather than
+blindly re-running every file, since several migrations (e.g. `012`'s
+`ALTER TABLE ADD COLUMN`) aren't idempotent. Recipes use portable
+`\`-continued shell rather than `.ONESHELL:`, since macOS ships GNU Make
+3.81 (frozen pre-GPLv3) which predates that directive entirely (3.82+) —
+discovered when the first draft failed with a cryptic `/bin/sh: syntax
+error: unexpected end of file` because each recipe line was silently
+running in its own disconnected shell.
+
+**Six pre-existing test failures fixed as a side effect of building
+`deploy`'s test gate:** `2026-07-23`'s entry above already noted 6 failures
+in `api.test.js`/`health-check.test.js` as "a local-env issue, not a
+regression" and moved on. Root cause, finally chased down: `src/lib/api.js`
+short-circuits with an `errorKind: 'config'` guard when `VITE_API_URL` is
+unset, before ever reaching the mocked `fetch` those tests stub — and no
+`.env`/`.env.test` file existed to set it for Vitest's `test` mode (only
+`.env.production`, loaded only in `production` mode, and `.env.example`,
+which is itself stale — it still documents the old Supabase setup this app
+migrated away from). Added `.env.test` with a placeholder `VITE_API_URL`;
+the actual value is never hit over the network since every affected test
+stubs `fetch` regardless.
+
+### Verified
+
+`npx vitest run` — 464/464 passing (up from 456; the 8 new tests cover the
+live-update fix, the events grid/filters/pickers, and the definitions CRUD
+round-trip in `RefereeView.test.js`, plus `maybeGenerateEvent`'s custom-pool
+merge in `market-events.test.js`), including the 6 that were failing at the
+start of this session with no relation to any of today's other changes.
+`make deploy` run end-to-end against the live database: `test` passes,
+`migrate` correctly reports all 13 migrations already applied (skip, not
+re-run), `worker-deploy` redeploys and confirms `/api/health` reports
+`schema_ok: true`. Manually verified in the live app: creating a custom
+definition, assigning it to a world via the new Sector/World dropdowns, and
+seeing it appear in the grid immediately; expiring it flips its status in
+place rather than removing the row.
+
+### Known gap, not addressed this session
+
+`AGENTS.md` and `.env.example` both still describe the pre-migration
+Supabase architecture (this app now runs on Cloudflare D1/Workers, per the
+Tech Stack table in `README.md` and `src/lib/api.js`'s own "replaces
+@supabase/supabase-js" comment) — stale documentation debt, noticed while
+tracking down the `.env.test` issue above, but out of scope for this pass.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

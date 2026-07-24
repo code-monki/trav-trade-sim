@@ -49,25 +49,32 @@ Two terminals are required — one for the Worker API, one for the Vite dev serv
 
 ```bash
 # Terminal 1 — API (uses the remote D1 database)
-cd worker
-npx wrangler dev --remote
+make worker-install   # first time only
+make worker-dev
 
 # Terminal 2 — frontend
-npm install
-npm run dev
+make install          # first time only
+make dev
 ```
 
 The frontend `.env` file points `VITE_API_URL` at `http://localhost:8787` by default.
 
 ### Deploy
 
-```bash
-# Deploy Worker
-cd worker && npx wrangler deploy
+`.github/workflows/deploy.yml` builds and deploys the **frontend** to GitHub
+Pages automatically on push to `master`. The **Worker backend has no CI** —
+`make deploy` is the one command that should ever be needed to ship a
+change touching `worker/` or `d1/`:
 
-# Deploy frontend (or push to master — GitHub Actions handles it)
-npm run build
+```bash
+make deploy   # test -> apply any pending d1/*.sql migrations -> deploy Worker -> verify /api/health
 ```
+
+Or run the steps individually — `make migrate-status` (read-only), `make
+migrate`, `make worker-deploy`. `migrate`/`migrate-status` diff `d1/*.sql`
+against the remote `schema_migrations` ledger rather than blindly re-running
+every file, since several migrations aren't idempotent. Run `make help` for
+the full target list.
 
 Add `VITE_API_URL=https://<your-worker>.workers.dev` as a GitHub Actions repository secret before deploying the frontend.
 
@@ -105,4 +112,6 @@ d1/
   009_org_financials.sql # dues, disbursement, organization_ownership (Corp/Fleet Phase 2)
   010_mgt2022_trade_rules.sql # MgT2022 ruleset (Basic Passage, Freight, traffic_snapshots)
   011_schema_ledger.sql  # schema_migrations ledger — powers GET /api/health drift detection
+  012_market_event_source.sql # market_events.source ('auto'/'manual')
+  013_event_definitions.sql   # event_definitions table (reusable event templates)
 ```
