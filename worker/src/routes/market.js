@@ -81,6 +81,17 @@ app.patch('/event/:eventId/expire', requireReferee, async (c) => {
   return c.json({ data: { ok: true } })
 })
 
+// ── DELETE /api/campaigns/event/:eventId (referee only) ───────────────────────
+// Safe as a plain delete regardless of history — an assigned event's fields
+// are a one-time copy at creation (no lasting FK from market_events back to
+// event_definitions), and price snapshots bake an event's effect into a
+// number at generation time rather than holding a live reference to the row.
+app.delete('/event/:eventId', requireReferee, async (c) => {
+  const { eventId } = c.req.param()
+  await c.env.DB.prepare(`DELETE FROM market_events WHERE id = ?`).bind(eventId).run()
+  return c.json({ data: { ok: true } })
+})
+
 // ── GET /api/campaigns/:id/event-definitions ──────────────────────────────────
 // requireAuth (not requireReferee): the deterministic per-tick auto-generator
 // (maybeGenerateEvent) needs the same definitions pool regardless of which

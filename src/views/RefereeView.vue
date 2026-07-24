@@ -868,238 +868,96 @@
     <!-- EVENTS TAB                                                           -->
     <!-- ════════════════════════════════════════════════════════════════════ -->
     <section v-if="activeTab === 'events'" class="tab-pane">
-      <div class="events-layout">
+      <div class="events-actions">
+        <button class="btn-primary" @click="openAssignDialog()">+ Assign Event</button>
+        <button class="btn-secondary" @click="showPresetsDialog = true">View Built-in Presets</button>
+      </div>
+      <p v-if="gridError" class="form-error">{{ gridError }}</p>
 
-        <!-- Events grid -->
-        <div class="events-col">
-          <h2>Events</h2>
-          <div class="grid-filters">
-            <div class="form-row">
-              <label>Sector</label>
-              <select v-model="gridSectorFilter">
-                <option value="">All sectors</option>
-                <option v-for="s in gridSectorOptions" :key="s" :value="s">{{ s }}</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>World</label>
-              <select v-model="gridWorldFilter">
-                <option value="">All worlds</option>
-                <option v-for="w in gridWorldOptions" :key="w.hex" :value="w.hex">{{ w.label }}</option>
-              </select>
-            </div>
-          </div>
-          <div v-if="!filteredGridEvents.length" class="placeholder">No events yet</div>
-          <div v-else class="table-scroll">
-            <table class="skills-table events-grid">
-              <thead>
-                <tr>
-                  <th>Description</th><th>Scope</th><th>Sector</th><th>World</th>
-                  <th>Good Die</th><th>Buy %</th><th>Sell %</th><th>Tick</th>
-                  <th>Expires</th><th>Status</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="ev in filteredGridEvents" :key="ev.id">
-                  <td><span class="sev-dot" :class="ev.severity"></span>{{ ev.description }}</td>
-                  <td>{{ ev.scope === 'local' ? 'Local' : 'Subsector' }}</td>
-                  <td>{{ ev.sector }}</td>
-                  <td>{{ ev.scope === 'local' ? worldLabel(ev.sector, ev.world_hex) : '—' }}</td>
-                  <td>{{ ev.trade_good_die || 'All' }}</td>
-                  <td>{{ ev.buy_modifier_pct != null ? (ev.buy_modifier_pct > 0 ? '+' : '') + ev.buy_modifier_pct + '%' : '—' }}</td>
-                  <td>{{ ev.sell_modifier_pct != null ? (ev.sell_modifier_pct > 0 ? '+' : '') + ev.sell_modifier_pct + '%' : '—' }}</td>
-                  <td>{{ ev.tick }}</td>
-                  <td>{{ ev.expires_tick ?? '—' }}</td>
-                  <td>
-                    <span :class="isEventActive(ev) ? 'status-active' : 'status-expired'">
-                      {{ isEventActive(ev) ? 'Active' : 'Expired' }}
-                    </span>
-                  </td>
-                  <td>
-                    <button v-if="isEventActive(ev)" class="btn-danger btn-xs"
-                            @click="doExpireEvent(ev.id)">Expire</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      <h2>Events</h2>
+      <div class="grid-filters">
+        <div class="form-row">
+          <label>Sector</label>
+          <select v-model="gridSectorFilter">
+            <option value="">All sectors</option>
+            <option v-for="s in gridSectorOptions" :key="s" :value="s">{{ s }}</option>
+          </select>
         </div>
-
-        <!-- Assign Event to World -->
-        <div class="events-col">
-          <h2>Assign Event to World</h2>
-          <form class="detail-form" @submit.prevent="submitEvent">
-            <div class="form-row">
-              <label>Event Definition</label>
-              <select v-model="selectedDefinitionKey" @change="applyDefinitionSelection">
-                <option value="">— pick a definition —</option>
-                <optgroup label="Custom" v-if="referee.eventDefinitions.length">
-                  <option v-for="d in referee.eventDefinitions" :key="'custom:' + d.id" :value="'custom:' + d.id">
-                    {{ d.description }}
-                  </option>
-                </optgroup>
-                <optgroup label="Built-in">
-                  <option v-for="(e, i) in EVENT_CATALOGUE" :key="'builtin:' + i" :value="'builtin:' + i">
-                    {{ e.description }}
-                  </option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>Scope</label>
-              <select v-model="newEvent.scope">
-                <option value="local">Local (single world)</option>
-                <option value="subsector">Subsector-wide</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>Sector</label>
-              <input v-model="sectorFilterQuery" placeholder="Filter sectors…" />
-              <select v-model="newEvent.sector" @change="onAssignSectorChange">
-                <option value="">— select a sector —</option>
-                <option v-for="s in filteredAssignSectors" :key="s.name" :value="s.name">{{ s.name }}</option>
-              </select>
-            </div>
-            <div v-if="newEvent.scope === 'local'" class="form-row">
-              <label>World Hex</label>
-              <select v-if="eventFormWorlds.length" v-model="newEvent.worldHex">
-                <option value="">— select world —</option>
-                <option v-for="w in eventFormWorlds" :key="w.Hex" :value="w.Hex">
-                  {{ w.Hex }} — {{ w.Name || '(unnamed)' }}
-                </option>
-              </select>
-              <input v-else v-model="newEvent.worldHex" placeholder="e.g. 1910" />
-              <span v-if="eventFormWorldsLoading" class="hint">Loading worlds…</span>
-              <span v-if="eventFormWorldsError" class="hint">{{ eventFormWorldsError }} — enter the hex manually.</span>
-            </div>
-            <div class="form-row">
-              <label>Description <span class="req">*</span></label>
-              <input v-model="newEvent.description" required placeholder="What's happening?" />
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>Buy modifier %</label>
-                <input v-model.number="newEvent.buyModifierPct" type="number"
-                       placeholder="+20 or -15" />
-              </div>
-              <div>
-                <label>Sell modifier %</label>
-                <input v-model.number="newEvent.sellModifierPct" type="number"
-                       placeholder="+20 or -15" />
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>Duration (ticks)</label>
-                <input v-model.number="newEvent.durationTicks" type="number" min="1" />
-              </div>
-            </div>
-            <div class="form-row">
-              <label>Trade Good Die</label>
-              <input v-model="newEvent.tradeGoodDie" placeholder="e.g. 36 — leave blank for all" />
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn-primary"
-                      :disabled="!newEvent.description.trim() || !newEvent.sector">Assign Event</button>
-            </div>
-            <p v-if="eventError" class="form-error">{{ eventError }}</p>
-            <p v-if="eventSuccess" class="form-success">Event assigned.</p>
-          </form>
+        <div class="form-row">
+          <label>World</label>
+          <select v-model="gridWorldFilter">
+            <option value="">All worlds</option>
+            <option v-for="w in gridWorldOptions" :key="w.hex" :value="w.hex">{{ w.label }}</option>
+          </select>
         </div>
-
-        <!-- Manage Event Definitions -->
-        <div class="events-col">
-          <h2>Manage Event Definitions</h2>
-          <form class="detail-form" @submit.prevent="submitDefinition">
-            <div class="form-row">
-              <label>Description <span class="req">*</span></label>
-              <input v-model="defForm.description" required placeholder="What's happening?" />
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>Scope</label>
-                <select v-model="defForm.scope">
-                  <option value="local">Local (single world)</option>
-                  <option value="subsector">Subsector-wide</option>
-                </select>
-              </div>
-              <div>
-                <label>Severity</label>
-                <select v-model="defForm.severity">
-                  <option value="minor">Minor</option>
-                  <option value="major">Major</option>
-                  <option value="crisis">Crisis</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>Buy modifier %</label>
-                <input v-model.number="defForm.buyModifierPct" type="number" placeholder="+20 or -15" />
-              </div>
-              <div>
-                <label>Sell modifier %</label>
-                <input v-model.number="defForm.sellModifierPct" type="number" placeholder="+20 or -15" />
-              </div>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label>Duration (ticks)</label>
-                <input v-model.number="defForm.durationTicks" type="number" min="1" />
-              </div>
-              <div>
-                <label>Trade Good Die</label>
-                <input v-model="defForm.tradeGoodDie" placeholder="Leave blank for all" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn-primary" :disabled="!defForm.description.trim()">
-                {{ editingDefinitionId ? 'Save Definition' : 'Add Definition' }}
-              </button>
-              <button v-if="editingDefinitionId" type="button" class="btn-secondary" @click="resetDefForm">
-                Cancel
-              </button>
-            </div>
-            <p v-if="defError" class="form-error">{{ defError }}</p>
-            <p v-if="defSuccess" class="form-success">Definition saved.</p>
-          </form>
-
-          <div v-if="!referee.eventDefinitions.length" class="placeholder sm">No custom definitions yet</div>
-          <div v-else class="event-list">
-            <div v-for="d in referee.eventDefinitions" :key="d.id" class="event-card">
-              <div class="event-card-body">
-                <span class="event-desc">{{ d.description }}</span>
-                <span class="event-meta">
-                  {{ d.scope === 'local' ? 'Local' : 'Subsector' }} · {{ d.severity }}
-                  <template v-if="d.buy_modifier_pct != null">· Buy {{ d.buy_modifier_pct > 0 ? '+' : '' }}{{ d.buy_modifier_pct }}%</template>
-                  <template v-if="d.sell_modifier_pct != null">· Sell {{ d.sell_modifier_pct > 0 ? '+' : '' }}{{ d.sell_modifier_pct }}%</template>
-                  · {{ d.duration_ticks }} ticks
+      </div>
+      <div v-if="!filteredGridEvents.length" class="placeholder">No events yet</div>
+      <div v-else class="table-scroll">
+        <table class="skills-table events-grid">
+          <thead>
+            <tr>
+              <th>Description</th><th>Scope</th><th>Sector</th><th>World</th>
+              <th>Good Die</th><th>Buy %</th><th>Sell %</th><th>Tick</th>
+              <th>Expires</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ev in filteredGridEvents" :key="ev.id">
+              <td><span class="sev-dot" :class="ev.severity"></span>{{ ev.description }}</td>
+              <td>{{ ev.scope === 'local' ? 'Local' : 'Subsector' }}</td>
+              <td>{{ ev.sector }}</td>
+              <td>{{ ev.scope === 'local' ? worldLabel(ev.sector, ev.world_hex) : '—' }}</td>
+              <td>{{ ev.trade_good_die || 'All' }}</td>
+              <td>{{ ev.buy_modifier_pct != null ? (ev.buy_modifier_pct > 0 ? '+' : '') + ev.buy_modifier_pct + '%' : '—' }}</td>
+              <td>{{ ev.sell_modifier_pct != null ? (ev.sell_modifier_pct > 0 ? '+' : '') + ev.sell_modifier_pct + '%' : '—' }}</td>
+              <td>{{ ev.tick }}</td>
+              <td>{{ ev.expires_tick ?? '—' }}</td>
+              <td>
+                <span :class="isEventActive(ev) ? 'status-active' : 'status-expired'">
+                  {{ isEventActive(ev) ? 'Active' : 'Expired' }}
                 </span>
-              </div>
-              <div class="event-card-actions">
-                <button class="btn-secondary btn-xs" @click="startEditDefinition(d)">Edit</button>
-                <button class="btn-danger btn-xs" @click="doDeleteDefinition(d.id)">Delete</button>
-              </div>
-            </div>
+              </td>
+              <td class="row-actions">
+                <button v-if="isEventActive(ev)" class="btn-secondary btn-xs"
+                        @click="doExpireEvent(ev.id)">Expire</button>
+                <button class="btn-danger btn-xs" @click="doDeleteEvent(ev.id)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Event Definitions</h2>
+      <div class="events-actions">
+        <button class="btn-primary" @click="openDefinitionDialog()">+ New Definition</button>
+      </div>
+      <div v-if="!referee.eventDefinitions.length" class="placeholder sm">No custom definitions yet</div>
+      <div v-else class="event-list">
+        <div v-for="d in referee.eventDefinitions" :key="d.id" class="event-card">
+          <div class="event-card-body">
+            <span class="event-desc">{{ d.description }}</span>
+            <span class="event-meta">
+              {{ d.scope === 'local' ? 'Local' : 'Subsector' }} · {{ d.severity }}
+              <template v-if="d.buy_modifier_pct != null">· Buy {{ d.buy_modifier_pct > 0 ? '+' : '' }}{{ d.buy_modifier_pct }}%</template>
+              <template v-if="d.sell_modifier_pct != null">· Sell {{ d.sell_modifier_pct > 0 ? '+' : '' }}{{ d.sell_modifier_pct }}%</template>
+              · {{ d.duration_ticks }} ticks
+            </span>
           </div>
-
-          <h3>Built-in Presets</h3>
-          <p class="cat-hint">Reference only — pick one above to assign it to a world.</p>
-          <div class="catalogue-list">
-            <div v-for="e in EVENT_CATALOGUE" :key="e.description" class="cat-entry">
-              <span class="cat-desc">{{ e.description }}</span>
-              <span class="cat-meta">
-                <span v-if="e.buyModifierPct != null" :class="e.buyModifierPct > 0 ? 'mod-up' : 'mod-down'">
-                  Buy {{ e.buyModifierPct > 0 ? '+' : '' }}{{ e.buyModifierPct }}%
-                </span>
-                <span v-if="e.sellModifierPct != null" :class="e.sellModifierPct > 0 ? 'mod-up' : 'mod-down'">
-                  Sell {{ e.sellModifierPct > 0 ? '+' : '' }}{{ e.sellModifierPct }}%
-                </span>
-              </span>
-            </div>
+          <div class="event-card-actions">
+            <button class="btn-secondary btn-xs" @click="openAssignDialog('custom:' + d.id)">Assign</button>
+            <button class="btn-secondary btn-xs" @click="openDefinitionDialog(d)">Edit</button>
+            <button class="btn-danger btn-xs" @click="doDeleteDefinition(d.id)">Delete</button>
           </div>
         </div>
       </div>
+
+      <AssignEventDialog v-if="showAssignDialog"
+        :initial-definition-key="assignDialogDefKey"
+        @close="showAssignDialog = false" />
+      <EventDefinitionDialog v-if="showDefinitionDialog"
+        :editing="editingDefinition"
+        @close="showDefinitionDialog = false" />
+      <EventPresetsDialog v-if="showPresetsDialog" @close="showPresetsDialog = false" />
     </section>
 
     <!-- ════════════════════════════════════════════════════════════════════ -->
@@ -1197,6 +1055,9 @@ import { useRefereeStore } from '../stores/referee.js'
 import { useMapStore } from '../stores/map.js'
 import { api } from '../lib/api.js'
 import RecoveryCodeDialog from '../components/RecoveryCodeDialog.vue'
+import AssignEventDialog from '../components/AssignEventDialog.vue'
+import EventDefinitionDialog from '../components/EventDefinitionDialog.vue'
+import EventPresetsDialog from '../components/EventPresetsDialog.vue'
 import { INCOME_TYPES, EXPENSE_TYPES } from '../lib/reports.js'
 
 const router = useRouter()
@@ -2021,40 +1882,25 @@ async function toggleOrgFleetReport(orgId) {
   }
 }
 
-// ── Events tab state ─────────────────────────────────────────────────────────
+// ── Events tab: dialog visibility ───────────────────────────────────────────
 
-const eventError   = ref('')
-const eventSuccess = ref(false)
+const gridError = ref('')
 
-const newEvent = ref({
-  scope: 'local', worldHex: '', sector: '', description: '',
-  buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
-})
+const showAssignDialog    = ref(false)
+const assignDialogDefKey  = ref('')
+const showDefinitionDialog = ref(false)
+const editingDefinition   = ref(null)
+const showPresetsDialog   = ref(false)
 
-// Pre-built M.U.L.E.-style events. Referee selects one to pre-fill the form,
-// then sets the world/scope/duration before creating.
-const EVENT_CATALOGUE = [
-  { description: 'Pirate raid disrupts supply lines',       buyModifierPct:  30, sellModifierPct: null, durationTicks: 4 },
-  { description: 'Trade embargo imposed',                   buyModifierPct:  20, sellModifierPct: -20,  durationTicks: 8 },
-  { description: 'Bumper harvest floods the market',        buyModifierPct: -20, sellModifierPct: -30,  durationTicks: 4 },
-  { description: 'Drought: food & consumables scarce',      buyModifierPct:  25, sellModifierPct:  25,  durationTicks: 6 },
-  { description: 'Tech festival drives demand',             buyModifierPct:  15, sellModifierPct:  20,  durationTicks: 3 },
-  { description: 'Port workers strike',                     buyModifierPct:  10, sellModifierPct: -10,  durationTicks: 3 },
-  { description: 'Imperial subsidy lowers prices',          buyModifierPct: -15, sellModifierPct: null, durationTicks: 4 },
-  { description: 'Megacorp buyout: prices spike',           buyModifierPct:  20, sellModifierPct:  20,  durationTicks: 6 },
-  { description: 'Military contract boosts demand',         buyModifierPct:  20, sellModifierPct:  25,  durationTicks: 4 },
-  { description: 'Misjump quarantine: traffic halted',      buyModifierPct:  15, sellModifierPct: -25,  durationTicks: 5 },
-  { description: 'New refinery opens: fuel costs drop',     buyModifierPct: -10, sellModifierPct: null, durationTicks: 8 },
-  { description: 'Scout survey finds rich lode',            buyModifierPct: -20, sellModifierPct:  15,  durationTicks: 6 },
-  { description: 'Political unrest disrupts distribution',  buyModifierPct:  15, sellModifierPct: -15,  durationTicks: 4 },
-  { description: 'Festival of the Traveller: demand surge', buyModifierPct:  10, sellModifierPct:  15,  durationTicks: 2 },
-  { description: 'Counterfeit goods scandal',               buyModifierPct: null, sellModifierPct: -20,  durationTicks: 4 },
-  { description: 'Pandemic scare: medical goods scarce',    buyModifierPct:  30, sellModifierPct:  30,  durationTicks: 6 },
-  { description: 'Surplus clearance: bulk discount',        buyModifierPct: -25, sellModifierPct: -15,  durationTicks: 3 },
-  { description: 'Noble house patronage: luxury demand up', buyModifierPct:  15, sellModifierPct:  25,  durationTicks: 4 },
-  { description: 'Wormhole route opens: competition rises', buyModifierPct: -10, sellModifierPct: -10,  durationTicks: 12 },
-  { description: 'Natural disaster: relief goods needed',   buyModifierPct:  35, sellModifierPct:  35,  durationTicks: 6 },
-]
+function openAssignDialog(defKey = '') {
+  assignDialogDefKey.value = defKey
+  showAssignDialog.value   = true
+}
+
+function openDefinitionDialog(def = null) {
+  editingDefinition.value   = def
+  showDefinitionDialog.value = true
+}
 
 // ── Events grid ───────────────────────────────────────────────────────────────
 
@@ -2138,152 +1984,21 @@ async function doExpireEvent(eventId) {
       )
     }
   } catch (e) {
-    eventError.value = e.message
+    gridError.value = e.message
   }
 }
 
-// ── Assign Event to World ────────────────────────────────────────────────────
-
-const selectedDefinitionKey = ref('')
-const sectorFilterQuery     = ref('')
-const eventFormWorlds       = ref([])
-const eventFormWorldsLoading = ref(false)
-const eventFormWorldsError   = ref('')
-
-const filteredAssignSectors = computed(() => {
-  const q = sectorFilterQuery.value.trim().toLowerCase()
-  if (!q) return map.sectors
-  return map.sectors.filter(s => s.name.toLowerCase().includes(q))
-})
-
-function applyDefinitionSelection() {
-  if (!selectedDefinitionKey.value) return
-  const [kind, key] = selectedDefinitionKey.value.split(':')
-
-  if (kind === 'custom') {
-    const def = referee.eventDefinitions.find(d => d.id === key)
-    if (!def) return
-    newEvent.value = {
-      ...newEvent.value,
-      description:     def.description,
-      scope:            def.scope,
-      buyModifierPct:   def.buy_modifier_pct,
-      sellModifierPct:  def.sell_modifier_pct,
-      durationTicks:    def.duration_ticks,
-      tradeGoodDie:     def.trade_good_die || '',
-    }
-  } else if (kind === 'builtin') {
-    const def = EVENT_CATALOGUE[Number(key)]
-    if (!def) return
-    newEvent.value = {
-      ...newEvent.value,
-      description:     def.description,
-      scope:           'local',
-      buyModifierPct:  def.buyModifierPct  ?? null,
-      sellModifierPct: def.sellModifierPct ?? null,
-      durationTicks:   def.durationTicks   ?? 4,
-    }
-  }
-}
-
-async function onAssignSectorChange() {
-  newEvent.value.worldHex     = ''
-  eventFormWorlds.value       = []
-  eventFormWorldsError.value  = ''
-  if (!newEvent.value.sector) return
-
-  eventFormWorldsLoading.value = true
+async function doDeleteEvent(eventId) {
   try {
-    eventFormWorlds.value = await map.fetchWorldsForSector(newEvent.value.sector)
+    await referee.deleteEvent(eventId)
+    if (tick.activeEvents) {
+      tick.activeEvents = tick.activeEvents.filter(e => e.id !== eventId)
+    }
+    if (tick.allEvents) {
+      tick.allEvents = tick.allEvents.filter(e => e.id !== eventId)
+    }
   } catch (e) {
-    eventFormWorldsError.value = `Couldn't load worlds for this sector (${e.message})`
-  } finally {
-    eventFormWorldsLoading.value = false
-  }
-}
-
-async function submitEvent() {
-  eventError.value   = ''
-  eventSuccess.value = false
-  try {
-    const created = await referee.createEvent(auth.campaign.id, {
-      ...newEvent.value,
-      currentTick: tick.currentTick,
-    })
-    // Add to both local lists immediately (mirrors doExpireEvent)
-    if (tick.activeEvents && created) {
-      tick.activeEvents = [created, ...tick.activeEvents]
-    }
-    if (tick.allEvents && created) {
-      tick.allEvents = [created, ...tick.allEvents]
-    }
-    eventSuccess.value = true
-    newEvent.value = {
-      scope: 'local', worldHex: '', sector: '', description: '',
-      buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
-    }
-    selectedDefinitionKey.value = ''
-    eventFormWorlds.value       = []
-    setTimeout(() => { eventSuccess.value = false }, 3000)
-  } catch (e) {
-    eventError.value = e.message
-  }
-}
-
-// ── Manage Event Definitions ─────────────────────────────────────────────────
-
-const defError   = ref('')
-const defSuccess = ref(false)
-const editingDefinitionId = ref(null)
-
-const defForm = ref({
-  description: '', scope: 'local', severity: 'minor',
-  buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
-})
-
-function resetDefForm() {
-  defForm.value = {
-    description: '', scope: 'local', severity: 'minor',
-    buyModifierPct: null, sellModifierPct: null, durationTicks: 4, tradeGoodDie: '',
-  }
-  editingDefinitionId.value = null
-}
-
-function startEditDefinition(d) {
-  editingDefinitionId.value = d.id
-  defForm.value = {
-    description:     d.description,
-    scope:            d.scope,
-    severity:         d.severity,
-    buyModifierPct:   d.buy_modifier_pct,
-    sellModifierPct:  d.sell_modifier_pct,
-    durationTicks:    d.duration_ticks,
-    tradeGoodDie:     d.trade_good_die || '',
-  }
-}
-
-async function submitDefinition() {
-  defError.value   = ''
-  defSuccess.value = false
-  try {
-    if (editingDefinitionId.value) {
-      await referee.updateEventDefinition(editingDefinitionId.value, {
-        description:       defForm.value.description.trim(),
-        scope:              defForm.value.scope,
-        severity:           defForm.value.severity,
-        buy_modifier_pct:   defForm.value.buyModifierPct  ?? null,
-        sell_modifier_pct:  defForm.value.sellModifierPct ?? null,
-        duration_ticks:     defForm.value.durationTicks   ?? 4,
-        trade_good_die:     defForm.value.tradeGoodDie    || null,
-      })
-    } else {
-      await referee.createEventDefinition(auth.campaign.id, defForm.value)
-    }
-    defSuccess.value = true
-    resetDefForm()
-    setTimeout(() => { defSuccess.value = false }, 3000)
-  } catch (e) {
-    defError.value = e.message
+    gridError.value = e.message
   }
 }
 
@@ -2291,7 +2006,7 @@ async function doDeleteDefinition(defId) {
   try {
     await referee.deleteEventDefinition(defId)
   } catch (e) {
-    defError.value = e.message
+    gridError.value = e.message
   }
 }
 
@@ -2705,15 +2420,9 @@ onMounted(async () => {
 
 /* ── Events tab ──────────────────────────────────────────────────────────── */
 
-.events-layout {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 1.5rem;
-  align-items: start;
-}
+.events-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 
-.events-col h2 { font-size: 0.95rem; margin: 0 0 0.75rem; }
-.events-col h3 { font-size: 0.85rem; margin: 1.25rem 0 0.25rem; }
+.row-actions { display: flex; gap: 0.4rem; }
 
 .event-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .event-card {
@@ -2756,33 +2465,6 @@ onMounted(async () => {
 
 .status-active  { color: var(--accent); font-weight: 600; font-size: 0.78rem; }
 .status-expired { color: var(--text-dim); font-size: 0.78rem; }
-
-/* ── Events catalogue ────────────────────────────────────────────────────── */
-.cat-hint { font-size: 0.75rem; color: var(--text-dim); margin: 0 0 0.5rem; }
-
-.catalogue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  overflow-y: auto;
-  max-height: 420px;
-}
-
-.cat-entry {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  background: var(--bg-item);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.35rem 0.65rem;
-}
-
-.cat-desc { font-size: 0.8rem; color: var(--text); flex: 1; }
-.cat-meta { display: flex; gap: 0.4rem; flex-shrink: 0; font-size: 0.72rem; font-family: monospace; }
-.mod-up   { color: var(--red, #e05); }
-.mod-down { color: var(--accent); }
 
 /* ── Campaign tab ────────────────────────────────────────────────────────── */
 

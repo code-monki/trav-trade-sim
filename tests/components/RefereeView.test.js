@@ -3,6 +3,9 @@ import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import RefereeView from '../../src/views/RefereeView.vue'
+import AssignEventDialog from '../../src/components/AssignEventDialog.vue'
+import EventDefinitionDialog from '../../src/components/EventDefinitionDialog.vue'
+import EventPresetsDialog from '../../src/components/EventPresetsDialog.vue'
 
 function makeRouter() {
   return createRouter({
@@ -14,7 +17,7 @@ function makeRouter() {
   })
 }
 
-function mountReferee({ tickState = {}, refereeState = {}, mapState = {} } = {}) {
+function mountReferee({ tickState = {}, refereeState = {} } = {}) {
   return mount(RefereeView, {
     shallow: true,
     global: {
@@ -27,7 +30,7 @@ function mountReferee({ tickState = {}, refereeState = {}, mapState = {} } = {})
             },
             tick: { currentTick: 5, activeEvents: [], allEvents: [], ...tickState },
             referee: { eventDefinitions: [], ...refereeState },
-            map: { sectors: [], ...mapState },
+            map: { sectors: [] },
           },
           stubActions: true,
           createSpy: vi.fn,
@@ -49,38 +52,23 @@ describe('RefereeView — Events grid', () => {
     expect(wrapper.find('.placeholder').text()).toBe('No events yet')
   })
 
-  it('adds a newly assigned event to the grid immediately, without a manual refresh', async () => {
-    const wrapper = mountReferee()
-    await openEventsTab(wrapper)
-    expect(wrapper.findAll('.events-grid tbody tr')).toHaveLength(0)
-
-    wrapper.vm.referee.createEvent.mockResolvedValue({
-      id: 'ev1',
-      description:       'Pirate raid disrupts supply lines',
-      scope:              'local',
-      sector:             'Spinward Marches',
-      world_hex:          '0101',
-      trade_good_die:     null,
-      buy_modifier_pct:   30,
-      sell_modifier_pct:  null,
-      tick:               5,
-      expires_tick:       9,
-      severity:           'minor',
+  it('renders assigned events with Expire (active) and Delete actions', async () => {
+    const wrapper = mountReferee({
+      tickState: {
+        allEvents: [{
+          id: 'ev1', description: 'Trade embargo imposed', scope: 'local',
+          sector: 'Spinward Marches', world_hex: '0101', trade_good_die: null,
+          buy_modifier_pct: 20, sell_modifier_pct: -20, tick: 1, expires_tick: 9,
+          severity: 'minor',
+        }],
+      },
     })
+    await openEventsTab(wrapper)
 
-    const assignForm = wrapper.findAll('.events-col')[1]
-    await assignForm.find('input[placeholder="What\'s happening?"]').setValue('Pirate raid disrupts supply lines')
-    await assignForm.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.vm.referee.createEvent).toHaveBeenCalledTimes(1)
-
-    const rows = wrapper.findAll('.events-grid tbody tr')
-    expect(rows).toHaveLength(1)
-    expect(rows[0].text()).toContain('Pirate raid disrupts supply lines')
-    expect(rows[0].find('.status-active').exists()).toBe(true)
-    expect(wrapper.findAll('.events-col')[0].find('.placeholder').exists()).toBe(false)
-    expect(assignForm.find('.form-success').text()).toBe('Event assigned.')
+    const row = wrapper.find('.events-grid tbody tr')
+    expect(row.find('.status-active').exists()).toBe(true)
+    const buttons = row.findAll('.row-actions button')
+    expect(buttons.map(b => b.text())).toEqual(['Expire', 'Delete'])
   })
 
   it('flips a row to Expired in place, rather than removing it, when expired', async () => {
@@ -97,16 +85,35 @@ describe('RefereeView — Events grid', () => {
     await openEventsTab(wrapper)
     wrapper.vm.referee.expireEvent.mockResolvedValue(undefined)
 
-    let rows = wrapper.findAll('.events-grid tbody tr')
-    expect(rows[0].find('.status-active').exists()).toBe(true)
-
-    await rows[0].find('.btn-danger').trigger('click')
+    await wrapper.find('.row-actions .btn-secondary').trigger('click') // Expire
     await wrapper.vm.$nextTick()
 
-    rows = wrapper.findAll('.events-grid tbody tr')
+    const rows = wrapper.findAll('.events-grid tbody tr')
     expect(rows).toHaveLength(1)
     expect(rows[0].find('.status-expired').exists()).toBe(true)
-    expect(rows[0].find('.btn-danger').exists()).toBe(false)
+    expect(rows[0].findAll('.row-actions button').map(b => b.text())).toEqual(['Delete'])
+  })
+
+  it('removes the row entirely when deleted', async () => {
+    const wrapper = mountReferee({
+      tickState: {
+        allEvents: [{
+          id: 'ev1', description: 'Trade embargo imposed', scope: 'local',
+          sector: 'Spinward Marches', world_hex: '0101', trade_good_die: null,
+          buy_modifier_pct: 20, sell_modifier_pct: -20, tick: 1, expires_tick: 9,
+          severity: 'minor',
+        }],
+      },
+    })
+    await openEventsTab(wrapper)
+    wrapper.vm.referee.deleteEvent.mockResolvedValue(undefined)
+
+    await wrapper.find('.row-actions .btn-danger').trigger('click') // Delete
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.referee.deleteEvent).toHaveBeenCalledWith('ev1')
+    expect(wrapper.findAll('.events-grid tbody tr')).toHaveLength(0)
+    expect(wrapper.find('.placeholder').text()).toBe('No events yet')
   })
 
   it('narrows the grid with the Sector and World filters', async () => {
@@ -130,63 +137,78 @@ describe('RefereeView — Events grid', () => {
   })
 })
 
-describe('RefereeView — Assign Event to World', () => {
-  it('fills the form from a built-in definition', async () => {
+describe('RefereeView — dialog wiring', () => {
+  it('"+ Assign Event" opens AssignEventDialog with no initial definition', async () => {
     const wrapper = mountReferee()
     await openEventsTab(wrapper)
-    const assignForm = wrapper.findAll('.events-col')[1]
+    expect(wrapper.findComponent(AssignEventDialog).exists()).toBe(false)
 
-    const defSelect = assignForm.find('select')
-    const builtinOption = defSelect.findAll('option').find(o => o.text() === 'Pirate raid disrupts supply lines')
-    await defSelect.setValue(builtinOption.element.value)
+    await wrapper.findAll('.events-actions')[0].find('.btn-primary').trigger('click')
 
-    expect(wrapper.vm.newEvent.description).toBe('Pirate raid disrupts supply lines')
-    expect(wrapper.vm.newEvent.buyModifierPct).toBe(30)
-    expect(wrapper.vm.newEvent.scope).toBe('local')
+    const dialog = wrapper.findComponent(AssignEventDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('initialDefinitionKey')).toBe('')
   })
 
-  it('loads that sector\'s worlds into the World dropdown when a sector is picked', async () => {
-    const wrapper = mountReferee({ mapState: { sectors: [{ name: 'Spinward Marches', abbreviation: '', x: 0, y: 0, tags: '' }] } })
-    await openEventsTab(wrapper)
-
-    wrapper.vm.map.fetchWorldsForSector.mockResolvedValue([
-      { Hex: '0101', Name: 'Regina' },
-      { Hex: '0202', Name: 'Efate' },
-    ])
-
-    const assignForm = wrapper.findAll('.events-col')[1]
-    const sectorSelect = assignForm.findAll('select')[2] // Definition, Scope, Sector, [World]
-    await sectorSelect.setValue('Spinward Marches')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.vm.map.fetchWorldsForSector).toHaveBeenCalledWith('Spinward Marches')
-    const worldOptions = assignForm.findAll('select')[3].findAll('option')
-    expect(worldOptions.map(o => o.text())).toContain('0101 — Regina')
-  })
-})
-
-describe('RefereeView — Manage Event Definitions', () => {
-  it('creates a custom definition and shows it in the list', async () => {
+  it('closes AssignEventDialog on its close event', async () => {
     const wrapper = mountReferee()
     await openEventsTab(wrapper)
-    const manageForm = wrapper.findAll('.events-col')[2]
+    await wrapper.findAll('.events-actions')[0].find('.btn-primary').trigger('click')
 
-    wrapper.vm.referee.createEventDefinition.mockResolvedValue({
+    await wrapper.findComponent(AssignEventDialog).vm.$emit('close')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent(AssignEventDialog).exists()).toBe(false)
+  })
+
+  it('a definition row\'s Assign button opens AssignEventDialog pre-filled with that definition', async () => {
+    const wrapper = mountReferee({
+      refereeState: {
+        eventDefinitions: [{
+          id: 'def1', description: 'Solar flare disrupts comms', scope: 'local',
+          severity: 'minor', buy_modifier_pct: 10, sell_modifier_pct: null,
+          duration_ticks: 4, trade_good_die: null,
+        }],
+      },
+    })
+    await openEventsTab(wrapper)
+
+    await wrapper.find('.event-card .event-card-actions .btn-secondary').trigger('click') // Assign
+
+    const dialog = wrapper.findComponent(AssignEventDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('initialDefinitionKey')).toBe('custom:def1')
+  })
+
+  it('"+ New Definition" opens EventDefinitionDialog with no editing target', async () => {
+    const wrapper = mountReferee()
+    await openEventsTab(wrapper)
+
+    await wrapper.findAll('.events-actions')[1].find('.btn-primary').trigger('click')
+
+    const dialog = wrapper.findComponent(EventDefinitionDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('editing')).toBeNull()
+  })
+
+  it('a definition row\'s Edit button opens EventDefinitionDialog with that definition', async () => {
+    const def = {
       id: 'def1', description: 'Solar flare disrupts comms', scope: 'local',
       severity: 'minor', buy_modifier_pct: 10, sell_modifier_pct: null,
       duration_ticks: 4, trade_good_die: null,
-    })
+    }
+    const wrapper = mountReferee({ refereeState: { eventDefinitions: [def] } })
+    await openEventsTab(wrapper)
 
-    await manageForm.find('input[placeholder="What\'s happening?"]').setValue('Solar flare disrupts comms')
-    await manageForm.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
+    const buttons = wrapper.findAll('.event-card .event-card-actions button')
+    await buttons[1].trigger('click') // Edit
 
-    expect(wrapper.vm.referee.createEventDefinition).toHaveBeenCalledTimes(1)
-    expect(manageForm.find('.form-success').text()).toBe('Definition saved.')
+    const dialog = wrapper.findComponent(EventDefinitionDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('editing')).toEqual(def)
   })
 
-  it('deletes a custom definition', async () => {
+  it('a definition row\'s Delete button calls referee.deleteEventDefinition', async () => {
     const wrapper = mountReferee({
       refereeState: {
         eventDefinitions: [{
@@ -199,9 +221,19 @@ describe('RefereeView — Manage Event Definitions', () => {
     await openEventsTab(wrapper)
     wrapper.vm.referee.deleteEventDefinition.mockResolvedValue(undefined)
 
-    const manageForm = wrapper.findAll('.events-col')[2]
-    await manageForm.find('.event-card .btn-danger').trigger('click')
+    const buttons = wrapper.findAll('.event-card .event-card-actions button')
+    await buttons[2].trigger('click') // Delete
 
     expect(wrapper.vm.referee.deleteEventDefinition).toHaveBeenCalledWith('def1')
+  })
+
+  it('"View Built-in Presets" opens EventPresetsDialog', async () => {
+    const wrapper = mountReferee()
+    await openEventsTab(wrapper)
+    expect(wrapper.findComponent(EventPresetsDialog).exists()).toBe(false)
+
+    await wrapper.findAll('.events-actions')[0].find('.btn-secondary').trigger('click')
+
+    expect(wrapper.findComponent(EventPresetsDialog).exists()).toBe(true)
   })
 })

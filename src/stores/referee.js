@@ -258,6 +258,11 @@ export const useRefereeStore = defineStore('referee', () => {
     if (apiErr) throw new Error(apiErr)
   }
 
+  async function deleteEvent(eventId) {
+    const { error: apiErr } = await api.delete(`/api/campaigns/event/${eventId}`)
+    if (apiErr) throw new Error(apiErr)
+  }
+
   // ── Reusable event definitions ─────────────────────────────────────────────
 
   async function loadEventDefinitions(campaignId) {
@@ -315,7 +320,7 @@ export const useRefereeStore = defineStore('referee', () => {
     loadOrganizations, createOrganization, updateOrganization, deleteOrganization,
     assignCrew, removeCrew, setCrewCanTrade, setCrewStateroomOccupancy, updateCrewRole,
     loadPlayers, upsertSkill, removeSkill,
-    createEvent, expireEvent,
+    createEvent, expireEvent, deleteEvent,
     loadEventDefinitions, createEventDefinition, updateEventDefinition, deleteEventDefinition,
   }
 })
