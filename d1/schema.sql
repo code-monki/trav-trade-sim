@@ -403,11 +403,34 @@ CREATE TABLE IF NOT EXISTS market_events (
   expires_tick      INTEGER,
   severity          TEXT    NOT NULL DEFAULT 'minor'
                     CHECK (severity IN ('minor', 'major', 'crisis')),
+  source            TEXT    NOT NULL DEFAULT 'auto'
+                    CHECK (source IN ('auto', 'manual')),
   created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_world
   ON market_events (campaign_id, world_hex, sector, tick DESC);
+
+-- ── Event Definitions ─────────────────────────────────────────────────────────
+-- Reusable "what an event does" templates, decoupled from "where/when it's
+-- applied" (see d1/013_event_definitions.sql). The built-in Quick Events
+-- catalogue is a static list in RefereeView.vue, not stored here.
+
+CREATE TABLE IF NOT EXISTS event_definitions (
+  id                TEXT    PRIMARY KEY,
+  campaign_id       TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  description       TEXT    NOT NULL,
+  scope             TEXT    NOT NULL DEFAULT 'local' CHECK (scope IN ('local', 'subsector')),
+  severity          TEXT    NOT NULL DEFAULT 'minor'  CHECK (severity IN ('minor', 'major', 'crisis')),
+  buy_modifier_pct  INTEGER,
+  sell_modifier_pct INTEGER,
+  duration_ticks    INTEGER NOT NULL DEFAULT 4,
+  trade_good_die    TEXT,
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (campaign_id, description)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_definitions_campaign ON event_definitions (campaign_id);
 
 -- ── Cargo ─────────────────────────────────────────────────────────────────────
 
@@ -616,4 +639,4 @@ INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
   ('001', unixepoch()), ('002', unixepoch()), ('003', unixepoch()),
   ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
   ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
-  ('010', unixepoch()), ('011', unixepoch());
+  ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch());

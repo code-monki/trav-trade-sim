@@ -16,11 +16,11 @@ describe('diffMigrations', () => {
   })
 
   it('reports unexpected IDs when the database is ahead of this Worker build', () => {
-    const applied = [...EXPECTED_MIGRATIONS, '012']
+    const applied = [...EXPECTED_MIGRATIONS, '099']
     const result = diffMigrations(applied)
     expect(result.ok).toBe(false)
     expect(result.missing).toEqual([])
-    expect(result.unexpected).toEqual(['012'])
+    expect(result.unexpected).toEqual(['099'])
   })
 
   it('reports both missing and unexpected IDs at once', () => {

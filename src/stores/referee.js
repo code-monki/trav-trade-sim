@@ -7,6 +7,7 @@ export const useRefereeStore = defineStore('referee', () => {
   const players     = ref([])   // all players with skills + current ship name
   const templates   = ref([])   // ship templates for this campaign's ruleset
   const organizations = ref([]) // campaign-wide list of Organizations
+  const eventDefinitions = ref([]) // reusable custom market-event definitions
   const loading     = ref(false)
   const error       = ref(null)
 
@@ -246,6 +247,7 @@ export const useRefereeStore = defineStore('referee', () => {
       sell_modifier_pct: sellModifierPct ?? null,
       description:       description.trim(),
       expires_tick:      currentTick + durationTicks,
+      source:            'manual',
     })
     if (apiErr) throw new Error(apiErr)
     return data
@@ -256,16 +258,57 @@ export const useRefereeStore = defineStore('referee', () => {
     if (apiErr) throw new Error(apiErr)
   }
 
+  // ── Reusable event definitions ─────────────────────────────────────────────
+
+  async function loadEventDefinitions(campaignId) {
+    const { data, error: apiErr } = await api.get(`/api/campaigns/${campaignId}/event-definitions`)
+    if (apiErr) throw new Error(apiErr)
+    eventDefinitions.value = data ?? []
+  }
+
+  async function createEventDefinition(campaignId, {
+    description, scope, severity, buyModifierPct, sellModifierPct, durationTicks, tradeGoodDie,
+  }) {
+    const { data, error: apiErr } = await api.post(`/api/campaigns/${campaignId}/event-definitions`, {
+      description:       description.trim(),
+      scope:              scope    ?? 'local',
+      severity:           severity ?? 'minor',
+      buy_modifier_pct:   buyModifierPct  ?? null,
+      sell_modifier_pct:  sellModifierPct ?? null,
+      duration_ticks:     durationTicks   ?? 4,
+      trade_good_die:     tradeGoodDie    || null,
+    })
+    if (apiErr) throw new Error(apiErr)
+    eventDefinitions.value = [...eventDefinitions.value, data].sort((a, b) => a.description.localeCompare(b.description))
+    return data
+  }
+
+  async function updateEventDefinition(defId, fields) {
+    const { data, error: apiErr } = await api.patch(`/api/campaigns/event-definitions/${defId}`, fields)
+    if (apiErr) throw new Error(apiErr)
+    eventDefinitions.value = eventDefinitions.value
+      .map(d => d.id === defId ? { ...d, ...data } : d)
+      .sort((a, b) => a.description.localeCompare(b.description))
+    return data
+  }
+
+  async function deleteEventDefinition(defId) {
+    const { error: apiErr } = await api.delete(`/api/campaigns/event-definitions/${defId}`)
+    if (apiErr) throw new Error(apiErr)
+    eventDefinitions.value = eventDefinitions.value.filter(d => d.id !== defId)
+  }
+
   function clear() {
-    ships.value         = []
-    players.value       = []
-    templates.value     = []
-    organizations.value = []
-    error.value         = null
+    ships.value            = []
+    players.value          = []
+    templates.value        = []
+    organizations.value    = []
+    eventDefinitions.value = []
+    error.value            = null
   }
 
   return {
-    ships, players, templates, organizations, loading, error,
+    ships, players, templates, organizations, eventDefinitions, loading, error,
     clearError, clear,
     loadShips, createShip, updateShip,
     loadShipTemplates, createShipTemplate, updateShipTemplate, deleteShipTemplate,
@@ -273,5 +316,6 @@ export const useRefereeStore = defineStore('referee', () => {
     assignCrew, removeCrew, setCrewCanTrade, setCrewStateroomOccupancy, updateCrewRole,
     loadPlayers, upsertSkill, removeSkill,
     createEvent, expireEvent,
+    loadEventDefinitions, createEventDefinition, updateEventDefinition, deleteEventDefinition,
   }
 })

@@ -254,6 +254,26 @@ export const useMapStore = defineStore('map', () => {
     }
   }
 
+  // Non-mutating: fetches one sector's worlds without touching the shared
+  // map-browsing state (selectedSectorName/worlds/etc). Used by RefereeView's
+  // event-creation form, which needs its own independent sector selection.
+  // Reads the shared IndexedDB cache opportunistically but never writes to it,
+  // so it can't leave a degraded (routes/subsector-less) copy behind for the
+  // real map browsing feature to pick up later.
+  async function fetchWorldsForSector(sectorName, milieu = selectedMilieu.value) {
+    if (!sectorName) return []
+    try {
+      const cached = await cacheGetSector(milieu, sectorName)
+      if (cached?.worlds?.length) return cached.worlds
+    } catch { /* IndexedDB unavailable */ }
+
+    const enc = encodeURIComponent(sectorName)
+    const res = await fetch(`${API}/api/sec?sector=${enc}&type=TabDelimited&milieu=${milieu}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+    const { worlds: parsed } = parseTabDelimited(await res.text())
+    return parsed
+  }
+
   async function onMilieuChange() {
     sectors.value            = []
     worlds.value             = []
@@ -289,5 +309,6 @@ export const useMapStore = defineStore('map', () => {
     worldByHex, routesByHex, selectedWorldRoutes,
     // actions
     loadSectors, onSectorChange, onMilieuChange, selectWorld,
+    fetchWorldsForSector,
   }
 })

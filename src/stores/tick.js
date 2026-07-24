@@ -27,8 +27,20 @@ export const useTickStore = defineStore('tick', () => {
   // Active events for current campaign (loaded once per session / tick advance)
   const activeEvents = ref([])
 
+  // All referee-created (manual) events for the Referee's events grid —
+  // independent of activeEvents, which drives live pricing and always
+  // includes auto-generated events too.
+  const allEvents = ref([])
+
   // Full event history for the currently viewed world (active + expired)
   const worldEventHistory = ref([])
+
+  // Referee-authored event_definitions for this campaign — joins the
+  // built-in catalogue's pool in maybeGenerateEvent. Loaded once per
+  // session (see loadCustomEventDefinitions) so a whole backfill run uses
+  // one consistent snapshot of the pool rather than refetching per tick.
+  const customEventDefinitions       = ref([])
+  const customEventDefinitionsLoaded = ref(false)
 
   // MgT2022-only: current tick's passenger/freight/mail traffic-availability
   // counts for the currently viewed world. Always null for CT7/T5 campaigns.
@@ -77,6 +89,7 @@ export const useTickStore = defineStore('tick', () => {
       trafficAvailability.value = null
 
       await loadActiveEvents()
+      await loadCustomEventDefinitions()
       return { ok: true, tick: data.tick }
     } catch (e) {
       error.value = e.message
@@ -99,6 +112,26 @@ export const useTickStore = defineStore('tick', () => {
     activeEvents.value = data ?? []
   }
 
+  // Referee events grid — all manual events for this campaign, regardless
+  // of active/expired status.
+  async function loadAllEvents(campaignId) {
+    if (!campaignId) return
+
+    const { data } = await api.get(`/api/campaigns/${campaignId}/events`, {
+      source: 'manual',
+    })
+    allEvents.value = data ?? []
+  }
+
+  async function loadCustomEventDefinitions() {
+    const campaignId = auth.campaign?.id
+    if (!campaignId) return
+
+    const { data } = await api.get(`/api/campaigns/${campaignId}/event-definitions`)
+    customEventDefinitions.value       = data ?? []
+    customEventDefinitionsLoaded.value = true
+  }
+
   // Rolls (and inserts, if not already present) the deterministic event for
   // one world at one specific tick — current or historical (backfill).
   // Returns the event row if one fired, else null.
@@ -106,7 +139,12 @@ export const useTickStore = defineStore('tick', () => {
     const campaignId = auth.campaign?.id
     if (!campaignId) return null
 
-    const ev = maybeGenerateEvent({ world, sectorName, campaignId, tick })
+    if (!customEventDefinitionsLoaded.value) await loadCustomEventDefinitions()
+
+    const ev = maybeGenerateEvent({
+      world, sectorName, campaignId, tick,
+      customDefinitions: customEventDefinitions.value,
+    })
     if (!ev) return null
 
     // Check for an existing event at the same (campaign, tick, world_hex) first
@@ -323,12 +361,15 @@ export const useTickStore = defineStore('tick', () => {
 
   return {
     currentTick, currentYear, currentDay, currentMonth,
-    loading, error, activeEvents, worldSnapshots, worldEventHistory,
+    loading, error, activeEvents, allEvents, worldSnapshots, worldEventHistory,
+    customEventDefinitions,
     trafficAvailability,
     imperialDate,
     loadCalendar,
     advanceTick,
     loadActiveEvents,
+    loadAllEvents,
+    loadCustomEventDefinitions,
     ensureWorldSnapshot,
     ensureTrafficSnapshot,
     loadWeeklyHistory,

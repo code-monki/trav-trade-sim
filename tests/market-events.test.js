@@ -1,5 +1,54 @@
 import { describe, it, expect } from 'vitest'
-import { activeEventsForWorld } from '../src/lib/market-events.js'
+import { activeEventsForWorld, maybeGenerateEvent } from '../src/lib/market-events.js'
+
+// ── maybeGenerateEvent — custom definitions join the pool ──────────────────────
+
+describe('maybeGenerateEvent — custom definitions', () => {
+  const world      = { Hex: '1010', Remarks: 'Ag Ni' }
+  const sectorName = 'Spinward Marches'
+  const campaignId = 'camp-custom-test'
+
+  const customDef = {
+    id: 'def1', campaign_id: campaignId, description: 'Solar flare disrupts comms',
+    scope: 'local', severity: 'minor', buy_modifier_pct: 12, sell_modifier_pct: null,
+    duration_ticks: 5, trade_good_die: null,
+  }
+
+  it('can be selected by the seeded roll, normalized into a market_events-shaped row', () => {
+    // Deterministic seeded RNG — brute-force the first tick where the roll
+    // actually lands on our custom definition, then assert its exact shape.
+    let found = null
+    for (let tick = 0; tick < 5000 && !found; tick++) {
+      const ev = maybeGenerateEvent({
+        world, sectorName, campaignId, tick,
+        customDefinitions: [customDef],
+      })
+      if (ev && ev.description === customDef.description) found = { tick, ev }
+    }
+
+    expect(found).not.toBeNull()
+    expect(found.ev).toEqual({
+      campaign_id:       campaignId,
+      tick:              found.tick,
+      scope:             'local',
+      world_hex:         world.Hex,
+      sector:            sectorName,
+      trade_good_die:    null,
+      buy_modifier_pct:  12,
+      sell_modifier_pct: null,
+      description:       'Solar flare disrupts comms',
+      expires_tick:      found.tick + 5,
+      severity:          'minor',
+    })
+  })
+
+  it('omitting customDefinitions never produces a custom-derived description (default [])', () => {
+    for (let tick = 0; tick < 200; tick++) {
+      const ev = maybeGenerateEvent({ world, sectorName, campaignId, tick })
+      if (ev) expect(ev.description).not.toBe(customDef.description)
+    }
+  })
+})
 
 // ── activeEventsForWorld ────────────────────────────────────────────────────────
 

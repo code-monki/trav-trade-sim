@@ -321,9 +321,12 @@ const MAJOR_SHARE        = 0.015 / TOTAL_EVENT_CHANCE   // ~0.25
  * @param {string} opts.sectorName
  * @param {string} opts.campaignId
  * @param {number} opts.tick
+ * @param {object[]} [opts.customDefinitions] — referee-authored event_definitions
+ *   rows for this campaign (snake_case DB shape); join the same pool as the
+ *   built-in catalogue. Defaults to [] so existing call sites are unaffected.
  * @returns {object|null} event row for market_events, or null
  */
-export function maybeGenerateEvent({ world, sectorName, campaignId, tick }) {
+export function maybeGenerateEvent({ world, sectorName, campaignId, tick, customDefinitions = [] }) {
   const rng = makeRng(`event:${campaignId}:${world.Hex}:${tick}`)
 
   // Roll 1: does any event fire this tick?
@@ -337,8 +340,23 @@ export function maybeGenerateEvent({ world, sectorName, campaignId, tick }) {
 
   const worldRemarks = (world.Remarks || '').trim().toUpperCase()
 
+  // Custom definitions join the built-in catalogue's pool, normalized to the
+  // same shape. No trade-code relevance weighting (affectsCodes: []) — the
+  // definition form has no trade-code multi-select, so they're always
+  // uniformly weighted, same as a built-in event with no listed codes.
+  const normalizedCustom = customDefinitions.map(def => ({
+    severity:        def.severity,
+    scope:           def.scope,
+    goodDie:         def.trade_good_die,
+    affectsCodes:    [],
+    buyModifierPct:  def.buy_modifier_pct,
+    sellModifierPct: def.sell_modifier_pct,
+    durationTicks:   def.duration_ticks,
+    description:     def.description,
+  }))
+
   // Build weighted pool: events matching the world's trade codes are twice as likely
-  const pool = MARKET_EVENTS.filter(ev => ev.severity === severity)
+  const pool = [...MARKET_EVENTS, ...normalizedCustom].filter(ev => ev.severity === severity)
   const weighted = pool.flatMap(ev => {
     const relevant = ev.affectsCodes.length === 0
       || ev.affectsCodes.some(c => worldRemarks.includes(c.toUpperCase()))

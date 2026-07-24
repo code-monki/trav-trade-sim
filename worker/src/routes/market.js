@@ -9,7 +9,7 @@ const app = new Hono()
 app.get('/:id/events', requireAuth, async (c) => {
   const session   = c.var.session
   const { id }    = c.req.param()
-  const { active, world_hex, sector, current_tick } = c.req.query()
+  const { active, world_hex, sector, current_tick, source } = c.req.query()
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const db = c.env.DB
@@ -24,6 +24,11 @@ app.get('/:id/events', requireAuth, async (c) => {
   if (world_hex && sector) {
     sql += ` AND sector = ? AND (world_hex = ? OR scope = 'subsector')`
     args.push(sector, world_hex)
+  }
+
+  if (source) {
+    sql += ` AND source = ?`
+    args.push(source)
   }
 
   sql += ` ORDER BY tick DESC LIMIT 200`
@@ -49,16 +54,16 @@ app.post('/:id/events', requireAuth, async (c) => {
   }
 
   const eventId = crypto.randomUUID()
-  const { world_hex, sector, scope, trade_good_die, buy_modifier_pct, sell_modifier_pct, description, expires_tick, severity, tick } = body
+  const { world_hex, sector, scope, trade_good_die, buy_modifier_pct, sell_modifier_pct, description, expires_tick, severity, tick, source } = body
 
   await c.env.DB.prepare(
     `INSERT INTO market_events
        (id, campaign_id, tick, scope, world_hex, sector, trade_good_die,
-        buy_modifier_pct, sell_modifier_pct, description, expires_tick, severity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        buy_modifier_pct, sell_modifier_pct, description, expires_tick, severity, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(eventId, id, tick, scope ?? 'local', world_hex ?? null, sector ?? null,
          trade_good_die ?? null, buy_modifier_pct ?? null, sell_modifier_pct ?? null,
-         description, expires_tick ?? null, severity ?? 'minor').run()
+         description, expires_tick ?? null, severity ?? 'minor', source ?? 'auto').run()
 
   const row = await c.env.DB.prepare(`SELECT * FROM market_events WHERE id = ?`).bind(eventId).first()
   return c.json({ data: row }, 201)
@@ -73,6 +78,97 @@ app.patch('/event/:eventId/expire', requireReferee, async (c) => {
     `UPDATE market_events SET expires_tick = ? WHERE id = ?`
   ).bind(current_tick, eventId).run()
 
+  return c.json({ data: { ok: true } })
+})
+
+// ── GET /api/campaigns/:id/event-definitions ──────────────────────────────────
+// requireAuth (not requireReferee): the deterministic per-tick auto-generator
+// (maybeGenerateEvent) needs the same definitions pool regardless of which
+// campaign member's client happens to trigger it.
+app.get('/:id/event-definitions', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }   = c.req.param()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM event_definitions WHERE campaign_id = ? ORDER BY description`
+  ).bind(id).all()
+  return c.json({ data: results ?? [] })
+})
+
+// ── POST /api/campaigns/:id/event-definitions — create a custom definition ───
+app.post('/:id/event-definitions', requireReferee, async (c) => {
+  const session = c.var.session
+  const { id }   = c.req.param()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const { description, scope, severity, buy_modifier_pct, sell_modifier_pct,
+          duration_ticks, trade_good_die } = await c.req.json()
+
+  const db = c.env.DB
+  const taken = await db.prepare(
+    `SELECT id FROM event_definitions WHERE campaign_id = ? AND description = ?`
+  ).bind(id, description.trim()).first()
+  if (taken) return c.json({ error: 'A definition with this description already exists' }, 409)
+
+  const defId = crypto.randomUUID()
+  await db.prepare(
+    `INSERT INTO event_definitions
+       (id, campaign_id, description, scope, severity, buy_modifier_pct,
+        sell_modifier_pct, duration_ticks, trade_good_die)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(defId, id, description.trim(), scope ?? 'local', severity ?? 'minor',
+         buy_modifier_pct ?? null, sell_modifier_pct ?? null,
+         duration_ticks ?? 4, trade_good_die ?? null).run()
+
+  const row = await db.prepare(`SELECT * FROM event_definitions WHERE id = ?`).bind(defId).first()
+  return c.json({ data: row }, 201)
+})
+
+// ── PATCH /api/campaigns/event-definitions/:defId — edit a definition ────────
+app.patch('/event-definitions/:defId', requireReferee, async (c) => {
+  const session = c.var.session
+  const { defId } = c.req.param()
+  const fields    = await c.req.json()
+
+  const db  = c.env.DB
+  const def = await db.prepare(`SELECT campaign_id FROM event_definitions WHERE id = ?`).bind(defId).first()
+  if (!def)                                    return c.json({ error: 'Definition not found' }, 404)
+  if (def.campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+
+  if (fields.description) {
+    const taken = await db.prepare(
+      `SELECT id FROM event_definitions WHERE campaign_id = ? AND description = ? AND id != ?`
+    ).bind(session.campaign_id, fields.description.trim(), defId).first()
+    if (taken) return c.json({ error: 'A definition with this description already exists' }, 409)
+  }
+
+  const allowed = ['description', 'scope', 'severity', 'buy_modifier_pct',
+                   'sell_modifier_pct', 'duration_ticks', 'trade_good_die']
+  const setClauses = []
+  const values     = []
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k)) { setClauses.push(`${k} = ?`); values.push(v) }
+  }
+  if (!setClauses.length) return c.json({ error: 'No valid fields' }, 400)
+
+  values.push(defId)
+  await db.prepare(`UPDATE event_definitions SET ${setClauses.join(', ')} WHERE id = ?`).bind(...values).run()
+  const updated = await db.prepare(`SELECT * FROM event_definitions WHERE id = ?`).bind(defId).first()
+  return c.json({ data: updated })
+})
+
+// ── DELETE /api/campaigns/event-definitions/:defId ────────────────────────────
+app.delete('/event-definitions/:defId', requireReferee, async (c) => {
+  const session   = c.var.session
+  const { defId } = c.req.param()
+
+  const db  = c.env.DB
+  const def = await db.prepare(`SELECT campaign_id FROM event_definitions WHERE id = ?`).bind(defId).first()
+  if (!def)                                    return c.json({ error: 'Definition not found' }, 404)
+  if (def.campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+
+  await db.prepare(`DELETE FROM event_definitions WHERE id = ?`).bind(defId).run()
   return c.json({ data: { ok: true } })
 })
 
