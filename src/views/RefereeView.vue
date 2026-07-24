@@ -1954,10 +1954,14 @@ async function submitEvent() {
   eventError.value   = ''
   eventSuccess.value = false
   try {
-    await referee.createEvent(auth.campaign.id, {
+    const created = await referee.createEvent(auth.campaign.id, {
       ...newEvent.value,
       currentTick: tick.currentTick,
     })
+    // Add to tick store's local list immediately (mirrors doExpireEvent)
+    if (tick.activeEvents && created) {
+      tick.activeEvents = [created, ...tick.activeEvents]
+    }
     eventSuccess.value = true
     newEvent.value = {
       scope: 'local', worldHex: '', sector: '', description: '',
