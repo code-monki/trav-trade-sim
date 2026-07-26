@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../lib/api.js'
 import { useAuthStore } from './auth.js'
+import { useShipStore } from './ship.js'
 import {
   generateWorldSnapshot, tickToCalendar, formatImperialDate,
   TICKS_PER_YEAR, TICKS_PER_MONTH, shouldRollupMonth, shouldRollupYear,
@@ -12,6 +13,7 @@ import { generateTrafficSnapshot } from '../lib/traffic-tick.js'
 
 export const useTickStore = defineStore('tick', () => {
   const auth = useAuthStore()
+  const ship = useShipStore()
 
   // ── State ──────────────────────────────────────────────────────────────────
   const currentTick   = ref(0)
@@ -354,18 +356,27 @@ export const useTickStore = defineStore('tick', () => {
   // ── Traffic availability (MgT2022 only) ───────────────────────────────────
 
   // Deterministically generates this tick's passenger/freight/mail traffic
-  // snapshot for a world and persists it (idempotent — INSERT OR IGNORE, and
-  // regeneration from the same seed always produces the same row, so a race
-  // between two clients is harmless). No-op for CT7/T5 campaigns.
+  // snapshot for a ship at a world and persists it (idempotent — INSERT OR
+  // IGNORE, and regeneration from the same seed always produces the same
+  // row, so a race between two clients is harmless). No-op for CT7/T5
+  // campaigns or when the player has no ship (traffic DMs depend on crew
+  // skills, so there's nothing to compute without one).
   async function ensureTrafficSnapshot(world, sectorName) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022') {
+    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022' || !ship.hasShip) {
       trafficAvailability.value = null
       return null
     }
 
     const row = generateTrafficSnapshot({
       world, sectorName, campaignId, tick: currentTick.value,
+      shipId: ship.ship.id,
+      crewStewardMax:        ship.crewStewardMax,
+      crewPassengerCheckMax: ship.crewPassengerCheckMax,
+      crewFreightCheckMax:   ship.crewFreightCheckMax,
+      crewNavalScoutRankMax: ship.crewNavalScoutRankMax,
+      crewSocialStandingMax: ship.crewSocialStandingMax,
+      shipArmed:             ship.shipArmed,
     })
     await api.post(`/api/campaigns/${campaignId}/traffic`, row)
     trafficAvailability.value = row

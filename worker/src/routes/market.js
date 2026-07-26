@@ -326,13 +326,13 @@ app.get('/:id/market/annual', requireAuth, async (c) => {
 app.get('/:id/traffic', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
-  const { world_hex, sector, tick } = c.req.query()
+  const { world_hex, sector, tick, ship_id } = c.req.query()
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const row = await c.env.DB.prepare(
     `SELECT * FROM traffic_snapshots
-     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ?`
-  ).bind(id, world_hex, sector, Number(tick)).first()
+     WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND tick = ?`
+  ).bind(id, ship_id, world_hex, sector, Number(tick)).first()
 
   return c.json({
     data: row ?? {
@@ -353,12 +353,12 @@ app.post('/:id/traffic', requireAuth, async (c) => {
 
   await c.env.DB.prepare(
     `INSERT OR IGNORE INTO traffic_snapshots
-       (campaign_id, world_hex, sector, tick, high_passages, middle_passages,
+       (campaign_id, ship_id, world_hex, sector, tick, high_passages, middle_passages,
         basic_passages, low_passages, major_freight_lots, minor_freight_lots,
         incidental_freight_lots, mail_containers)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    id, r.world_hex, r.sector, r.tick,
+    id, r.ship_id, r.world_hex, r.sector, r.tick,
     r.high_passages, r.middle_passages, r.basic_passages, r.low_passages,
     r.major_freight_lots, r.minor_freight_lots, r.incidental_freight_lots,
     r.mail_containers

@@ -21,7 +21,6 @@ import {
   mailContainerCount,
   mailPaymentMgT2022,
   smugglingRiskDM,
-  trafficCount,
   parseTradeCodes,
   starportFromUWP,
   techFromUWP,
@@ -327,21 +326,6 @@ describe('smugglingRiskDM', () => {
   })
 })
 
-// ── Traffic availability ───────────────────────────────────────────────────────
-
-describe('trafficCount', () => {
-  it('roll of 6 with no DM yields 0', () => {
-    expect(trafficCount(6, 0)).toBe(0)
-  })
-
-  it('never goes negative', () => {
-    expect(trafficCount(2, -10)).toBe(0)
-  })
-
-  it('scales with roll and DM above baseline', () => {
-    expect(trafficCount(10, 2)).toBe(10 + 2 - 6)
-  })
-})
 
 // ── Re-exported UWP helpers (from trade-engine-ct7.js) ────────────────────────
 

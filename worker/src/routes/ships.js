@@ -41,6 +41,13 @@ function freightNetAfterPenalty(charge, penaltyPct) {
   return Math.max(0, Math.round(charge * (1 - penaltyPct / 100)))
 }
 
+// Basic Passage (MgT2022) consumes general cargo tonnage instead of a
+// dedicated stateroom/berth — kept in sync with src/lib/traveller-data-
+// mgt2022.js's MGT2022_BASIC_PASSAGE_TONS constant of the same value (the
+// worker doesn't share code with the frontend bundle, same as everywhere
+// else in this file).
+const MGT2022_BASIC_PASSAGE_TONS = 2
+
 // obligations rows aliased back to the passenger_manifests / mail_contracts /
 // freight shapes the frontend already expects (see
 // docs/financial-model-gap-analysis.md — "Commercial obligations" — for why
@@ -85,7 +92,7 @@ app.get('/current', requireAuth, async (c) => {
             s.current_world, s.current_sector, s.credits,
             s.jump_rating, s.maneuver_drive_rating,
             s.stateroom_capacity, s.low_berth_capacity,
-            s.fuel_capacity, s.fuel_current, s.market_value
+            s.fuel_capacity, s.fuel_current, s.market_value, s.armed
      FROM crew c
      JOIN ships s ON s.id = c.ship_id
      WHERE c.player_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL
@@ -103,19 +110,39 @@ app.get('/current', requireAuth, async (c) => {
     stateroom_capacity: crew.stateroom_capacity,
     low_berth_capacity: crew.low_berth_capacity,
     fuel_capacity: crew.fuel_capacity, fuel_current: crew.fuel_current,
-    market_value: crew.market_value,
+    market_value: crew.market_value, armed: crew.armed === 1,
     crew_role: crew.role, can_trade: crew.can_trade === 1,
   }
 
-  const [{ results: cargoRows }, { results: passengerRows }, { results: mailRows }, { results: freightRows }, crewStateRow] = await Promise.all([
+  const [
+    { results: cargoRows }, { results: passengerRows }, { results: mailRows }, { results: freightRows },
+    crewStateRow, stewardRow, passengerCheckRow, freightCheckRow, navalScoutRow, socRow,
+  ] = await Promise.all([
     db.prepare(`SELECT * FROM cargo WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(MAIL_SELECT + ` WHERE kind = 'mail' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(FREIGHT_SELECT + ` WHERE kind = 'freight' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(`SELECT COUNT(*) as cnt FROM crew WHERE ship_id = ? AND campaign_id = ? AND left_tick IS NULL AND has_stateroom = 1`).bind(ship.id, campaign_id).first(),
+    // Traffic-availability crew DMs (MgT2022 "SEEKING PASSENGERS"/"FREIGHT"/"MAIL") —
+    // computed here alongside crew_staterooms, same join shape.
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Steward'`).bind(ship.id, campaign_id).first(),
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill IN ('Broker','Carouse','Streetwise')`).bind(ship.id, campaign_id).first(),
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill IN ('Broker','Streetwise')`).bind(ship.id, campaign_id).first(),
+    db.prepare(`SELECT MAX(p.rank) as mx FROM crew c JOIN players p ON p.id = c.player_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND LOWER(p.background) IN ('navy','scout')`).bind(ship.id, campaign_id).first(),
+    db.prepare(`SELECT MAX(p.social_standing) as mx FROM crew c JOIN players p ON p.id = c.player_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL`).bind(ship.id, campaign_id).first(),
   ])
 
-  ship.crew_staterooms = crewStateRow?.cnt ?? 0
+  ship.crew_staterooms             = crewStateRow?.cnt ?? 0
+  ship.crew_steward_max            = stewardRow?.mx ?? 0
+  ship.crew_passenger_check_max    = passengerCheckRow?.mx ?? 0
+  ship.crew_freight_check_max      = freightCheckRow?.mx ?? 0
+  ship.crew_naval_scout_rank_max   = navalScoutRow?.mx ?? 0
+  ship.crew_social_standing_max    = socRow?.mx ?? null
 
   return c.json({ data: { ship, cargo: cargoRows ?? [], passengers: passengerRows ?? [], mailContracts: mailRows ?? [], freight: freightRows ?? [] } })
 })
@@ -294,19 +321,62 @@ app.post('/:id/book-passengers', requireAuth, async (c) => {
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
+  const db   = c.env.DB
+  const ship = await db.prepare(`SELECT stateroom_capacity, low_berth_capacity, cargo_capacity FROM ships WHERE id = ?`).bind(id).first()
+  if (!ship) return c.json({ error: 'Ship not found' }, 404)
+
+  const [crewStateRow, cargoRow, pendingResult, trafficRow] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) as cnt FROM crew WHERE ship_id = ? AND campaign_id = ? AND left_tick IS NULL AND has_stateroom = 1`).bind(id, campaign_id).first(),
+    db.prepare(`SELECT COALESCE(SUM(tons), 0) as tons FROM cargo WHERE ship_id = ? AND campaign_id = ?`).bind(id, campaign_id).first(),
+    db.prepare(`SELECT passage_type, COALESCE(SUM(passenger_count), 0) as cnt FROM obligations
+                WHERE ship_id = ? AND campaign_id = ? AND kind = 'passenger' AND status = 'pending' GROUP BY passage_type`).bind(id, campaign_id).all(),
+    db.prepare(`SELECT high_passages, middle_passages, basic_passages, low_passages FROM traffic_snapshots
+                WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND tick = ?`)
+      .bind(campaign_id, id, embark_world_hex, embark_sector, tick).first(),
+  ])
+
+  const pendingByType = {}
+  for (const row of pendingResult.results ?? []) pendingByType[row.passage_type] = row.cnt
+
+  // Stateroom/low-berth/cargo capacity — validates nothing today, not even
+  // these pre-existing caps. Deliberately excludes Basic from the
+  // stateroom count (correctly, per passageCapacityNeeded() — Basic uses
+  // cargo tons instead) rather than mirroring the client's own known
+  // stateroomsUsed bug (logged separately), since this is new server code.
+  if (passage_type === 'high' || passage_type === 'middle') {
+    const stateroomsUsed = (crewStateRow?.cnt ?? 0) + (pendingByType.high ?? 0) + (pendingByType.middle ?? 0)
+    const available = ship.stateroom_capacity - stateroomsUsed
+    if (count > available) return c.json({ error: `Only ${Math.max(0, available)} stateroom(s) available` }, 400)
+  } else if (passage_type === 'low') {
+    const available = ship.low_berth_capacity - (pendingByType.low ?? 0)
+    if (count > available) return c.json({ error: `Only ${Math.max(0, available)} low berth(s) available` }, 400)
+  } else if (passage_type === 'basic') {
+    const cargoUsed = (cargoRow?.tons ?? 0) + (pendingByType.basic ?? 0) * MGT2022_BASIC_PASSAGE_TONS
+    const available = Math.floor((ship.cargo_capacity - cargoUsed) / MGT2022_BASIC_PASSAGE_TONS)
+    if (count > available) return c.json({ error: `Only ${Math.max(0, available)} Basic passenger(s) worth of cargo space available` }, 400)
+  }
+
+  // Traffic-availability cap (MgT2022 only — no snapshot row exists for
+  // CT7/T5, which stay unlimited-subject-to-capacity as before).
+  if (trafficRow) {
+    const trafficKey = { high: 'high_passages', middle: 'middle_passages', basic: 'basic_passages', low: 'low_passages' }[passage_type]
+    const trafficCap = trafficRow[trafficKey] ?? 0
+    if (count > trafficCap) return c.json({ error: `Only ${trafficCap} ${passage_type} passenger(s) available this tick` }, 400)
+  }
+
   const manifestId = crypto.randomUUID()
-  await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, passage_type, passenger_count, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, fare_per_head)
+  await db.batch([
+    db.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, passage_type, passenger_count, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, fare_per_head)
                       VALUES (?, ?, ?, ?, 'passenger', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(manifestId, campaign_id, id, player_id, fare_total, passage_type, count, embark_world_hex, embark_sector, embark_world_name ?? '', tick, dest_world_hex, dest_sector, dest_world_name ?? '', fare_per_head),
-    c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+    db.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
                       VALUES (?, ?, ?, ?, ?, 'passenger_fare', ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, fare_total, embark_world_hex, embark_sector,
             `${count}× ${passage_type} → ${dest_world_name || dest_world_hex}`),
-    c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(fare_total, id),
+    db.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(fare_total, id),
   ])
 
-  const manifest = await c.env.DB.prepare(PASSENGER_SELECT + ` WHERE id = ?`).bind(manifestId).first()
+  const manifest = await db.prepare(PASSENGER_SELECT + ` WHERE id = ?`).bind(manifestId).first()
   return c.json({ data: manifest }, 201)
 })
 

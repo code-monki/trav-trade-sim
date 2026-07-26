@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0
+**Version:** 0.8.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -152,6 +152,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-1105 | Auto-deliver on arrival | HLD §5.1 | `ship.js:updateLocation`, `worker/src/routes/ships.js` | — | — | — | — |
 | FR-1106 | Aboard tab shows occupancy + passengers | DD §2 `AboardPanel`/`PassengerManifest` | `AboardPanel.vue`, `PassengerManifest.vue` | — | — | — | — |
 | FR-1107 | Referee refund | HLD §5.1, DD §2 | `RefereeView.vue:doRefundPassenger`, `ship.js:refundPassenger` | — | — | — | — |
+| FR-1108 | Server-side stateroom/low-berth/cargo/traffic-cap validation on booking | HLD §7c | `worker/src/routes/ships.js:book-passengers` | — | — | — | MTS-14 |
 
 ## 2.12 Fuel Purchasing
 
@@ -242,14 +243,16 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-2001 | Port > Freight tab (MgT2022 only) | HLD §4 | `FreightPanel.vue`, `MapView.vue` (`PORT_TABS` computed) | UT-604 | — | — | MTS-14 |
+| FR-2001 | Port > Freight tab (MgT2022 only); lot tonnage rolled not chosen | HLD §7c | `FreightPanel.vue` (`lotTons` computed), `MapView.vue` (`PORT_TABS` computed), `traveller-data-mgt2022.js:MGT2022_FREIGHT_LOT_SIZE_DICE` | UT-604 | — | — | MTS-14 |
 | FR-2002 | Freight obligation + upfront charge | DD §1.1 `obligations` (kind='freight') | `worker/src/routes/ships.js:book-freight`, `ship.js:bookFreight` | — | — | — | MTS-14 |
 | FR-2003 | Auto-deliver on arrival | HLD §5.1 | `ship.js:autoDeliver` (freight branch), `worker/src/routes/ships.js:deliver-freight` | — | — | — | MTS-14 |
 | FR-2004 | Late-delivery penalty | DD §1.1 `obligations.due_tick` | `trade-engine-mgt2022.js:freightLatePenaltyPct`/`freightNetAfterPenalty`, `worker/src/routes/ships.js:deliver-freight` | UT-605 | — | — | MTS-14 |
 | FR-2005 | Freight refund | HLD §5.1 | `worker/src/routes/ships.js:refund-freight`, `ship.js:refundFreight` | — | — | — | MTS-14 |
-| FR-2006 | Deterministic per-tick traffic-availability roll | HLD §4.6 | `traffic-tick.js:generateTrafficSnapshot`, `tick.js:ensureTrafficSnapshot` | UT-610–611 | — | — | MTS-14 |
+| FR-2006 | Deterministic per-(ship, world, tick) traffic-availability roll via the real Passenger/Freight Traffic dice tables | HLD §7c | `traffic-tick.js:generateTrafficSnapshot`, `tick.js:ensureTrafficSnapshot`, `traveller-data-mgt2022.js:passengerTrafficDiceCount`/`freightTrafficDiceCount` | UT-610–611, UT-620–621 | — | — | MTS-14 |
 | FR-2007 | Availability count shown + enforced in booking forms | DD §2 | `PassengersPanel.vue`, `FreightPanel.vue`, `ShipServices.vue` (`trafficAvailability` reads) | — | — | — | MTS-14 |
 | FR-2008 | Traffic data scoped to MgT2022 only | DD §1.1 `traffic_snapshots` | `tick.js:ensureTrafficSnapshot` (`trade_rules === 'MgT2022'` guard) | — | — | — | MTS-14 |
+| FR-2009 | Crew-derived DMs: Steward (ambient), Broker/Carouse/Streetwise or Broker/Streetwise Effect (automatic check, best of crew) | HLD §7c | `traffic-tick.js:generateTrafficSnapshot`, `worker/src/routes/ships.js` ship-load crew aggregate queries, `ship.js:crewStewardMax`/`crewPassengerCheckMax`/`crewFreightCheckMax` | UT-622–623 | — | — | MTS-14 |
+| FR-2010 | Mail DM: banded Freight DM + armed + world TL + Naval/Scout rank + SOC | HLD §7c | `traffic-tick.js:generateTrafficSnapshot` (mail section), `traveller-data-mgt2022.js:MGT2022_MAIL_FREIGHT_DM_BANDS`/`mailTechLevelDM` | UT-624 | — | — | MTS-14 |
 
 ---
 

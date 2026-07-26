@@ -588,6 +588,7 @@ CREATE INDEX IF NOT EXISTS idx_obligations_dest
 CREATE TABLE IF NOT EXISTS traffic_snapshots (
   id                      INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id             TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  ship_id                 TEXT    NOT NULL REFERENCES ships(id)     ON DELETE CASCADE,
   world_hex               TEXT    NOT NULL,
   sector                  TEXT    NOT NULL,
   tick                    INTEGER NOT NULL,
@@ -600,11 +601,15 @@ CREATE TABLE IF NOT EXISTS traffic_snapshots (
   incidental_freight_lots INTEGER NOT NULL DEFAULT 0,
   mail_containers         INTEGER NOT NULL DEFAULT 0,
   created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (campaign_id, world_hex, sector, tick)
+  -- ship_id added by migration 016 (traffic availability now depends on the
+  -- ship's own crew skills, not just world/tick) — the UNIQUE constraint
+  -- below reflects that end state directly since a fresh install starts
+  -- there; see 016_traffic_snapshots_per_ship.sql for the migration path.
+  UNIQUE (campaign_id, ship_id, world_hex, sector, tick)
 );
 
 CREATE INDEX IF NOT EXISTS idx_traffic_snapshots_lookup
-  ON traffic_snapshots (campaign_id, world_hex, sector, tick);
+  ON traffic_snapshots (campaign_id, ship_id, world_hex, sector, tick);
 
 -- ── Realized OHLCV View ───────────────────────────────────────────────────────
 -- Inline equivalents of the Postgres helper functions:
@@ -673,4 +678,4 @@ INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
   ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
   ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
   ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch()), ('014', unixepoch()),
-  ('015', unixepoch());
+  ('015', unixepoch()), ('016', unixepoch());

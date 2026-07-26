@@ -781,6 +781,156 @@ database and the Worker still hasn't been redeployed with any of this
 rebuild — Phase 4 adds no new migration, but nothing from Phases 1-4 is
 live yet, only committed to the working tree.
 
+*(Update, same day: the user asked for this to be committed and deployed.
+Migrations 014/015 were applied to the remote D1 database and the Worker
+was redeployed via `make deploy` — `/api/health` confirmed `schema_ok: true`
+with all 15 migrations present. Phases 1-4 are live as of this point.)*
+
+---
+
+## 2026-07-26 — Traffic Availability rebuild: Passengers + Freight + Mail (Phase 5)
+
+### Goal
+
+Continue the MgT2022 rebuild into what the plan had called Phase 5
+("Passenger Steward capacity gate"). That plan entry turned out to be
+based on a misremembered rule from earlier in this conversation, before it
+was compacted — there is no "Steward caps how many passengers a ship can
+carry" mechanic in the book. The user pasted the actual rulebook text
+("SEEKING PASSENGERS", "FREIGHT", "MAIL") mid-session, which revealed the
+real mechanic: Steward, Broker, Carouse, and Streetwise all feed DMs into
+the **Traffic Availability** roll — how many passengers/cargo-lots/mail-
+containers exist to be booked at a world this tick — which is the same
+mechanic the plan's Phase 6/7 already targeted for Freight/Mail, just with
+several DM values that turned out to be wrong once checked against the
+real text. Re-planned and executed all three (Passengers/Freight/Mail)
+together as one unified "Phase 5" rather than three separate passes, since
+they share one generation function and were about to gain the same kind
+of crew-skill inputs.
+
+### What the real text changed
+
+The already-coded `MGT2022_POPULATION_TRAFFIC_DM` (`Pop6-7:+2, Pop8+:+4`)
+and `zoneTrafficDM()` (`Amber:-2, Red:-6`) turned out to be **correct for
+Freight** but **wrong for Passengers**, which has its own, less punishing
+table (`Pop6-7:+1, Pop8+:+3`; `Amber:+1, Red:-4` — Amber is actually a
+*bonus* for passenger traffic, a *penalty* for freight). Renamed to
+`MGT2022_FREIGHT_POPULATION_TRAFFIC_DM`/`freightZoneTrafficDM()` and added
+the Passenger-specific versions alongside. Also discovered the Passenger
+and Freight Traffic *dice-count* tables (2D+DM → "roll N dice for the
+count") genuinely diverge at rolls 6, 9, 10, 12, 13, and 15 — not the same
+table reused, as the existing (unused) `freightTrafficDiceCount` might have
+suggested; added `passengerTrafficDiceCount` as its own table. Confirmed
+`freightTrafficDiceCount` itself, `techLevelTrafficDM`, the Mail DM-banding
+table, and Mail's own availability/payment constants were all already
+correct from earlier work — Phase 5 was mostly about *wiring these in* and
+*not* reusing them for the wrong traffic type.
+
+### Design decisions made with the user during planning
+
+- The Broker/Carouse/Streetwise check's Effect (2D+skill−8, can be
+  negative) is a **shared, automatic DM** — computed once per (ship,
+  world, tick) using whichever crew member has the single highest relevant
+  skill, folded into the same deterministic generation. Not a per-player
+  live overlay (unlike Phase 4's pricing) and not a manual one-click action
+  (unlike Find a Supplier) — the user's own suggestion, which resolved an
+  open question about "whose check" cleanly: check everyone aboard
+  automatically and take the best, mirroring how Steward's DM ("highest
+  Steward skill on ship") already worked with no check at all.
+- Because these DMs depend on *this ship's* own crew, traffic availability
+  became a function of **(ship, world, tick)**, not just (world, tick) —
+  confirmed explicitly with the user before touching schema, since it's a
+  real, if narrow, architectural change: two different ships docked at the
+  same world can now get different numbers.
+- Destination-world DMs and the "past first parsec" distance DM remain
+  deferred, extending the plan's original decision for Freight to
+  Passengers too — no destination is known at traffic-generation time.
+- The known `ship.js` `stateroomsUsed` bug (Basic Passage double-counted
+  against staterooms) surfaced again while touching this area; confirmed
+  with the user it stays a separate, already-logged follow-up.
+
+### A real bug this session's own test suite caught
+
+Initially wrote `generateTrafficSnapshot` with **one shared RNG stream**
+for Passengers, Freight, and Mail in sequence (mirroring the old code's
+structure). A new test asserting "Steward only affects Passengers, never
+Freight" failed: since each tier's dice-*count* is data-dependent (a DM of
++2 might sum 3 dice, +4 might sum 5), changing an input that only logically
+affects Passengers still shifted *how many dice got drawn* during the
+Passenger phase — which shifted the RNG's position for every draw after
+it, contaminating Freight's results despite no rule connecting the two.
+Fixed by giving Passengers, Freight, and Mail **separate seeded RNG
+streams** (`...traffic:passenger:...`, `...traffic:freight:...`,
+`...traffic:mail:...`) — the identical fix already applied to goods
+composition vs. price rolls back in Phase 3, for the identical reason.
+Caught by the test before shipping, not by inspection — a good reminder
+that "shared stream, variable draw count" is a recurring trap in this
+codebase's style of seeded generation, worth checking for explicitly
+whenever a new variable-length draw is added anywhere near an existing one.
+
+### Schema migration `016` — `traffic_snapshots` becomes per-ship
+
+Dropped and recreated `traffic_snapshots` with a `ship_id` column added to
+the row and its `UNIQUE` constraint (SQLite can't `ALTER` a `UNIQUE`
+constraint in place). Safe to drop: this table is pure deterministic cache
+data, regenerable from its inputs, never referenced by any other table —
+booked obligations live in `obligations`, untouched. **Not yet applied to
+the remote database** — flagged for explicit go-ahead at deploy time, same
+as any migration, but worth calling out again here since `DROP TABLE` is
+irreversible against a live database.
+
+### Crew-derived inputs
+
+`worker/src/routes/ships.js`'s ship-loading route gained five new aggregate
+queries (`MAX(level)`/`MAX(rank)`/`MAX(social_standing)` joins over `crew`
++ `player_skills`/`players`), mirroring the existing `crew_staterooms`
+`COUNT(*)` query's shape exactly. Also fixed a real, unrelated gap found
+while reading this route: `ships.armed` (added back in Phase 2) was never
+actually selected or returned by it — needed now for Mail's "ship is
+armed" DM, but it was a pre-existing hole regardless.
+
+### Other changes
+
+- **Freight lot tonnage is now rolled, not typed.** `FreightPanel.vue`'s
+  free-typed tons stepper is gone — a lot's tonnage (Major 1D×10, Minor
+  1D×5, Incidental 1D) is now a seeded roll (`...freight-lot:${lotSize}:...`),
+  fixed and non-editable once a lot size is picked, matching "a freight lot
+  cannot be broken up." Reused the existing `MGT2022_FREIGHT_LOT_SIZE_DICE`
+  constant and `trade-engine-ct7.js`'s `rollQty`, both already correct from
+  earlier work and simply never wired in here.
+- **`POST /:id/book-passengers` gained its first server-side validation
+  ever** — stateroom (high+middle), low-berth (low), cargo tons (basic,
+  MgT2022), and the traffic-availability cap for the requested tier.
+  Previously this route validated nothing, not even the pre-existing
+  stateroom/low-berth caps the client already enforced client-side. The
+  cargo-tons check needed `MGT2022_BASIC_PASSAGE_TONS`, a small MgT2022
+  domain constant — hardcoded directly in the worker rather than imported,
+  consistent with this file's existing precedent (the late-delivery-penalty
+  formula above it does the same) that the worker package never shares code
+  with the frontend bundle.
+- `book-freight`/`accept-mail` have the identical missing-validation gap,
+  logged as a further follow-up rather than fixed here (matches the scope
+  the user actually asked for).
+
+### Verified
+
+`npx vitest run` — 516/516 passing (up from 506; 17 in a substantially
+rewritten `tests/traffic-tick.test.js`, covering the dice-table divergence,
+the Passenger/Freight DM tables, the RNG-isolation fix above, and each
+crew-derived DM's directional effect). `npx vite build` compiles cleanly
+(confirms the new `tick.js` ⇄ `ship.js` mutual import — mirroring `ship.js`'s
+pre-existing reverse import of `useTickStore` — resolves fine, since both
+only call `useOtherStore()` lazily inside their own `defineStore` body).
+
+### Known gaps, not addressed this session
+
+Migration `016` is committed but **not yet applied** to remote D1, and the
+Worker hasn't been redeployed with any of this phase — nothing from Phase 5
+is live yet. `book-freight`/`accept-mail`'s missing server-side validation,
+`ship.js`'s stateroom double-counting bug, and mail's cargo-space
+reservation gap (from Phase 2/7) all remain separate, already-logged
+follow-ups.
+
 ---
 
 ## Documentation TODO

@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0
+**Version:** 0.8.0
 
 ---
 
@@ -449,21 +449,22 @@ Indexes: `idx_trade_records_market`, `idx_trade_records_player`, `idx_trade_reco
 Indexes: `idx_obligations_ship (campaign_id, ship_id, kind, status)`, `idx_obligations_dest (dest_world_hex, dest_sector) WHERE status = 'pending'`
 
 #### `traffic_snapshots`
-*(`d1/010_mgt2022_trade_rules.sql`)* — MgT2022-only passenger/freight/mail traffic-availability rolls, one row per (campaign, world, tick), generated deterministically alongside the market snapshot (see `src/lib/traffic-tick.js`). CT7/T5 campaigns never populate this table.
+*(`d1/010_mgt2022_trade_rules.sql`, `ship_id` added by `d1/016_traffic_snapshots_per_ship.sql`)* — MgT2022-only passenger/freight/mail traffic-availability rolls, one row per (campaign, **ship**, world, tick), generated deterministically alongside the market snapshot (see `src/lib/traffic-tick.js`). Per-ship (not just per-world) since migration `016` — the roll depends on the ship's own crew (Steward/Broker/Carouse/Streetwise/Naval-Scout-rank/SOC), so two ships at the same world/tick can get different numbers; see HLD §7c. CT7/T5 campaigns never populate this table. Migration `016` dropped and recreated this table (pure deterministic cache data, safe to discard — see its own header comment) rather than `ALTER`ing the `UNIQUE` constraint, which SQLite can't do in place.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | INTEGER | PK, AUTOINCREMENT | |
 | `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
+| `ship_id` | TEXT | FK → ships(id) ON DELETE CASCADE | Added by migration `016` |
 | `world_hex` / `sector` | TEXT | NOT NULL | |
 | `tick` | INTEGER | NOT NULL | |
-| `high_passages` / `middle_passages` / `basic_passages` / `low_passages` | INTEGER | NOT NULL, default 0 | Rolled availability count per passage tier this tick |
-| `major_freight_lots` / `minor_freight_lots` / `incidental_freight_lots` | INTEGER | NOT NULL, default 0 | Rolled availability count per freight lot size this tick |
+| `high_passages` / `middle_passages` / `basic_passages` / `low_passages` | INTEGER | NOT NULL, default 0 | Rolled availability count per passage tier this tick, via `passengerTrafficDiceCount` |
+| `major_freight_lots` / `minor_freight_lots` / `incidental_freight_lots` | INTEGER | NOT NULL, default 0 | Rolled availability count per freight lot size this tick, via `freightTrafficDiceCount` |
 | `mail_containers` | INTEGER | NOT NULL, default 0 | Rolled container count (0 if the 2D mail-availability roll didn't meet 12+) |
 | `created_at` | TEXT | NOT NULL | |
-| UNIQUE | `(campaign_id, world_hex, sector, tick)` | | |
+| UNIQUE | `(campaign_id, ship_id, world_hex, sector, tick)` | | |
 
-Index: `idx_traffic_snapshots_lookup (campaign_id, world_hex, sector, tick)`
+Index: `idx_traffic_snapshots_lookup (campaign_id, ship_id, world_hex, sector, tick)`
 
 #### `supplier_search_attempts`
 *(`d1/015_supplier_search_attempts.sql`)* — MgT2022-only. "Find a Supplier" is a character-based, one-click check (Broker/Streetwise/Admin skill + starport DM, Average 8+ target) gating whether a given player can see a world's market at all this game-month — not an ambient world property, since different players may hold the relevant skill at different levels. Plain (non-seeded) dice: a one-shot player action, not a value that needs to be reproducible on replay.
@@ -507,7 +508,7 @@ D1 has no stored procedures — business logic that a Postgres-era design would 
 | `campaigns.js` | `/api/campaigns` | Campaign label edit |
 | `calendar.js` | `/api/campaigns/:id/calendar`, `/advance-tick`, `/rollup-repair` | Tick advancement (`requireReferee`), monthly/annual rollup, gap-backfill repair (`requireAuth`) |
 | `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*`, `/find-supplier` | Market snapshot lazy generation/backfill, price history, market events; MgT2022 Find-a-Supplier check (`GET`/`POST /find-supplier`) |
-| `ships.js` | `/api/ships` | Player-facing ship view, buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/mail), pay-debt |
+| `ships.js` | `/api/ships` | Player-facing ship view (returns `armed` plus five Traffic Availability crew-DM aggregates, HLD §7c), buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/mail — `book-passengers` validates stateroom/low-berth/cargo/traffic caps server-side), pay-debt |
 | `referee.js` | `/api/referee` | Ships (incl. `armed`), crew, players (incl. MgT2022 characteristics/background/rank via `PATCH /players/:id`), skills, ship templates (incl. `armed`), ship debts, ship ownership (all `requireReferee`) |
 | `organizations.js` | `/api/organizations` | Organization CRUD, officers, members, equity, dues collection, disbursement, fleet report (all `requireAuth`; mutations additionally gated by `isOfficerOrReferee`) |
 | `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned); player self-service skills and MgT2022 characteristics (`GET`/`PATCH /characteristics`) |
@@ -641,7 +642,7 @@ No emits. Destination fields, T5 parsecs input, payment preview; MgT2022 instead
 | `world` | Object | `null` | Origin world for the lot |
 | `sectorName` | String | `''` | |
 
-No emits. Lot-size selector (Major/Minor/Incidental), tons stepper capped at cargo space, parsecs input, destination fields, charge preview, due-tick note. Embeds `WorldPicker.vue`; calls `ship.bookFreight`.
+No emits. Lot-size selector (Major/Minor/Incidental) — tonnage is a seeded roll (`lotTons` computed, HLD §7c), not player-editable, since a lot can't be split or resized — parsecs input, destination fields, charge preview, due-tick note. Embeds `WorldPicker.vue`; calls `ship.bookFreight`.
 
 ### `AboardPanel`
 No props, no emits. Ship's "Aboard" sub-tab — composes `PassengerManifest` and `ContractsPanel` under one view (occupancy + in-transit passengers, and in-transit mail contracts).
@@ -763,6 +764,7 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `loadActiveEvents()` | |
 | `maybeInsertEvent()` | Seeds a deterministic market event for the current tick, if the roll hits |
 | `ensureWorldSnapshot(world, sector)` | Lazy generation/backfill/fetch of market prices for a world — backfills every gap since the world's last visit, not just its first-ever visit |
+| `ensureTrafficSnapshot(world, sector)` | Lazy generation/fetch of the current tick's passenger/freight/mail traffic snapshot for the player's own ship (imports `useShipStore` directly to read `ship.value.id` and the crew-derived DM fields below — a no-op if the player has no ship). MgT2022 only |
 | `loadWeeklyHistory` / `loadMonthlyHistory` / `loadAnnualHistory` | |
 | `eventsForWorld(worldHex)` | |
 | `loadWorldEventHistory(hex, sector)` | |
@@ -784,6 +786,7 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `cargoUsed`, `cargoCapacity`, `cargoAvailable` | |
 | `stateroomsTotal`, `crewStateroomsUsed`, `stateroomsUsed`, `stateroomsAvailable` | |
 | `lowBerthsTotal`, `lowBerthsUsed`, `lowBerthsAvailable` | |
+| `crewStewardMax`, `crewPassengerCheckMax`, `crewFreightCheckMax`, `crewNavalScoutRankMax`, `crewSocialStandingMax`, `shipArmed` | MgT2022 Traffic Availability crew DMs (HLD §7c) — thin passthroughs onto the ship-load route's own `MAX(...)` aggregate query results, mirroring `crewStateroomsUsed`'s existing pattern |
 
 | Action | Description |
 |--------|-------------|

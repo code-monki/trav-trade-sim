@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0
+**Version:** 0.8.0
 
 ---
 
@@ -128,8 +128,13 @@ Covers the MgT2022 pricing/freight/mail/traffic/composition pipeline (`tests/tra
 | UT-607 | `smugglingRiskDM` | `bannedLawLevel=3, worldLawLevel=9` (book's worked example: military weapons banned at LL3, smuggled onto an LL9 world) | `6` — `max(0, worldLawLevel - bannedLawLevel)` |
 | UT-608 | `generateWorldSnapshot` | `tradeRules: 'MgT2022'` | Rows drawn from the 35-entry `MGT2022_TRADE_GOODS` (not `CT2_TRADE_GOODS`), never including Exotics (D66=66); row count is now variable per world/tick (composition-dependent, see UT-613), not a fixed 36 |
 | UT-609 | `generateWorldSnapshot` | `tradeRules: 'CT7'` vs `'T5'`, same seed | Purchase prices diverge — confirms the pre-existing T5-uses-CT7-pricing bug is fixed |
-| UT-610 | `generateTrafficSnapshot` | same inputs twice | Identical row (deterministic) |
+| UT-610 | `generateTrafficSnapshot` | same inputs twice, including `shipId` | Identical row (deterministic) |
 | UT-611 | `generateTrafficSnapshot` | high-population vs low-population world, 30 ticks | High-population world's summed traffic ≥ low-population world's |
+| UT-620 | `passengerTrafficDiceCount` vs `freightTrafficDiceCount` | 2D+DM = 6, 9, 10, 12, 13, 15 | Diverge at each (confirmed against the book's own two distinct tables); agree elsewhere |
+| UT-621 | `generateTrafficSnapshot` | two different `shipId`s, same world/tick | Independent, generally different results (crew DMs differ per ship) |
+| UT-622 | `generateTrafficSnapshot` | `crewStewardMax: 4` vs `0`, 40 ticks | Summed passenger traffic higher with Steward; summed freight traffic **identical** (proves the RNG-stream-isolation fix — Steward must never perturb Freight's draws) |
+| UT-623 | `generateTrafficSnapshot` | `crewFreightCheckMax: 4` vs `0`, 40 ticks | Summed freight traffic higher; summed passenger traffic identical |
+| UT-624 | `generateTrafficSnapshot` | `shipArmed`/`crewNavalScoutRankMax`/`crewSocialStandingMax` boosted vs baseline, 60 ticks | Mail-container hit rate is at least as high boosted |
 | UT-612 | `findSupplierRoll` | 2D=8, skill=0, starportDM=0, previousAttempts=0 | `{ total: 8, success: true }` (Average 8+ target); previousAttempts applies DM-1 each |
 | UT-613 | `mgt2022Composition` (via `generateWorldSnapshot`) | world with no matching trade codes, Population digit 0 | Exactly the 6 Common Goods, no random extras |
 | UT-614 | `mgt2022Composition` (via `generateWorldSnapshot`) | world Remarks include a code matching a Trade Good's `availability` | That Trade Good is present regardless of the random D66 rolls |
@@ -507,13 +512,18 @@ Every subsection below fully catalogues its component's actual test file (`tests
 2. Open Campaign Management → Ships → Templates; verify a "Type A Free Trader" template is lazily seeded (parity with CT7), and that the New Ship/Template forms expose an Armed checkbox
 3. Select a world with the Market tab open as a player who hasn't yet found a supplier there this game-month; verify a "Find a Supplier" prompt is shown instead of the market table. Click "Find a Supplier"; on success, verify the market table now shows MgT2022's own goods names (e.g. "Common Electronics"), not CT7/T5's Book 2 names, and that the goods shown are a subset (Common Goods + trade-code matches + a few random extras) rather than always all 35. On failure, verify the prompt persists and a repeat attempt applies a DM-1 penalty
 4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity); verify Low passage fare scales by parsec distance (not flat)
-5. Open Port → Freight (visible only for MgT2022 campaigns); book a Major/Minor/Incidental lot; verify the charge is collected upfront (per-parsec rate, same regardless of lot size), and the lot appears in Ship → Aboard → Freight in Transit
+5. Open Port → Freight (visible only for MgT2022 campaigns); pick a lot size and verify its tonnage is a fixed, rolled value (Major ≈1-6×10t, Minor ≈1-6×5t, Incidental 1-6t) — not editable; book it; verify the charge is collected upfront (per-parsec rate, same regardless of lot size), and the lot appears in Ship → Aboard → Freight in Transit
 6. Advance the tick past the freight's due tick, then navigate the ship to its destination; verify a late-delivery penalty is deducted from credits at delivery and the obligation clears
 7. Open Port → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
 8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
 9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
 10. Open the Character dialog as a player in an MgT2022 campaign; verify the six characteristics (STR/DEX/END/INT/EDU/SOC) are editable and persist; verify the referee can also edit them, plus background/rank, from the Players tab
 11. As two different players with different Broker skill levels, attempt "Find a Supplier" at the same world; verify each player's own attempts/success are tracked independently (one succeeding doesn't grant the other access)
+12. Give a crew member the Steward skill (via the referee's Players tab) and advance a tick; verify Passenger traffic availability increases at the same world relative to before, while Freight lot availability is unaffected
+13. Give a crew member Broker or Streetwise and advance a tick; verify Freight lot availability tends to increase, with Passenger traffic unaffected by that specific skill
+14. Two different ships docked at the same world/tick: verify their traffic-availability numbers can differ (traffic is now per-ship, driven by each ship's own crew) — e.g. by comparing before/after reassigning a Steward-skilled crew member from one ship to the other
+15. Mark a ship Armed (referee Ships tab) and give a crew member a Navy or Scout background with a rank; verify mail-container availability trends higher than an otherwise-identical unarmed, rank-less ship
+16. Attempt to book more High/Middle/Low/Basic passengers than the ship's stateroom/low-berth/cargo capacity allows via a direct API call (bypassing the client's own check) — verify `POST /:id/book-passengers` rejects it server-side rather than only relying on client-side validation
 
 ### MTS-15: Accessibility (WCAG 2.2 AA)
 1. On each routed view (Login, Map, Referee), press Tab once on page load; verify the "Skip to main content" link becomes visible and focused, and activating it (Enter) moves focus into that view's `<main>` landmark

@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0  
+**Version:** 0.8.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -425,22 +425,24 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-17: Book Passengers
 
 **Actor:** Player
-**Related Requirements:** FR-1101, FR-1102, FR-1103, FR-1104, FR-1106
+**Related Requirements:** FR-1101, FR-1102, FR-1103, FR-1104, FR-1106, FR-1108
 **Trigger:** Player opens Port > Passengers tab
 
 **Preconditions:**
 - Player's character has `can_trade`
 - Sufficient stateroom/berth capacity is available for the requested passage type
+- For MgT2022: sufficient traffic availability for the requested tier this tick (UC-38)
 
 **Main Flow:**
 1. Player selects passage type (High, Middle, or Low), passenger count, and a destination
-2. System validates capacity is available
+2. System validates capacity is available (client-side)
 3. System collects fare at embarkation (CT7: flat per jump; T5: per-parsec for High/Middle, flat for Low; MgT2022: per-parsec for all four tiers — High/Middle/Basic/Low — with Basic consuming cargo tonnage instead of a berth)
-4. System creates an obligation record (kind = passenger), writes a `passenger_fare` transaction, and credits the ship account
-5. System updates the Ship > Aboard tab occupancy display
+4. System independently re-validates stateroom/low-berth/cargo capacity and (MgT2022) the traffic-availability cap server-side before committing (FR-1108)
+5. System creates an obligation record (kind = passenger), writes a `passenger_fare` transaction, and credits the ship account
+6. System updates the Ship > Aboard tab occupancy display
 
 **Alternate / Exception Flows:**
-- **A1 — Insufficient stateroom/berth capacity:** Booking rejected
+- **A1 — Insufficient stateroom/berth/cargo capacity, or traffic availability exceeded (MgT2022):** Booking rejected, server-side as well as client-side
 
 **Postconditions:**
 - An obligation (kind = passenger) exists as pending
@@ -870,8 +872,8 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 - Campaign's `trade_rules` is `MgT2022`
 
 **Main Flow:**
-1. Player selects a lot size (Major, Minor, or Incidental), a tonnage, parsecs, and a destination
-2. System validates cargo space and caps the tonnage/lot count against the tick's rolled freight-lot traffic availability
+1. Player selects a lot size (Major, Minor, or Incidental) and a destination; the lot's tonnage is a fixed, seeded roll (Major 1D×10, Minor 1D×5, Incidental 1D) — not a value the player chooses, since a lot can't be split or resized
+2. System validates cargo space and caps the lot count against the tick's rolled freight-lot traffic availability for this ship
 3. System creates an obligation (kind = freight) recording the tonnage, lot size, rate, and a due tick, charges the agreed amount upfront, and credits the ship account. Rate/ton depends only on parsecs travelled, not on the chosen lot size — lot size affects availability (via traffic rolls) and typical tonnage, not price
 4. Ship > Aboard > Freight in Transit reflects the new lot
 
@@ -905,22 +907,24 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-38: View Traffic Availability (MgT2022)
 
 **Actor:** Player, Referee
-**Related Requirements:** FR-2006, FR-2007, FR-2008
+**Related Requirements:** FR-2006, FR-2007, FR-2008, FR-2009, FR-2010
 **Trigger:** Player opens the Passengers, Mail, or Freight tab on an MgT2022 campaign
 
 **Preconditions:**
 - Campaign's `trade_rules` is `MgT2022`
+- Player has an assigned ship (the roll depends on that ship's own crew)
 
 **Main Flow:**
-1. System deterministically rolls (or retrieves, if already rolled this tick) the current tick's passenger/freight/mail traffic-availability counts for the selected world, seeded the same way as market snapshot generation
+1. System deterministically rolls (or retrieves, if already rolled this tick) the current tick's passenger/freight/mail traffic-availability counts for the selected world **and the player's own ship** — not the world alone, since the roll incorporates that ship's current crew's highest Steward skill (Passengers, ambient) and an automatic Broker/Carouse/Streetwise or Broker/Streetwise check (best of crew, Effect can be negative), plus, for Mail, whether the ship is armed, the world's Tech Level, and the highest Naval/Scout rank and SOC among crew
 2. System displays the rolled count next to each passage tier, freight lot size, and the mail contract form
 3. Booking forms cap their inputs at the displayed availability
 
 **Alternate / Exception Flows:**
 - **A1 — CT7/T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity
+- **A2 — A different ship at the same world/tick:** Gets its own, potentially different, availability counts, reflecting its own crew
 
 **Postconditions:**
-- `traffic_snapshots` has a row for this (campaign, world, tick) if one didn't already exist
+- `traffic_snapshots` has a row for this (campaign, **ship**, world, tick) if one didn't already exist
 
 ---
 

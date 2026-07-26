@@ -41,6 +41,16 @@ export const useShipStore = defineStore('ship', () => {
     passengers.value.filter(p => p.passage_type === 'low').reduce((s, p) => s + p.count, 0))
   const lowBerthsAvailable = computed(() => lowBerthsTotal.value - lowBerthsUsed.value)
 
+  // MgT2022 traffic-availability crew DMs ("SEEKING PASSENGERS"/"FREIGHT"/
+  // "MAIL") — aggregated server-side at ship-load time, same pattern as
+  // crew_staterooms above.
+  const crewStewardMax          = computed(() => ship.value?.crew_steward_max ?? 0)
+  const crewPassengerCheckMax   = computed(() => ship.value?.crew_passenger_check_max ?? 0)
+  const crewFreightCheckMax     = computed(() => ship.value?.crew_freight_check_max ?? 0)
+  const crewNavalScoutRankMax   = computed(() => ship.value?.crew_naval_scout_rank_max ?? 0)
+  const crewSocialStandingMax   = computed(() => ship.value?.crew_social_standing_max ?? null)
+  const shipArmed               = computed(() => ship.value?.armed ?? false)
+
   function clearError() { error.value = null }
 
   // ── loadShip ──────────────────────────────────────────────────────────────
@@ -543,6 +553,8 @@ export const useShipStore = defineStore('ship', () => {
     cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed,
     stateroomsTotal, crewStateroomsUsed, stateroomsUsed, stateroomsAvailable,
     lowBerthsTotal, lowBerthsUsed, lowBerthsAvailable,
+    crewStewardMax, crewPassengerCheckMax, crewFreightCheckMax,
+    crewNavalScoutRankMax, crewSocialStandingMax, shipArmed,
     clearError, loadShip, createShip, updateLocation,
     buyCargo, sellCargo,
     bookPassengers, refundPassenger,

@@ -23,7 +23,6 @@ import {
   MGT2022_MAIL_PAYMENT_PER_CONTAINER,
   MGT2022_STARPORT_TRAFFIC_DM,
   MGT2022_STARPORT_SUPPLIER_DM,
-  MGT2022_POPULATION_TRAFFIC_DM,
 } from './traveller-data-mgt2022.js'
 
 export { parseTradeCodes, starportFromUWP, techFromUWP, lawFromUWP } from './trade-engine-ct7.js'
@@ -281,19 +280,4 @@ export function smugglingRiskDM(bannedLawLevel, worldLawLevel) {
   return Math.max(0, worldLawLevel - bannedLawLevel)
 }
 
-// ── Traffic availability (passenger/freight/mail scarcity) ───────────────────
-
-/**
- * Resolve a 2D6+DM roll into an availability count for one traffic category.
- * Baseline: a roll of 6 or less yields 0; each point above 6 yields one more
- * unit available (tier/lot-size differences are expressed via the DM table,
- * not this formula).
- * @param {number} twoDRoll
- * @param {number} dm
- * @returns {number}
- */
-export function trafficCount(twoDRoll, dm) {
-  return Math.max(0, twoDRoll + dm - 6)
-}
-
-export { MGT2022_STARPORT_TRAFFIC_DM, MGT2022_POPULATION_TRAFFIC_DM }
+export { MGT2022_STARPORT_TRAFFIC_DM }

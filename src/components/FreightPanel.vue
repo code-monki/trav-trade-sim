@@ -40,15 +40,8 @@
 
           <div class="form-row two-col">
             <div>
-              <label for="freight-tons-input">Tons</label>
-              <div class="stepper">
-                <button type="button" aria-label="Decrease tons"
-                        @click="decTons" :disabled="form.tons <= 1">−</button>
-                <input id="freight-tons-input" v-model.number="form.tons" type="number" min="1"
-                       :max="maxTons" class="count-input" />
-                <button type="button" aria-label="Increase tons"
-                        @click="incTons" :disabled="form.tons >= maxTons">+</button>
-              </div>
+              <label>Lot Tonnage</label>
+              <div class="lot-tonnage">{{ lotTons }}t</div>
             </div>
             <div>
               <label for="freight-parsecs-input">Parsecs</label>
@@ -56,6 +49,10 @@
                      class="parsec-input" />
             </div>
           </div>
+          <p class="hint">
+            A {{ LOT_SIZE_LABELS[form.lotSize] }} lot is {{ MGT2022_FREIGHT_LOT_SIZE_DICE[form.lotSize] }} tons,
+            rolled once per lot size/tick — lots can't be split or resized.
+          </p>
 
           <div class="form-row">
             <label>Destination World</label>
@@ -69,10 +66,10 @@
           </p>
 
           <!-- Charge preview -->
-          <div class="fare-preview" v-if="form.tons > 0">
+          <div class="fare-preview" v-if="lotTons > 0">
             <span class="fare-label">Charge</span>
             <span class="fare-amount">
-              {{ form.tons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
+              {{ lotTons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
               = <strong>Cr{{ charge.toLocaleString() }}</strong>
             </span>
           </div>
@@ -104,6 +101,9 @@ import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
 import { freightRate, freightCharge } from '../lib/trade-engine-mgt2022.js'
+import { rollQty } from '../lib/trade-engine-ct7.js'
+import { makeRng } from '../lib/market-tick.js'
+import { MGT2022_FREIGHT_LOT_SIZE_DICE } from '../lib/traveller-data-mgt2022.js'
 import { hexDistance }   from '../utils/hexDistance.js'
 import WorldPicker       from './WorldPicker.vue'
 
@@ -119,7 +119,7 @@ const tick = useTickStore()
 const LOT_SIZES = ['major', 'minor', 'incidental']
 const LOT_SIZE_LABELS = { major: 'Major', minor: 'Minor', incidental: 'Incidental' }
 
-const form = ref({ lotSize: 'major', tons: 10, parsecs: 1 })
+const form = ref({ lotSize: 'major', parsecs: 1 })
 const destWorld = ref({ hex: '', name: '', sector: '' })
 
 watch(() => destWorld.value.hex, (hex) => {
@@ -132,9 +132,21 @@ watch(() => destWorld.value.hex, (hex) => {
 const formError  = ref('')
 const successMsg = ref('')
 
+function d6(rng) { return Math.floor(rng() * 6) + 1 }
+
+// A lot's tonnage is rolled, not chosen — "Major = 1Dx10, Minor = 1Dx5,
+// Incidental = 1D" — and can't be split or resized once booked. Seeded so
+// the same lot size/tick/ship/world always shows the same tonnage rather
+// than re-rolling on every render.
+const lotTons = computed(() => {
+  if (!ship.hasShip || !props.world?.Hex) return 0
+  const rng = makeRng(`${auth.campaign?.id}:${props.world.Hex}:${ship.ship.id}:freight-lot:${form.value.lotSize}:${tick.currentTick}:v1`)
+  return rollQty(MGT2022_FREIGHT_LOT_SIZE_DICE[form.value.lotSize], [d6(rng)])
+})
+
 // Rate depends only on distance, not lot size, per the corrected MgT2022 rules.
 const ratePerTon = computed(() => freightRate(form.value.parsecs))
-const charge     = computed(() => freightCharge(form.value.tons, form.value.parsecs))
+const charge     = computed(() => freightCharge(lotTons.value, form.value.parsecs))
 const dueTick    = computed(() => tick.currentTick + form.value.parsecs)
 
 const lotsAvailable = computed(() => {
@@ -142,12 +154,10 @@ const lotsAvailable = computed(() => {
   return tick.trafficAvailability?.[key] ?? 0
 })
 
-const maxTons = computed(() => Math.max(0, ship.cargoAvailable))
-
 const canBook = computed(() => {
   if (!ship.hasShip) return false
-  if (form.value.tons < 1) return false
-  if (form.value.tons > ship.cargoAvailable) return false
+  if (lotTons.value < 1) return false
+  if (lotTons.value > ship.cargoAvailable) return false
   if (!destWorld.value.hex.trim()) return false
   if (!destWorld.value.sector.trim()) return false
   if (lotsAvailable.value <= 0) return false
@@ -158,8 +168,8 @@ async function submitBooking() {
   formError.value  = ''
   successMsg.value = ''
 
-  if (form.value.tons > ship.cargoAvailable) {
-    formError.value = `Insufficient cargo space (need ${form.value.tons}t, have ${ship.cargoAvailable}t)`
+  if (lotTons.value > ship.cargoAvailable) {
+    formError.value = `Insufficient cargo space (need ${lotTons.value}t, have ${ship.cargoAvailable}t)`
     return
   }
   if (lotsAvailable.value <= 0) {
@@ -177,7 +187,7 @@ async function submitBooking() {
     destSector:       destWorld.value.sector,
     destWorldName:    destWorld.value.name,
     parsecs:          form.value.parsecs,
-    freightTons:      form.value.tons,
+    freightTons:      lotTons.value,
     freightLotSize:   form.value.lotSize,
     ratePerTon:       ratePerTon.value,
     charge:           charge.value,
@@ -190,15 +200,11 @@ async function submitBooking() {
     return
   }
 
-  successMsg.value = `Booked ${form.value.tons}t ${LOT_SIZE_LABELS[form.value.lotSize]} freight — Cr${charge.value.toLocaleString()} collected`
-  form.value.tons    = 10
+  successMsg.value = `Booked ${lotTons.value}t ${LOT_SIZE_LABELS[form.value.lotSize]} freight — Cr${charge.value.toLocaleString()} collected`
   form.value.parsecs = 1
   destWorld.value    = { hex: '', name: '', sector: '' }
   setTimeout(() => { successMsg.value = '' }, 3500)
 }
-
-function incTons() { if (form.value.tons < maxTons.value) form.value.tons++ }
-function decTons() { if (form.value.tons > 1) form.value.tons-- }
 </script>
 
 <style scoped>
@@ -258,17 +264,15 @@ function decTons() { if (form.value.tons > 1) form.value.tons-- }
   color: var(--accent);
 }
 
-.stepper { display: flex; align-items: center; gap: 0.25rem; }
-.stepper button {
-  background: var(--bg-panel);
+.lot-tonnage {
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  width: 28px; height: 28px;
-  font-size: 1rem; cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+  width: fit-content;
 }
-.stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
-.count-input  { width: 60px; text-align: center; }
 .parsec-input { width: 60px; }
 
 .fare-preview {

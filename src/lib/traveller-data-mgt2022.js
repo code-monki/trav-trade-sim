@@ -174,13 +174,24 @@ export const MGT2022_MAIL_FREIGHT_DM_BANDS = [
 // ── Traffic availability: 2D + Population/Starport/TL/Zone DM → dice count ───
 // Drives the passenger/freight/mail scarcity mechanic (traffic-tick.js).
 // Distinct from MGT2022_POPULATION_AVAIL_DM above (that one's for the
-// speculative-trade quantity roll) — this table is specific to the Freight
-// section's own DMs and was previously (incorrectly) aliased to the other one.
-export const MGT2022_POPULATION_TRAFFIC_DM = {
+// speculative-trade quantity roll). Passenger and Freight Traffic turn out
+// to have their OWN, different Population/Zone DM tables (confirmed against
+// the book's "SEEKING PASSENGERS" and "FREIGHT" sections) — this one is the
+// Freight-specific table (was previously, incorrectly, applied to Passenger
+// traffic too).
+export const MGT2022_FREIGHT_POPULATION_TRAFFIC_DM = {
   0: -4, 1: -4, 2: 0, 3: 0, 4: 0, 5: 0,
   6: +2, 7: +2, 8: +4, 9: +4, A: +4, B: +4, C: +4,
 }
 
+// Passenger Traffic's own Population DM — less punishing than Freight's at
+// the high end (Pop 6-7: +1 not +2, Pop 8+: +3 not +4).
+export const MGT2022_PASSENGER_POPULATION_TRAFFIC_DM = {
+  0: -4, 1: -4, 2: 0, 3: 0, 4: 0, 5: 0,
+  6: +1, 7: +1, 8: +3, 9: +3, A: +3, B: +3, C: +3,
+}
+
+// Starport DM is confirmed shared between Passenger and Freight Traffic.
 export const MGT2022_STARPORT_TRAFFIC_DM = { A: 2, B: 1, C: 0, D: 0, E: -1, X: -3 }
 
 // Find a Supplier's own starport DM — a distinct mechanic/table from the
@@ -188,7 +199,9 @@ export const MGT2022_STARPORT_TRAFFIC_DM = { A: 2, B: 1, C: 0, D: 0, E: -1, X: -
 // "The size of the Starport provides a bonus to finding a supplier."
 export const MGT2022_STARPORT_SUPPLIER_DM = { A: 6, B: 4, C: 2, D: 0, E: 0, X: 0 }
 
-// Tech Level DM for traffic (Freight/Mail): TL<=6: -1, TL>=9: +2, else 0.
+// Tech Level DM — Freight Traffic only (Passenger Traffic has no TL term;
+// Mail has its own, different TL threshold — see MGT2022_MAIL_TECH_LEVEL_DM
+// below): TL<=6: -1, TL>=9: +2, else 0.
 export function techLevelTrafficDM(techLevelInt) {
   if (techLevelInt == null) return 0
   if (techLevelInt <= 6) return -1
@@ -196,12 +209,31 @@ export function techLevelTrafficDM(techLevelInt) {
   return 0
 }
 
-// Zone DM for traffic (Freight/Mail): Amber: -2, Red: -6, else 0.
-export function zoneTrafficDM(zone) {
+// Mail's own Tech Level threshold — distinct from Freight's above (RAW:
+// "World is TL of 5 or less: DM-2", no bonus tier at the high end).
+export function mailTechLevelDM(techLevelInt) {
+  return techLevelInt != null && techLevelInt <= 5 ? -2 : 0
+}
+
+// Zone DM — Freight Traffic: Amber: -2, Red: -6, else 0.
+export function freightZoneTrafficDM(zone) {
   if (zone === 'A') return -2
   if (zone === 'R') return -6
   return 0
 }
+
+// Zone DM — Passenger Traffic's own table (less punishing, and Amber is
+// actually a bonus): Amber: +1, Red: -4, else 0.
+export function passengerZoneTrafficDM(zone) {
+  if (zone === 'A') return +1
+  if (zone === 'R') return -4
+  return 0
+}
+
+// Structural per-tier DMs — always applied when rolling for that specific
+// tier, independent of any crew/skill contribution.
+export const MGT2022_PASSENGER_TIER_DM = { high: -4, middle: 0, basic: 0, low: +1 }
+export const MGT2022_FREIGHT_TIER_DM   = { major: -4, minor: 0, incidental: +2 }
 
 // ── Freight Traffic table: 2D+DM → dice formula, then roll & sum ─────────────
 // Replaces the previous linear approximation. Returns the number of dice to
@@ -214,6 +246,24 @@ export function freightTrafficDiceCount(twoDPlusDM) {
   if (twoDPlusDM <= 11) return 4
   if (twoDPlusDM <= 14) return 5
   if (twoDPlusDM <= 16) return 6
+  if (twoDPlusDM === 17) return 7
+  if (twoDPlusDM === 18) return 8
+  if (twoDPlusDM === 19) return 9
+  return 10
+}
+
+// ── Passenger Traffic table: 2D+DM → dice formula, then roll & sum ───────────
+// Genuinely diverges from the Freight table above at rolls 6, 9, 10, 12, 13,
+// and 15 — confirmed against the book's own "Passenger Traffic" table, not
+// an approximation of the Freight one.
+export function passengerTrafficDiceCount(twoDPlusDM) {
+  if (twoDPlusDM <= 1)  return 0
+  if (twoDPlusDM <= 3)  return 1
+  if (twoDPlusDM <= 6)  return 2
+  if (twoDPlusDM <= 10) return 3
+  if (twoDPlusDM <= 13) return 4
+  if (twoDPlusDM <= 15) return 5
+  if (twoDPlusDM === 16) return 6
   if (twoDPlusDM === 17) return 7
   if (twoDPlusDM === 18) return 8
   if (twoDPlusDM === 19) return 9

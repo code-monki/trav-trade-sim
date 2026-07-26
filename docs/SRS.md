@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0  
+**Version:** 0.8.0  
 **Status:** Active development
 
 ---
@@ -150,6 +150,7 @@
 | FR-1105 | Passengers shall be automatically delivered when the ship arrives at their destination world |
 | FR-1106 | The Ship > Manifest tab shall display stateroom/berth occupancy and all in-transit passengers |
 | FR-1107 | The referee shall be able to issue a refund for any in-transit passenger; refund shall create a `passenger_refund` transaction and debit the ship account |
+| FR-1108 | `POST /:id/book-passengers` shall independently validate stateroom capacity (High/Middle), low-berth capacity (Low), cargo tonnage (Basic, MgT2022), and the current tick's traffic-availability cap for the requested tier server-side, rejecting a booking that exceeds any of them — not solely relying on the client-side check the booking form already performs |
 
 ### 2.12 Fuel Purchasing
 
@@ -240,14 +241,16 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-2001 | MgT2022 campaigns shall offer a Port > Freight tab for booking bulk cargo lots (Major, Minor, or Incidental), priced per ton per parsec off a single flat rate table — the rulebook's freight rate depends only on distance, not on lot size |
+| FR-2001 | MgT2022 campaigns shall offer a Port > Freight tab for booking bulk cargo lots (Major, Minor, or Incidental), priced per ton per parsec off a single flat rate table — the rulebook's freight rate depends only on distance, not on lot size. A lot's tonnage shall be rolled (Major 1D×10, Minor 1D×5, Incidental 1D), not chosen by the player, and a lot cannot be split or resized once booked |
 | FR-2002 | A freight booking shall create an `obligations` record (kind='freight') carrying the agreed tonnage, lot size, rate, and a due tick, write a `freight_charge` transaction, and credit the ship account upfront |
 | FR-2003 | Freight shall be automatically delivered when the ship arrives at its destination world, mirroring passenger/mail auto-delivery |
 | FR-2004 | Freight delivered after its due tick shall incur a randomized late-delivery penalty ((1D+4)×10% of the charge), clawed back from the ship's credits at delivery time and recorded as a `freight_penalty` transaction |
 | FR-2005 | The referee or player shall be able to cancel a pending freight obligation for a full refund via a "refund freight" action, mirroring passenger refunds |
-| FR-2006 | The system shall generate one deterministic, seeded traffic-availability roll per world per tick (population/starport-class driven), covering passenger counts per tier, freight lots per size, and mail container count — automatically, with no referee action required, following the same precedent as goods-quantity availability |
+| FR-2006 | The system shall generate one deterministic, seeded Traffic Availability roll per **ship** per world per tick — not per world/tick alone, since the roll depends on the ship's own crew (FR-2009) — covering passenger counts per tier, freight lots per size, and mail container count via the rulebook's own Passenger/Freight Traffic tables (2D6+DM → dice-formula → roll and sum), generated automatically with no referee action required, following the same precedent as goods-quantity availability |
 | FR-2007 | Passenger, freight, and mail booking forms shall display and enforce the current tick's rolled availability count for the selected tier/lot size, capping bookings at that count |
 | FR-2008 | Traffic-availability data shall be scoped to MgT2022 campaigns only; CT7/T5 campaigns shall remain unlimited-subject-to-ship-capacity, unaffected by this feature |
+| FR-2009 | The Traffic Availability roll shall incorporate the ship's own current crew: the highest `Steward` skill level (Passenger traffic only, ambient — no check required) and, separately, the Effect of an automatic Average (8+) check (2D6 + skill − 8, can be negative) using whichever crew member holds the single highest Broker/Carouse/Streetwise skill (Passengers) or Broker/Streetwise skill (Freight); a ship with no qualifying crew receives a DM of 0 for that term, not a penalty |
+| FR-2010 | Mail's own DM shall be derived from the banded Freight Traffic DM (excluding Freight's lot-size-tier adjustment) plus: +2 if the ship is armed, −2 if the world's Tech Level is 5 or less, the highest Naval-or-Scout `rank` among current crew, and the highest `social_standing` characteristic's DM among current crew |
 
 ---
 

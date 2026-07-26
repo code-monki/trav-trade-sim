@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.7.0
+**Version:** 0.8.0
 
 ---
 
@@ -477,3 +477,75 @@ Because `makeRng(seed)` is a pure function of its seed string, drawing the same 
 `tick.js`'s `displaySnapshots` computed overlays `worldSnapshots` with these per-player numbers (MgT2022: both prices; CT7: sale only) for the current player's own `brokerSkill` (fetched via `GET /api/reports/skills`, cached in `tick.brokerSkill`); `MarketTable.vue`/`CargoHold.vue` read `displaySnapshots` instead of `worldSnapshots`, so `BuyDialog.vue` and the actual `buy-cargo`/`sell-cargo` calls — which already send whatever price the client computed, unchanged since the Phase 1 concurrency fix — automatically use the adjusted number.
 
 CT7's Broker **fee** (`brokerFee(skill, finalPrice)` — 5% × skill × transaction value, paid regardless of profit/loss) is a lump deduction at the moment of sale, not a per-ton price term, mirroring the existing freight late-delivery-penalty pattern: `ship.js`'s `sellCargo()` computes it and sends `broker_fee_total`; `worker/src/routes/ships.js`'s `/sell-cargo` nets it out of the credited amount and records it as a distinct `'fee'`-type transaction.
+
+## 7c. Traffic Availability (Passengers/Freight/Mail)
+
+Distinct from §7/§7a/§7b above — this isn't goods pricing, it's the "how
+many passengers/cargo-lots/mail-containers exist to be booked this tick"
+scarcity mechanic (`src/lib/traffic-tick.js`, `traffic_snapshots`). Per the
+rulebook's own "SEEKING PASSENGERS"/"FREIGHT"/"MAIL" sections, this now
+depends on the **ship's own current crew** (Steward, Broker, Carouse,
+Streetwise, Naval/Scout rank, SOC), not just the world — so it's generated
+per **(ship, world, tick)**, not just (world, tick): two ships docked at
+the same world can get different numbers.
+
+`generateTrafficSnapshot(world, sectorName, campaignId, tick, shipId, crew*)`
+uses **three independent seeded RNG streams** — one each for Passengers,
+Freight, and Mail (`...traffic:passenger:...`, `...traffic:freight:...`,
+`...traffic:mail:...`). This isn't incidental: each tier's dice-*count* is
+data-dependent (a DM of +2 might sum 3 dice, +4 might sum 5), so a single
+shared stream would let a change that should only affect one category
+(e.g. Steward, which per RAW only ever touches Passenger traffic) shift
+where the *next* category's draws start from — the same
+composition-vs-pricing contamination problem §7a's `compositionRng`
+already solves, discovered again here via a failing test before shipping.
+
+```
+# Passengers — own stream
+passengerBaseDM = passengerPopulationDM(popDigit) + starportDM(starport) + passengerZoneTrafficDM(zone)
+passengerCheckEffect = (2d6(passengerRng) + crewPassengerCheckMax) - 8   # best of Broker/Carouse/Streetwise among crew; can be negative
+for tier in {high, middle, basic, low}:
+  tierDM = passengerBaseDM + crewStewardMax + passengerCheckEffect + MGT2022_PASSENGER_TIER_DM[tier]
+  count  = passengerTrafficDiceCount(2d6(passengerRng) + tierDM) dice, rolled and summed from passengerRng
+
+# Freight — own stream, genuinely different Population/Zone DM table and
+# dice-count table from Passengers' (confirmed divergent at rolls 6, 9, 10, 12, 13, 15)
+freightBaseDM = freightPopulationDM(popDigit) + starportDM(starport) + techLevelTrafficDM(tl) + freightZoneTrafficDM(zone)
+freightCheckEffect = (2d6(freightRng) + crewFreightCheckMax) - 8   # best of Broker/Streetwise among crew
+for tier in {major, minor, incidental}:
+  tierDM = freightBaseDM + freightCheckEffect + MGT2022_FREIGHT_TIER_DM[tier]
+  count  = freightTrafficDiceCount(2d6(freightRng) + tierDM) dice, rolled and summed from freightRng
+
+# Mail — own stream; "Freight Traffic DM" means the un-tiered freight DM
+# VALUE computed above, reused — not a shared RNG stream.
+mailDM = bandedMapping(freightBaseDM + freightCheckEffect)
+       + (shipArmed ? +2 : 0) + mailTechLevelDM(tl)
+       + crewNavalScoutRankMax + characteristicDM(crewSocialStandingMax)
+mailContainers = mailAvailable(2d6(mailRng) + mailDM) ? mailContainerCount(d6(mailRng)) : 0
+```
+
+The five crew-derived inputs (`crewStewardMax`, `crewPassengerCheckMax`,
+`crewFreightCheckMax`, `crewNavalScoutRankMax`, `crewSocialStandingMax`)
+and `shipArmed` are computed **server-side**, not by this pure function —
+`worker/src/routes/ships.js`'s ship-loading route runs five `MAX(...)`
+aggregate queries over `crew` joined to `player_skills`/`players`
+(mirroring its pre-existing `crew_staterooms` `COUNT(*)` query exactly),
+attached to the returned ship object; `ship.js` exposes thin computed
+passthroughs, and `tick.js`'s `ensureTrafficSnapshot` (which now imports
+`useShipStore` directly — mutual Pinia store imports are safe as long as
+`useXStore()` is only called lazily inside each store's own `defineStore`
+body, as both already do) reads them at generation time.
+
+**Freight lot tonnage is rolled, not chosen**: `FreightPanel.vue`'s
+`lotTons` computed rolls `MGT2022_FREIGHT_LOT_SIZE_DICE[lotSize]` (Major
+1D×10, Minor 1D×5, Incidental 1D) via a seeded RNG keyed by
+`...freight-lot:${lotSize}:${tick}:v1`, fixed and non-editable per lot
+size/tick — "a freight lot cannot be broken up."
+
+`POST /:id/book-passengers` gained its first server-side validation:
+stateroom (High+Middle), low-berth (Low), cargo tons (Basic, via a small
+`MGT2022_BASIC_PASSAGE_TONS` constant duplicated locally in the worker —
+this package never imports the frontend bundle, same as the late-delivery-
+penalty logic just above it in the same file), and the `traffic_snapshots`
+cap for the requested tier — previously this route validated nothing at
+all, relying entirely on the client's own (already-existing) checks.
