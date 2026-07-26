@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0
+**Version:** 0.7.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -66,8 +66,8 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-401 | Show 36 goods with prices | DD §7 | `MarketTable.vue`, `tick.js:worldSnapshots` | — | CT-103 | E2E-201 | MTS-1 |
-| FR-402 | Deterministic price generation | HLD §7, DD §5 | `market-tick.js:generateWorldSnapshot`, `makeRng` | UT-108–111 | — | — | — |
+| FR-401 | Show goods on offer with prices (36 fixed for CT7/T5; narrower randomized composition for MgT2022, FR-411) | DD §7 | `MarketTable.vue`, `tick.js:displaySnapshots` (per-player overlay, FR-412) | — | CT-103 | E2E-201 | MTS-1 |
+| FR-402 | Deterministic price generation | HLD §7 (CT7/T5), HLD §7a (MgT2022), DD §5 | `market-tick.js:generateWorldSnapshot`, `makeRng` | UT-108–111 | — | — | — |
 | FR-403 | Lazy snapshot generation | HLD §4.3 | `tick.js:ensureWorldSnapshot` | — | — | ST-102–103 | — |
 | FR-404 | Backfill gaps since last visit | HLD §4.3 | `tick.js:ensureWorldSnapshot` (gap-fill loop, not just first-ever visit) | — | — | — | MTS-3 |
 | FR-405 | Price colour coding | DD §7 | `MarketTable.vue` `priceClass()` | — | — | — | — |
@@ -76,6 +76,9 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-408 | Weekly/monthly/annual charts | HLD §4.3 | `PriceChart.vue`, `tick.js:loadWeeklyHistory/loadMonthlyHistory/loadAnnualHistory` | — | — | — | — |
 | FR-408 (realized) | Realized OHLCV chart tab | DD §2 `PriceChart` | `PriceChart.vue` Realized tab, `realized_ohlcv` view (`d1/schema.sql`) | — | — | — | — |
 | FR-409 | Per-row Buy button | DD §2, DD §7 | `MarketTable.vue` `showBuyButton` prop, `.buy-row-btn` | — | CT-109–111 | E2E-301 | MTS-1 |
+| FR-410 | Find-a-Supplier gate (MgT2022 only) | HLD §7a, DD §1.1 `supplier_search_attempts` | `FindSupplierPanel.vue`, `worker/src/routes/market.js` (`/find-supplier`), `tick.js:loadSupplierStatus`/`attemptFindSupplier`, `trade-engine-mgt2022.js:findSupplierRoll` | UT-612 | — | — | MTS-14 |
+| FR-411 | MgT2022 goods composition (Common + trade-code matches + population D66 extras) | HLD §7a | `market-tick.js:mgt2022Composition`, `trade-engine-mgt2022.js:isRerollRequired`/`resolveGood`/`goodsAvailableDM` | UT-613–614 | — | — | MTS-14 |
+| FR-412 | Per-player pricing (CT7 sale-only, MgT2022 both) reflects the acting player's own Broker skill | HLD §7a | `market-tick.js:mgt2022PlayerGoodPrice`/`ct7PlayerSalePrice`, `tick.js:brokerSkill`/`loadBrokerSkill`/`displaySnapshots` | UT-616–619 | — | — | MTS-14 |
 
 ## 2.5 Trading — Buy
 
@@ -84,8 +87,9 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-501 | Only `can_trade` characters may buy | HLD §4.5, DD §1.1 `crew` | `ship.js:buyCargo` (canTrade guard) | — | — | — | MTS-1 |
 | FR-502 | Buy dialog with price/qty/hold/credits | DD §2 `BuyDialog` | `BuyDialog.vue` | — | CT-201–203 | E2E-301 | MTS-1 |
 | FR-503 | Prevent over-buy | DD §3 `useShipStore` | `ship.js:buyCargo` pre-checks | — | CT-202 | — | ST-202–203 |
-| FR-504 | Buy inserts cargo + transaction, debits credits | HLD §4.5 | `ship.js:buyCargo`, `worker/src/routes/ships.js:buy-cargo` (atomic `db.batch()`) | — | — | E2E-302 | MTS-1 |
+| FR-504 | Buy inserts cargo + transaction, debits credits | HLD §4.5 | `ship.js:buyCargo`, `worker/src/routes/ships.js:buy-cargo` (guarded stock decrement, then `db.batch()` for cargo/transaction/credits — see FR-506) | — | — | E2E-302 | MTS-1 |
 | FR-505 | Hold display updates after buy | DD §3 | `ship.js` cargo ref reactivity | — | — | E2E-302 | — |
+| FR-506 | Atomic stock guard against concurrent overselling | DD §1.2 | `worker/src/routes/ships.js:buy-cargo` (guarded `UPDATE ... WHERE qty_available >= ?`, checked via `meta.changes`) | — | — | — | — |
 
 ## 2.6 Trading — Sell
 
@@ -95,6 +99,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-602 | Sell confirmation with profit/loss | HLD §4.5 | `CargoHold.vue` confirm row | — | — | E2E-303 | MTS-1 |
 | FR-603 | Sell removes cargo, logs transaction + trade_record | HLD §4.5 | `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` | — | — | E2E-303 | MTS-1 |
 | FR-604 | Profit flash notification | DD §2 | `CargoHold.vue` flash animation | — | — | E2E-303 | MTS-1 |
+| FR-605 | CT7 Broker commission deducted at sale, recorded as a distinct fee transaction | HLD §7a, DD §1.1 `transactions` | `trade-engine-ct7.js:brokerFee`, `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` (`broker_fee_total` handling) | — | — | — | MTS-14 |
 
 ## 2.7 Route Analysis
 
@@ -120,7 +125,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-901 | Referee creates ships | DD §1.1 `ships`, DD §3 | `RefereeView.vue` Ships tab, `referee.js:createShip` | — | — | E2E-402 | MTS-1 |
+| FR-901 | Referee creates ships (incl. MgT2022 `armed` flag) | DD §1.1 `ships` (migration `014`), DD §3 | `RefereeView.vue` Ships tab, `referee.js:createShip` | — | — | E2E-402 | MTS-1 |
 | FR-902 | Assign players to ships | DD §1.1 `crew` | `RefereeView.vue`, `referee.js:assignCrew` | — | — | E2E-403 | MTS-1 |
 | FR-903 | Toggle can_trade | DD §1.1 `crew` | `RefereeView.vue` crew checkbox, `d1/schema.sql` (crew.can_trade) | — | — | — | MTS-1 |
 | FR-904 | Captains auto-get can_trade | DD §1.1 | `RefereeView.vue:assignCrew` / `ship.js:createShip` (captain insert) | — | — | E2E-403 | MTS-1 |
@@ -134,6 +139,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-1001 | Referee manages skills | DD §1.1 `player_skills` | `RefereeView.vue` Players tab, `d1/schema.sql` | — | — | — | — |
 | FR-1002 | Skills visible to referee | HLD §5.1 | `RefereeView.vue` Players tab expand | — | — | — | — |
+| FR-1003 | MgT2022 characteristics/background/rank, referee + self-service editable | DD §1.1 `players` (migration `014`) | `CharacterDialog.vue`, `RefereeView.vue` Players tab, `worker/src/routes/reports.js` (`/characteristics`), `worker/src/routes/referee.js` (`PATCH /players/:id`) | — | — | — | MTS-14 |
 
 ## 2.11 Passengers
 

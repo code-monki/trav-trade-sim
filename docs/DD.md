@@ -1,13 +1,13 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0
+**Version:** 0.7.0
 
 ---
 
 ## 1. Database Schema
 
-The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/011_schema_ledger.sql`, both applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
+The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/015_supplier_search_attempts.sql` (15 migrations total, `001` being the baseline itself), applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
 
 **Schema-drift detection:** as of migration `011`, a `schema_migrations` ledger table (`id`, `applied_at`) records every migration a given D1 database has actually received — `d1/schema.sql` seeds it fully caught-up for fresh installs, and every migration file from `011` onward ends with its own `INSERT` recording itself. `worker/src/lib/schema-version.js` holds the Worker's own `EXPECTED_MIGRATIONS` list (must be updated in the same commit as any new migration file) and is checked by `GET /api/health`, which returns `503` with `schema_ok: false` if the live database's ledger doesn't match — the frontend (`src/lib/health-check.js`, called once at startup from `main.js`) shows a blocking "database schema is out of date" screen instead of letting the app continue into confusing mid-action failures.
 
@@ -62,7 +62,17 @@ Index: `idx_sessions_player (player_id)`
 | `locked_until` | TEXT | nullable | Lockout expiry; null = not locked |
 | `last_seen` | TEXT | nullable | |
 | `created_at` | TEXT | NOT NULL | |
+| `strength` | INTEGER | nullable | MgT2022 characteristic *(`d1/014_mgt2022_character_ship_fields.sql`)* |
+| `dexterity` | INTEGER | nullable | MgT2022 characteristic |
+| `endurance` | INTEGER | nullable | MgT2022 characteristic |
+| `intelligence` | INTEGER | nullable | MgT2022 characteristic |
+| `education` | INTEGER | nullable | MgT2022 characteristic |
+| `social_standing` | INTEGER | nullable | MgT2022 characteristic; feeds Mail's SOC DM (not yet wired — Phase 7) |
+| `background` | TEXT | nullable | e.g. `'Scout'`, `'Navy'`, `'Merchant'` — feeds Mail's Naval/Scout rank DM (not yet wired — Phase 7) |
+| `rank` | INTEGER | nullable | Rank within `background` |
 | UNIQUE | `(campaign_id, character_name)` | | |
+
+All eight fields added by migration `014`, nullable/defaulted so existing rows are unaffected; a referee fills them in per-character over time via `PATCH /api/referee/players/:id`, mirrored by a player self-service pair (`GET`/`PATCH /api/reports/characteristics`) with the same `session.player_id === player_id` ownership check `/skills` uses. Editable in `CharacterDialog.vue`, gated to campaigns with `trade_rules === 'MgT2022'`.
 
 #### `ships`
 
@@ -84,6 +94,7 @@ Index: `idx_sessions_player (player_id)`
 | `fuel_capacity` | INTEGER | NOT NULL, default 0 | Tons |
 | `fuel_current` | INTEGER | NOT NULL, default 0 | Tons |
 | `market_value` | INTEGER | NOT NULL, default 0 | Referee-entered valuation, populated via Ship Template selection or manual entry (§Asset Valuation) |
+| `armed` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | MgT2022: ship carries weapons — feeds Mail's armed-ship DM (not yet wired — Phase 7). Added by `d1/014_mgt2022_character_ship_fields.sql` |
 | `created_at` | TEXT | NOT NULL | |
 | UNIQUE | `(campaign_id, name)` | | |
 
@@ -107,6 +118,7 @@ Index: `idx_ships_campaign (campaign_id)`
 | `low_berth_capacity` | INTEGER | NOT NULL, default 0 | |
 | `fuel_capacity` | INTEGER | NOT NULL, default 0 | |
 | `market_value` | INTEGER | NOT NULL, default 0 | |
+| `armed` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | Mirrors `ships.armed`; carried onto ships created from this template. Added by `d1/014_mgt2022_character_ship_fields.sql` |
 | `notes` | TEXT | nullable | Flags the lazily-seeded CT7/MgT2022 starter template as unverified |
 | `created_at` | TEXT | NOT NULL | |
 | UNIQUE | `(campaign_id, name)` | | |
@@ -430,6 +442,7 @@ Indexes: `idx_trade_records_market`, `idx_trade_records_player`, `idx_trade_reco
 | `freight_tons` | INTEGER | nullable | freight only |
 | `freight_lot_size` | TEXT | nullable | freight only: `'major'` \| `'minor'` \| `'incidental'` (no `CHECK` constraint) |
 | `rate_per_ton` | INTEGER | nullable | freight only: agreed Cr/ton for the whole run |
+| `mail_containers` | INTEGER | nullable | mail only: 5 tons/container, meant to be reserved against cargo capacity on acceptance. Added by `d1/014_mgt2022_character_ship_fields.sql`; **not yet wired** — `POST /:id/accept-mail` doesn't populate it yet, so accepted mail still consumes no tracked cargo space (Phase 7, pending). Not to be confused with `traffic_snapshots.mail_containers` below, which is the *rolled availability count* for a world/tick, not a per-obligation reservation |
 | `notes` | TEXT | nullable | |
 | `created_at` | TEXT | NOT NULL | |
 
@@ -451,6 +464,25 @@ Indexes: `idx_obligations_ship (campaign_id, ship_id, kind, status)`, `idx_oblig
 | UNIQUE | `(campaign_id, world_hex, sector, tick)` | | |
 
 Index: `idx_traffic_snapshots_lookup (campaign_id, world_hex, sector, tick)`
+
+#### `supplier_search_attempts`
+*(`d1/015_supplier_search_attempts.sql`)* — MgT2022-only. "Find a Supplier" is a character-based, one-click check (Broker/Streetwise/Admin skill + starport DM, Average 8+ target) gating whether a given player can see a world's market at all this game-month — not an ambient world property, since different players may hold the relevant skill at different levels. Plain (non-seeded) dice: a one-shot player action, not a value that needs to be reproducible on replay.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PK | |
+| `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
+| `player_id` | TEXT | FK → players(id) ON DELETE CASCADE | |
+| `world_hex` / `sector` | TEXT | NOT NULL | |
+| `month_key` | INTEGER | NOT NULL | `floor(tick / TICKS_PER_MONTH)` — attempts/success persist for the rest of that game-month, not just the current tick |
+| `attempts` | INTEGER | NOT NULL, default 0 | Total attempts this player has made at this world this month; each additional attempt applies DM-1 to the next roll |
+| `succeeded` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | Once 1, `MarketTable.vue` is shown instead of the `FindSupplierPanel.vue` prompt for the rest of the month |
+| `updated_at` | TEXT | NOT NULL, default `datetime('now')` | |
+| UNIQUE | `(player_id, world_hex, sector, month_key)` | | |
+
+Index: `idx_supplier_search_player (campaign_id, player_id, world_hex, sector, month_key)`
+
+`GET`/`POST /api/campaigns/:id/find-supplier` (`worker/src/routes/market.js`) read/upsert this table; `src/stores/tick.js`'s `loadSupplierStatus`/`attemptFindSupplier` call them.
 
 Worker routes alias these columns back to the pre-refactor field names in SQL (`amount AS fare_total`, `origin_world_hex AS embark_world_hex`, `passenger_count AS count`, etc. — see `PASSENGER_SELECT`/`MAIL_SELECT` in `worker/src/routes/ships.js` and `referee.js`), so the frontend store (`useShipStore`'s `passengers`/`mailContracts` state, `bookPassengers`/`acceptMailContract` actions — §3) needed zero changes when the tables were unified.
 
@@ -474,11 +506,11 @@ D1 has no stored procedures — business logic that a Postgres-era design would 
 | `auth.js` | `/api/auth` | Create/join campaign, login, PIN reset, recovery code regeneration, delete campaign |
 | `campaigns.js` | `/api/campaigns` | Campaign label edit |
 | `calendar.js` | `/api/campaigns/:id/calendar`, `/advance-tick`, `/rollup-repair` | Tick advancement (`requireReferee`), monthly/annual rollup, gap-backfill repair (`requireAuth`) |
-| `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*` | Market snapshot lazy generation/backfill, price history, market events |
-| `ships.js` | `/api/ships` | Player-facing ship view, buy/sell cargo, fuel, obligations (passengers/mail), pay-debt |
-| `referee.js` | `/api/referee` | Ships, crew, players, skills, ship templates, ship debts, ship ownership (all `requireReferee`) |
+| `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*`, `/find-supplier` | Market snapshot lazy generation/backfill, price history, market events; MgT2022 Find-a-Supplier check (`GET`/`POST /find-supplier`) |
+| `ships.js` | `/api/ships` | Player-facing ship view, buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/mail), pay-debt |
+| `referee.js` | `/api/referee` | Ships (incl. `armed`), crew, players (incl. MgT2022 characteristics/background/rank via `PATCH /players/:id`), skills, ship templates (incl. `armed`), ship debts, ship ownership (all `requireReferee`) |
 | `organizations.js` | `/api/organizations` | Organization CRUD, officers, members, equity, dues collection, disbursement, fleet report (all `requireAuth`; mutations additionally gated by `isOfficerOrReferee`) |
-| `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned) |
+| `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned); player self-service skills and MgT2022 characteristics (`GET`/`PATCH /characteristics`) |
 | `health.js` | `/api/health` | Unauthenticated D1-aware readiness check — `checkSchemaVersion` against `schema_migrations`; `503` + `schema_ok: false` on drift. Distinct from the plain liveness check at `GET /` |
 
 Derived-value formulas (client-duplicated in `src/lib/market-tick.js` for display, computed server-side in `worker/src/lib/rollup.js`):
@@ -545,7 +577,7 @@ Drag release snaps to the nearest detent, with velocity awareness: a fling skips
 | `world` | Object | `null` | Current world (sell price lookup) |
 | `sectorName` | String | `''` | |
 
-No emits. Reads `useTickStore().worldSnapshots` for sell prices; calls `ship.sellCargo`. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
+No emits. Reads `useTickStore().displaySnapshots` for sell prices (the player's own Broker-adjusted number, not the shared baseline); calls `ship.sellCargo` with `brokerSkill: tick.brokerSkill` so the CT7 commission is applied consistently. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
 
 ### `BuyDialog`
 
@@ -648,7 +680,16 @@ Embedded in `PassengersPanel.vue`, `MailPanel.vue`, and `FreightPanel.vue` for d
 No props. Emits one event per menu item selected: `themes`, `about`, `tutorials`, `help`, `manage-character`, `manage-campaign` (referee-only), `signout`. Exposes a `mobile-extras` named slot, rendered inside the open dropdown only when slot content is provided — kept generic on purpose (the component has no store/prop dependency on what goes in it) so callers can carry over whatever controls don't fit their own narrow-viewport header. `MapView.vue` uses it to relocate the milieu picker and session readout (character, campaign code, REF badge) out of the header at ≤640px.
 
 ### `HelpDialog` / `AboutDialog` / `ThemeDialog` / `CharacterDialog` / `TutorialDialog`
-All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`). `HelpDialog`/`TutorialDialog` content is static/hardcoded (see `src/lib/tutorials.js` for tutorial step data); both are known to be stale relative to the financial-model feature set and are flagged for a separate revisit.
+All use `v-model` (`modelValue: Boolean`, emits `update:modelValue`). `HelpDialog`/`TutorialDialog` content is static/hardcoded (see `src/lib/tutorials.js` for tutorial step data); both are known to be stale relative to the financial-model feature set and are flagged for a separate revisit. `CharacterDialog` additionally shows a Characteristics section (STR/DEX/END/INT/EDU/SOC, self-service edit) gated to `auth.campaign?.trade_rules === 'MgT2022'`, backed by `GET`/`PATCH /api/reports/characteristics`.
+
+### `FindSupplierPanel` (MgT2022 only)
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `world` | Object | World whose starport supplies the DM |
+| `sectorName` | String | |
+
+No emits. Shown by `MapView.vue`'s Market tab in place of `MarketTable` whenever the current player hasn't yet succeeded a "Find a Supplier" check at this world this game-month. Reads the player's own Broker skill via `GET /api/reports/skills` and computes the starport DM client-side (`starportBrokerDM(starportFromUWP(world.UWP))`); the "Find a Supplier" button calls `tick.attemptFindSupplier`, which rolls 2D6 (unseeded — a one-shot player action, not required to be reproducible) server-side and records the attempt in `supplier_search_attempts`.
 
 ### Top-level views: `LoginView`, `MapView`, `RefereeView`
 Routed views, no props/emits (mounted by `src/router/index.js` under names `login`, `map`, `referee`). `MapView.vue` hosts the two-level tab system (§7) and every player-facing sub-component above. `RefereeView.vue` hosts the five campaign-management tabs (Ships, Players, Organizations, Events, Campaign) and makes many direct `api.js` calls beyond what `useRefereeStore` covers (ship debts, ship ownership, organizations sub-resources) — the store holds only the "core CRUD" state for each area; sub-resource management is component-local, a deliberate pattern carried consistently from the Organizations work onward.
@@ -705,12 +746,15 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | State | Description |
 |-------|-------------|
 | `currentTick`, `currentYear`, `currentDay`, `currentMonth` | |
-| `worldSnapshots` | `{ [die]: snapshotRow }` for the currently-viewed world/tick |
-| `snapshotWorldKey`, `activeEvents`, `worldEventHistory`, `loading`, `error` | |
+| `worldSnapshots` | `{ [die]: snapshotRow }` for the currently-viewed world/tick — the shared baseline (CT7/T5's own number; MgT2022's `brokerSkill: 0` number); components should read `displaySnapshots` instead (below) unless they specifically want the skill-independent baseline (e.g. nothing currently does) |
+| `snapshotWorldKey`, `snapshotWorld`, `snapshotSector` | Cache key/world object/sector behind `worldSnapshots`, set together in `ensureWorldSnapshot` — `snapshotWorld`/`snapshotSector` exist so `displaySnapshots`' per-player recompute has `world.UWP`/`Remarks`/`Zone` without every caller re-passing them |
+| `brokerSkill` | Current player's own `Broker` skill level (CT7/MgT2022 per-player pricing) — loaded via `loadBrokerSkill()`, not push-updated live |
+| `activeEvents`, `worldEventHistory`, `loading`, `error` | |
 
 | Computed | Description |
 |----------|-------------|
 | `imperialDate` | `"DDD-YYYY"` formatted string |
+| `displaySnapshots` | `worldSnapshots` overlaid with each good's price recomputed for `brokerSkill` — MgT2022: both purchase and sale (`mgt2022PlayerGoodPrice`); CT7: sale only (`ct7PlayerSalePrice`), per RAW; T5 and uncached state pass `worldSnapshots` through unchanged. The read site `MarketTable.vue`/`CargoHold.vue` use for display and for the price actually sent to `buyCargo`/`sellCargo` |
 
 | Action | Description |
 |--------|-------------|
@@ -722,6 +766,7 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `loadWeeklyHistory` / `loadMonthlyHistory` / `loadAnnualHistory` | |
 | `eventsForWorld(worldHex)` | |
 | `loadWorldEventHistory(hex, sector)` | |
+| `loadBrokerSkill()` | Fetches the current player's own `Broker` skill level via `GET /api/reports/skills`, into `brokerSkill`. Called from `MapView.vue`'s world-selection watcher (CT7/MgT2022 campaigns) |
 
 ### `useShipStore`
 
@@ -746,7 +791,7 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `loadShip(playerId, campaignId)` | One-call fetch of ship + cargo + passengers + mail |
 | `createShip(...)` | |
 | `updateLocation(worldHex, sector, opts?)` | Moves the ship; if `{tick, campaignId, playerId}` given, also auto-delivers matching passengers/mail |
-| `buyCargo(opts)` / `sellCargo(opts)` | |
+| `buyCargo(opts)` / `sellCargo(opts)` | `sellCargo` takes an optional `brokerSkill` (default 0); for CT7 campaigns it computes a Broker commission (`brokerFee`) deducted from proceeds and sent as `broker_fee_total`, netted out of the optimistic local credit update to match the worker's own deduction |
 | `bookPassengers(opts)` / `refundPassenger(...)` | |
 | `purchaseFuel(opts)` | Capped at `fuel_capacity − fuel_current` |
 | `payDebt(opts)` | Atomic decrement of `ships.credits` + `ship_debts.current_balance`, inserts a `debt_payments` row |
@@ -904,7 +949,7 @@ Keyboard shortcuts: `O` = Overview, `M` = Port/Market, `C` = Ship/Cargo, `E` = E
 
 | Sub-tab | Component | Content |
 |---------|-----------|---------|
-| Market | MarketTable + PriceChart | Trade goods, buy buttons, price chart |
+| Market | MarketTable + PriceChart (or FindSupplierPanel, MgT2022, until found) | Trade goods, buy buttons, price chart |
 | Passengers | PassengersPanel | Booking form, capacity check, fare preview |
 | Mail | MailPanel | Mail contract booking form, fare preview |
 | Services | ShipServices | Fuel purchase |

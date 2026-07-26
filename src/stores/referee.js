@@ -31,7 +31,7 @@ export const useRefereeStore = defineStore('referee', () => {
 
   async function createShip(campaignId, {
     name, hullType, hullTons, cargoCapacity, credits, jumpRating, maneuverRating,
-    staterooms, lowBerths, fuelCapacity, fuelCurrent, marketValue,
+    staterooms, lowBerths, fuelCapacity, fuelCurrent, marketValue, armed,
   }) {
     const { data, error: apiErr } = await api.post('/api/referee/ships', {
       campaign_id:           campaignId,
@@ -47,6 +47,7 @@ export const useRefereeStore = defineStore('referee', () => {
       fuel_capacity:         fuelCapacity  ?? 0,
       fuel_current:          fuelCurrent   ?? 0,
       market_value:          marketValue   ?? 0,
+      armed:                 armed         ?? false,
     })
     if (apiErr) throw new Error(apiErr)
     ships.value = [...ships.value, { ...data, crew: [] }].sort((a, b) => a.name.localeCompare(b.name))
@@ -70,7 +71,7 @@ export const useRefereeStore = defineStore('referee', () => {
 
   async function createShipTemplate({
     name, hullType, hullTons, cargoCapacity, jumpRating, maneuverRating,
-    staterooms, lowBerths, fuelCapacity, marketValue, notes,
+    staterooms, lowBerths, fuelCapacity, marketValue, armed, notes,
   }) {
     const { data, error: apiErr } = await api.post('/api/referee/ship-templates', {
       name:                  name.trim(),
@@ -83,6 +84,7 @@ export const useRefereeStore = defineStore('referee', () => {
       low_berth_capacity:    lowBerths     ?? 0,
       fuel_capacity:         fuelCapacity  ?? 0,
       market_value:          marketValue   ?? 0,
+      armed:                 armed         ?? false,
       notes:                 notes         || null,
     })
     if (apiErr) throw new Error(apiErr)
@@ -233,6 +235,15 @@ export const useRefereeStore = defineStore('referee', () => {
     )
   }
 
+  // ── Characteristics + background (MgT2022 rules-accuracy fields) ───────────
+
+  async function updatePlayerCharacteristics(playerId, fields) {
+    const { data, error: apiErr } = await api.patch(`/api/referee/players/${playerId}`, fields)
+    if (apiErr) throw new Error(apiErr)
+    players.value = players.value.map(p => p.id === playerId ? { ...p, ...data } : p)
+    return data
+  }
+
   // ── Manual market events ───────────────────────────────────────────────────
 
   async function createEvent(campaignId, { worldHex, sector, scope, tradeGoodDie, buyModifierPct, sellModifierPct, description, durationTicks, currentTick }) {
@@ -319,7 +330,7 @@ export const useRefereeStore = defineStore('referee', () => {
     loadShipTemplates, createShipTemplate, updateShipTemplate, deleteShipTemplate,
     loadOrganizations, createOrganization, updateOrganization, deleteOrganization,
     assignCrew, removeCrew, setCrewCanTrade, setCrewStateroomOccupancy, updateCrewRole,
-    loadPlayers, upsertSkill, removeSkill,
+    loadPlayers, upsertSkill, removeSkill, updatePlayerCharacteristics,
     createEvent, expireEvent, deleteEvent,
     loadEventDefinitions, createEventDefinition, updateEventDefinition, deleteEventDefinition,
   }

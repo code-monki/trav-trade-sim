@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0  
+**Version:** 0.7.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -194,24 +194,26 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-8: View Market Prices for a World
 
 **Actor:** Referee, Player
-**Related Requirements:** FR-401, FR-402, FR-403, FR-404, FR-405, FR-406, FR-407, FR-408, FR-409
+**Related Requirements:** FR-401, FR-402, FR-403, FR-404, FR-405, FR-406, FR-407, FR-408, FR-409, FR-410, FR-411, FR-412
 **Trigger:** User opens the Port > Market tab for a selected world
 
 **Preconditions:**
 - A world is selected
+- For MgT2022 campaigns: the player has succeeded a "Find a Supplier" check at this world this game-month (see A4)
 
 **Main Flow:**
 1. System checks whether a market snapshot exists for this world at the current tick
-2. If none exists, system generates prices deterministically and, on a world's first-ever visit, backfills price history for the current year
-3. System displays buy/sell price, spread, and quantity for all trade goods, colour-coded against the campaign ruleset's base price (CT7, T5, or MgT2022)
+2. If none exists, system generates prices deterministically and, on a world's first-ever visit, backfills price history for the current year. For MgT2022, the goods composing this snapshot are a randomized-per-world/tick subset (all Common Goods, Trade Goods matching the world's trade codes, plus population-code-count random extras) rather than the full goods table
+3. System displays buy/sell price, spread, and quantity for the goods on offer (all 36 `CT2_TRADE_GOODS` for CT7/T5; the MgT2022 composition above for MgT2022), colour-coded against the campaign ruleset's base price (CT7's/T5's shared constant, or MgT2022's own per-good base price). For CT7 (sale price only) and MgT2022 (both prices), the displayed numbers already reflect this specific player's own Broker skill — another player viewing the same world/tick with a different skill level would see different numbers
 4. Active market events are shown in a banner; affected goods are visually distinguished
 5. User selects one or more goods to chart; system renders weekly/monthly/annual/realized price history
 
 **Alternate / Exception Flows:**
-- None
+- **A4 — MgT2022, supplier not yet found this month:** System shows a "Find a Supplier" prompt instead of the market table. Player clicks "Find a Supplier"; system rolls 2D6 + the player's Broker/Streetwise/Admin skill + a starport DM, minus DM-1 per prior attempt this world/month, against an Average (8+) target. On success, the market table becomes visible for the rest of the game-month; on failure, the prompt persists and the attempt count increments
 
 **Postconditions:**
 - A `market_snapshots` row exists for (world, tick); no player state changes
+- For MgT2022, a successful Find-a-Supplier attempt persists in `supplier_search_attempts` for the rest of the game-month
 
 ---
 
@@ -220,7 +222,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-9: Buy Cargo
 
 **Actor:** Player
-**Related Requirements:** FR-501, FR-502, FR-503, FR-504, FR-505
+**Related Requirements:** FR-501, FR-502, FR-503, FR-504, FR-505, FR-506
 **Trigger:** Player opens the Market tab for the current world and initiates a purchase
 
 **Preconditions:**
@@ -239,6 +241,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 - **A1 — Insufficient credits:** System rejects the purchase and displays an error; no state changes occur
 - **A2 — Insufficient cargo capacity:** System rejects the purchase and displays an error; no state changes occur
 - **A3 — Player lacks `can_trade`:** Buy dialog is not available to the player
+- **A4 — Stock depleted by a concurrent buyer:** The stock decrement and availability check run as a single atomic operation; if another purchase already consumed the needed quantity between this player loading the market and confirming the buy, the system rejects the purchase with an error rather than allowing `qty_available` to go negative
 
 **Postconditions:**
 - Ship credits reduced by the purchase total
@@ -252,7 +255,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-10: Sell Cargo
 
 **Actor:** Player
-**Related Requirements:** FR-601, FR-602, FR-603, FR-604
+**Related Requirements:** FR-601, FR-602, FR-603, FR-604, FR-605
 **Trigger:** Player selects a held cargo item at the current world and opens Sell
 
 **Preconditions:**
@@ -261,18 +264,19 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Main Flow:**
 1. Player selects a cargo row and opens the Sell confirmation
-2. System displays the sale price and profit/loss versus purchase price
+2. System displays the sale price (for CT7/MgT2022, already reflecting this player's own Broker skill — a different player with a different skill level would see a different number for the same cargo) and profit/loss versus purchase price
 3. Player confirms the sale
-4. System deletes the cargo row, credits the ship account, writes a `sell` transaction, and inserts a trade record
-5. System displays a profit flash notification
+4. System deletes the cargo row, credits the ship account (for CT7, net of the Broker commission — see A2), writes a `sell` transaction, and inserts a trade record
+5. System displays a profit flash notification (net of any Broker commission)
 
 **Alternate / Exception Flows:**
 - **A1 — Player lacks `can_trade`:** Sell action is not available
+- **A2 — CT7 campaign, player has a Broker skill:** A commission (5% × skill × sale value, capped at skill 4) is deducted from proceeds and recorded as a separate fee transaction, distinct from the per-ton sale price itself
 
 **Postconditions:**
 - Cargo row removed
-- Ship credits increased by the sale price
-- A `sell` transaction and a trade record are recorded
+- Ship credits increased by the sale price, less any CT7 Broker commission
+- A `sell` transaction (and, for CT7 with a Broker commission, a `fee` transaction) and a trade record are recorded
 
 ---
 
@@ -431,7 +435,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Main Flow:**
 1. Player selects passage type (High, Middle, or Low), passenger count, and a destination
 2. System validates capacity is available
-3. System collects fare at embarkation (CT7: flat per jump; T5/MgT2022: per-parsec for High/Middle, flat for Low; MgT2022 also offers a fourth Basic tier billed per parsec, consuming cargo tonnage instead of a berth)
+3. System collects fare at embarkation (CT7: flat per jump; T5: per-parsec for High/Middle, flat for Low; MgT2022: per-parsec for all four tiers — High/Middle/Basic/Low — with Basic consuming cargo tonnage instead of a berth)
 4. System creates an obligation record (kind = passenger), writes a `passenger_fare` transaction, and credits the ship account
 5. System updates the Ship > Aboard tab occupancy display
 
@@ -868,7 +872,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Main Flow:**
 1. Player selects a lot size (Major, Minor, or Incidental), a tonnage, parsecs, and a destination
 2. System validates cargo space and caps the tonnage/lot count against the tick's rolled freight-lot traffic availability
-3. System creates an obligation (kind = freight) recording the tonnage, lot size, rate, and a due tick, charges the agreed amount upfront, and credits the ship account
+3. System creates an obligation (kind = freight) recording the tonnage, lot size, rate, and a due tick, charges the agreed amount upfront, and credits the ship account. Rate/ton depends only on parsecs travelled, not on the chosen lot size — lot size affects availability (via traffic rolls) and typical tonnage, not price
 4. Ship > Aboard > Freight in Transit reflects the new lot
 
 **Alternate / Exception Flows:**
@@ -917,3 +921,53 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Postconditions:**
 - `traffic_snapshots` has a row for this (campaign, world, tick) if one didn't already exist
+
+---
+
+### UC-39: Manage MgT2022 Characteristics, Background, and Rank
+
+**Actor:** Player, Referee
+**Related Requirements:** FR-1003
+**Trigger:** Player opens the Character dialog, or Referee opens Campaign Management > Players and selects a character (MgT2022 campaigns only)
+
+**Preconditions:**
+- Campaign's `trade_rules` is `MgT2022`
+- Referee flow: user is authenticated as referee. Player flow: user is authenticated as the character's own player
+
+**Main Flow:**
+1. User opens the characteristics form, pre-filled with the character's current STR/DEX/END/INT/EDU/SOC, background, and rank (blank/null if never set)
+2. User edits one or more fields and saves
+3. System persists the change
+
+**Alternate / Exception Flows:**
+- **A1 — Player attempts to edit another character's characteristics:** Rejected (403) — the self-service route checks `session.player_id === player_id`
+
+**Postconditions:**
+- `players` reflects the updated characteristics/background/rank
+
+---
+
+### UC-40: Find a Supplier (MgT2022)
+
+**Actor:** Player
+**Related Requirements:** FR-410
+**Trigger:** Player opens Port > Market at a world in an MgT2022 campaign, having not yet succeeded a Find-a-Supplier check there this game-month
+
+**Preconditions:**
+- Campaign's `trade_rules` is `MgT2022`
+- Player's character has `can_trade` on their assigned ship (to make the search meaningful — the check itself has no `can_trade` gate)
+
+**Main Flow:**
+1. System shows a "Find a Supplier" prompt in place of the market table, along with the count of any prior attempts this world/month
+2. Player clicks "Find a Supplier"
+3. System reads the player's own Broker skill level and computes the world's starport DM
+4. System rolls 2D6 (plain, non-seeded — a one-shot action, not required to be replay-deterministic), adds skill level + starport DM, subtracts 1 per prior attempt this world/month, and compares the total to the Average (8+) target
+5. System records the attempt in `supplier_search_attempts`
+6. On success, the market table becomes visible for the remainder of the game-month
+
+**Alternate / Exception Flows:**
+- **A1 — Check fails:** The Find-a-Supplier prompt remains; the player may retry (each retry is DM-1 harder) or wait for the next game-month, which resets `attempts`/`succeeded` for a new `month_key`
+- **A2 — Another player already succeeded at this world this month:** Has no effect on this player — success is tracked per player, not per world, since different players may hold Broker/Streetwise at different levels
+
+**Postconditions:**
+- `supplier_search_attempts` reflects the new attempt count and, on success, `succeeded = 1` for (player, world, sector, month)

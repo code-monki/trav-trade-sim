@@ -114,4 +114,6 @@ d1/
   011_schema_ledger.sql  # schema_migrations ledger — powers GET /api/health drift detection
   012_market_event_source.sql # market_events.source ('auto'/'manual')
   013_event_definitions.sql   # event_definitions table (reusable event templates)
+  014_mgt2022_character_ship_fields.sql # characteristics, background/rank, ship armed, mail_containers
+  015_supplier_search_attempts.sql      # Find a Supplier attempt tracking (MgT2022)
 ```

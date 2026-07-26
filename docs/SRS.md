@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0  
+**Version:** 0.7.0  
 **Status:** Active development
 
 ---
@@ -65,7 +65,7 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-401 | The market shall show current buy price, sell price, spread, and available quantity for all trade goods at the selected world |
+| FR-401 | The market shall show current buy price, sell price, spread, and available quantity for the goods on offer at the selected world. For CT7/T5 this is all 36 `CT2_TRADE_GOODS`; for MgT2022 it is a narrower, per-world/tick-randomized composition (FR-411) |
 | FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG, dispatched per-campaign to the CT7, T5, or MgT2022 pricing engine matching the campaign's `trade_rules` |
 | FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Cloudflare D1 |
 | FR-404 | On the first-ever visit to a world, the system shall backfill price history for all prior ticks in the current year |
@@ -74,6 +74,9 @@
 | FR-407 | The user shall be able to select multiple goods for simultaneous price charting via checkboxes |
 | FR-408 | Price charts shall support weekly (line), monthly (candlestick), annual (candlestick), and realized (candlestick/line from trade records) time frames |
 | FR-409 | A Buy button shall appear on each market row when the player has a ship and trading authorisation |
+| FR-410 | For MgT2022 campaigns, a player who has not yet succeeded a "Find a Supplier" check at the selected world this game-month shall see a Find-a-Supplier prompt instead of the market table; the check is a one-click character-based action (Broker/Streetwise/Admin skill + starport DM, target Average 8+, DM-1 per prior attempt this world/month), not an ambient world property |
+| FR-411 | For MgT2022 campaigns, the goods shown at a world shall be composed per the rulebook's "Determine Goods Available" procedure: all Common Goods, all Trade Goods whose availability matches one of the world's trade codes, plus one random D66 roll per digit of the world's Population code (rerolled on 61-65 unless seeking black market); a good rolled more than once stacks quantity rather than appearing twice. Composition is randomized independently per world/tick using a seed distinct from any good's own price-roll seed |
+| FR-412 | For CT7 and MgT2022 campaigns, the purchase and/or sale prices a player sees and pays shall reflect that player's own Broker skill: MgT2022 applies it to both the purchase and sale roll; CT7 applies it to the sale roll only (no RAW purchase-side term). Two players with different Broker skill levels viewing the same world/tick therefore see different prices. Price/OHLC history charts continue to show the shared, skill-independent baseline (a market index), not any individual player's negotiated price |
 
 ### 2.5 Trading — Buy
 
@@ -84,6 +87,7 @@
 | FR-503 | The system shall prevent purchase if credits are insufficient or hold space is unavailable |
 | FR-504 | A successful purchase shall insert a cargo row, debit the ship's credit account, and insert an immutable transaction record |
 | FR-505 | The ship's cargo hold display shall update immediately after purchase |
+| FR-506 | The system shall guard against two concurrent purchases overselling the same market snapshot's stock: the quantity decrement and the availability check shall be a single atomic operation, and a purchase that loses the race shall be rejected cleanly rather than allowing `qty_available` to go negative |
 
 ### 2.6 Trading — Sell
 
@@ -93,6 +97,7 @@
 | FR-602 | The sell confirmation shall display the sale price, profit/loss versus purchase price, and require explicit confirmation |
 | FR-603 | A successful sale shall delete the cargo row, credit the ship's account, insert a transaction record, and insert a trade record |
 | FR-604 | Profit shall be displayed as a flash notification after a successful sale |
+| FR-605 | For CT7 campaigns, a Broker-skill-based commission (5% × skill × total sale value, skill capped at 4) shall be deducted from sale proceeds at the moment of sale — paid regardless of profit or loss — and recorded as its own fee transaction, distinct from the per-ton sale price (which already carries the Broker DM bonus). MgT2022 has no equivalent separate commission; its Broker benefit is entirely inside the roll/price itself |
 
 ### 2.7 Route Analysis
 
@@ -118,7 +123,7 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-901 | The referee shall be able to create ships with name, hull type, hull tonnage, cargo capacity, stateroom capacity, low berth capacity, fuel capacity, current fuel level, jump rating, maneuver rating, and starting credits |
+| FR-901 | The referee shall be able to create ships with name, hull type, hull tonnage, cargo capacity, stateroom capacity, low berth capacity, fuel capacity, current fuel level, jump rating, maneuver rating, starting credits, and (MgT2022 only, in this app) an armed flag |
 | FR-902 | The referee shall be able to assign players to ships with a crew role |
 | FR-903 | The referee shall be able to set or remove the `can_trade` flag on any crew member |
 | FR-904 | Captains shall automatically receive `can_trade` when assigned or promoted |
@@ -132,6 +137,7 @@
 |----|------------|
 | FR-1001 | The referee shall be able to add, edit, and remove free-form skills for any player character |
 | FR-1002 | Skills shall be visible to the referee in the Players tab |
+| FR-1003 | For MgT2022 campaigns, a player's six characteristics (STR/DEX/END/INT/EDU/SOC), background, and rank shall be editable by both the referee (Players tab) and the player themself (Character dialog), mirroring the existing self-service pattern for skills |
 
 ### 2.11 Passengers
 
@@ -139,7 +145,7 @@
 |----|------------|
 | FR-1101 | A player shall be able to book passengers (High, Middle, or Low passage; MgT2022 campaigns add a fourth tier, Basic passage) at the Port > Passengers tab |
 | FR-1102 | The booking form shall validate that stateroom/berth capacity is available before accepting the booking; for MgT2022 Basic passage, general cargo tonnage shall be validated instead (2 tons/passenger), since Basic passage has no dedicated stateroom or berth |
-| FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 and MgT2022 per-parsec for High/Middle (MgT2022 also scales Basic by parsec), flat for Low |
+| FR-1103 | Passenger fares shall be collected at embarkation: CT7 flat per jump; T5 per-parsec for High/Middle, flat for Low; MgT2022 per-parsec for all four tiers (High/Middle/Basic/Low) |
 | FR-1104 | A passenger booking shall create an `obligations` record (kind='passenger'), write a `passenger_fare` transaction, and credit the ship account |
 | FR-1105 | Passengers shall be automatically delivered when the ship arrives at their destination world |
 | FR-1106 | The Ship > Manifest tab shall display stateroom/berth occupancy and all in-transit passengers |
@@ -172,7 +178,7 @@
 |----|------------|
 | FR-1401 | The referee shall be able to create, edit, and delete ship templates scoped to the campaign |
 | FR-1402 | Each template shall be tagged with a ruleset (CT7, T5, or MgT2022) matching the campaign's trade rules |
-| FR-1403 | The New Ship form shall offer a Template dropdown defaulting to "Custom Design"; selecting a template shall pre-fill hull tons, cargo capacity, stateroom/low berth capacity, fuel capacity, jump/maneuver rating, and market value |
+| FR-1403 | The New Ship form shall offer a Template dropdown defaulting to "Custom Design"; selecting a template shall pre-fill hull tons, cargo capacity, stateroom/low berth capacity, fuel capacity, jump/maneuver rating, market value, and armed flag |
 | FR-1404 | The referee shall be able to save an existing ship's current stats as a new named template via a "Save as Template" action |
 | FR-1405 | Template names shall be unique per campaign; creating or renaming to a conflicting name shall be rejected |
 | FR-1406 | The system shall lazily seed one verified-unverified starter template (Type A Free Trader) the first time a CT7 or MgT2022 campaign's Templates panel is opened with none present; T5 campaigns start with no seed |
@@ -234,7 +240,7 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-2001 | MgT2022 campaigns shall offer a Port > Freight tab for booking bulk cargo lots (Major, Minor, or Incidental), priced per ton per parsec, with smaller lots charged a higher per-ton rate |
+| FR-2001 | MgT2022 campaigns shall offer a Port > Freight tab for booking bulk cargo lots (Major, Minor, or Incidental), priced per ton per parsec off a single flat rate table — the rulebook's freight rate depends only on distance, not on lot size |
 | FR-2002 | A freight booking shall create an `obligations` record (kind='freight') carrying the agreed tonnage, lot size, rate, and a due tick, write a `freight_charge` transaction, and credit the ship account upfront |
 | FR-2003 | Freight shall be automatically delivered when the ship arrives at its destination world, mirroring passenger/mail auto-delivery |
 | FR-2004 | Freight delivered after its due tick shall incur a randomized late-delivery penalty ((1D+4)×10% of the charge), clawed back from the ship's credits at delivery time and recorded as a `freight_penalty` transaction |
@@ -249,7 +255,7 @@
 
 | ID | Requirement |
 |----|------------|
-| NFR-1 | **Performance:** Market snapshot generation for 36 goods shall complete and insert within 2 seconds on a standard broadband connection |
+| NFR-1 | **Performance:** Market snapshot generation shall complete and insert within 2 seconds on a standard broadband connection (36 goods for CT7/T5; up to 35 for MgT2022, fewer once Find-a-Supplier/composition narrows the set) |
 | NFR-2 | **Determinism:** Given the same inputs, all clients shall produce identical prices and event outcomes |
 | NFR-3 | **Security:** PINs shall be stored as PBKDF2-SHA256 hashes (Web Crypto API, salted); plaintext PINs shall never be stored or logged |
 | NFR-4 | **Security:** The recovery code shall be generated server-side, stored only as a PBKDF2 hash, and returned in plaintext exactly once |

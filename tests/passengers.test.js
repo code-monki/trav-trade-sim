@@ -62,8 +62,8 @@ describe('passengerFare — T5 (per parsec for High/Middle; Low flat)', () => {
 
 describe('passengerFare — MgT2022 (per parsec, 4 tiers)', () => {
   it('high passage scales with parsecs from the fare table', () => {
-    expect(passengerFare('high', 1, 'MgT2022', 1)).toEqual({ farePerHead: 10_000, fareTotal: 10_000 })
-    expect(passengerFare('high', 1, 'MgT2022', 6)).toEqual({ farePerHead: 30_000, fareTotal: 30_000 })
+    expect(passengerFare('high', 1, 'MgT2022', 1)).toEqual({ farePerHead: 9_000, fareTotal: 9_000 })
+    expect(passengerFare('high', 1, 'MgT2022', 6)).toEqual({ farePerHead: 210_000, fareTotal: 210_000 })
   })
 
   it('basic passage is cheaper than middle at every parsec', () => {
@@ -74,9 +74,9 @@ describe('passengerFare — MgT2022 (per parsec, 4 tiers)', () => {
     }
   })
 
-  it('low passage is flat regardless of parsecs', () => {
+  it('low passage scales with parsecs too (not flat, unlike CT7/T5)', () => {
     expect(passengerFare('low', 1, 'MgT2022', 1).farePerHead).toBe(700)
-    expect(passengerFare('low', 1, 'MgT2022', 6).farePerHead).toBe(700)
+    expect(passengerFare('low', 1, 'MgT2022', 6).farePerHead).toBe(27_000)
   })
 
   it('clamps parsecs to the 1-6 table range', () => {

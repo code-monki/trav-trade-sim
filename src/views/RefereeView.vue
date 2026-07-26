@@ -126,6 +126,11 @@
                   <input v-model.number="newShip.fuelCurrent" type="number" min="0" placeholder="0" />
                 </div>
               </div>
+              <div class="form-row">
+                <label class="owns-check-label">
+                  <input type="checkbox" v-model="newShip.armed" /> Armed
+                </label>
+              </div>
               <div class="form-actions">
                 <button type="button" class="btn-ghost" @click="cancelNewShip">Cancel</button>
                 <button type="submit" class="btn-primary" :disabled="!newShip.name.trim()">Create Ship</button>
@@ -218,6 +223,11 @@
                 </div>
               </div>
               <div class="form-row">
+                <label class="owns-check-label">
+                  <input type="checkbox" v-model="templateForm.armed" /> Armed
+                </label>
+              </div>
+              <div class="form-row">
                 <label>Notes</label>
                 <input v-model="templateForm.notes" placeholder="Optional" />
               </div>
@@ -283,6 +293,11 @@
                   <label>Market Value (Cr)</label>
                   <input v-model.number="editShipFields.marketValue" type="number" min="0" />
                 </div>
+              </div>
+              <div class="form-row">
+                <label class="owns-check-label">
+                  <input type="checkbox" v-model="editShipFields.armed" /> Armed
+                </label>
               </div>
               <div class="form-row two-col">
                 <div>
@@ -1152,7 +1167,7 @@ const newCrewRole     = ref('crew')
 const NEW_SHIP_DEFAULTS = {
   name: '', hullType: '', hullTons: 200, cargoCapacity: 80, credits: 0,
   jumpRating: null, maneuverRating: null, staterooms: 0, lowBerths: 0,
-  fuelCapacity: 0, fuelCurrent: 0, marketValue: 0,
+  fuelCapacity: 0, fuelCurrent: 0, marketValue: 0, armed: false,
 }
 const newShip = ref({ ...NEW_SHIP_DEFAULTS })
 const editShipFields = ref({})
@@ -1174,6 +1189,7 @@ function applyTemplate(templateId) {
     lowBerths:     t.low_berth_capacity,
     fuelCapacity:  t.fuel_capacity,
     marketValue:   t.market_value,
+    armed:         !!t.armed,
   }
 }
 
@@ -1185,7 +1201,7 @@ const editingTemplateId   = ref(null)
 const TEMPLATE_DEFAULTS = {
   name: '', hullType: '', hullTons: 200, cargoCapacity: 80,
   jumpRating: null, maneuverRating: null, staterooms: 0, lowBerths: 0,
-  fuelCapacity: 0, marketValue: 0, notes: '',
+  fuelCapacity: 0, marketValue: 0, armed: false, notes: '',
 }
 const templateForm = ref({ ...TEMPLATE_DEFAULTS })
 
@@ -1209,7 +1225,7 @@ function startEditTemplate(t) {
     cargoCapacity: t.cargo_capacity, jumpRating: t.jump_rating,
     maneuverRating: t.maneuver_drive_rating, staterooms: t.stateroom_capacity,
     lowBerths: t.low_berth_capacity, fuelCapacity: t.fuel_capacity,
-    marketValue: t.market_value, notes: t.notes ?? '',
+    marketValue: t.market_value, armed: !!t.armed, notes: t.notes ?? '',
   }
 }
 
@@ -1224,7 +1240,8 @@ async function submitTemplateForm() {
   const payload = {
     name: f.name, hullType: f.hullType, hullTons: f.hullTons, cargoCapacity: f.cargoCapacity,
     jumpRating: f.jumpRating, maneuverRating: f.maneuverRating, staterooms: f.staterooms,
-    lowBerths: f.lowBerths, fuelCapacity: f.fuelCapacity, marketValue: f.marketValue, notes: f.notes,
+    lowBerths: f.lowBerths, fuelCapacity: f.fuelCapacity, marketValue: f.marketValue,
+    armed: f.armed, notes: f.notes,
   }
   try {
     if (editingTemplateId.value) {
@@ -1233,7 +1250,7 @@ async function submitTemplateForm() {
         cargo_capacity: f.cargoCapacity, jump_rating: f.jumpRating || null,
         maneuver_drive_rating: f.maneuverRating || null, stateroom_capacity: f.staterooms,
         low_berth_capacity: f.lowBerths, fuel_capacity: f.fuelCapacity,
-        market_value: f.marketValue, notes: f.notes || null,
+        market_value: f.marketValue, armed: f.armed ? 1 : 0, notes: f.notes || null,
       })
     } else {
       await referee.createShipTemplate(payload)
@@ -1470,6 +1487,7 @@ function selectShip(id) {
       jumpRating:        s.jump_rating           ?? null,
       maneuverRating:    s.maneuver_drive_rating ?? null,
       marketValue:       s.market_value          ?? 0,
+      armed:             !!s.armed,
       currentWorld:      s.current_world         ?? '',
       currentSector:     s.current_sector        ?? '',
     }
@@ -1523,6 +1541,7 @@ async function submitEditShip() {
       jump_rating:           editShipFields.value.jumpRating          || null,
       maneuver_drive_rating: editShipFields.value.maneuverRating      || null,
       market_value:          editShipFields.value.marketValue         ?? 0,
+      armed:                 editShipFields.value.armed ? 1 : 0,
       current_world:         newWorld,
       current_sector:        newSector,
     })

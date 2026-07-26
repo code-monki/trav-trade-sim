@@ -22,20 +22,62 @@ import {
   MGT2022_MAIL_AVAILABLE_ROLL,
   MGT2022_MAIL_PAYMENT_PER_CONTAINER,
   MGT2022_STARPORT_TRAFFIC_DM,
+  MGT2022_STARPORT_SUPPLIER_DM,
   MGT2022_POPULATION_TRAFFIC_DM,
 } from './traveller-data-mgt2022.js'
 
-export { parseTradeCodes, starportFromUWP, techFromUWP } from './trade-engine-ct7.js'
+export { parseTradeCodes, starportFromUWP, techFromUWP, lawFromUWP } from './trade-engine-ct7.js'
+
+// ── Characteristics ───────────────────────────────────────────────────────────
+
+/**
+ * Standard Traveller characteristic-to-DM scale. Used by Mail's "highest
+ * SOC DM among the crew" bonus; available for any future characteristic-
+ * based check.
+ * @param {number|null} value — a characteristic score (2-15+), or null/
+ *   undefined if the player hasn't had it recorded yet
+ * @returns {number}
+ */
+export function characteristicDM(value) {
+  if (value == null) return 0
+  if (value <= 2)  return -2
+  if (value <= 5)  return -1
+  if (value <= 8)  return 0
+  if (value <= 11) return +1
+  return +2
+}
 
 // ── Find-a-Supplier ────────────────────────────────────────────────────────────
 
 /**
- * Starport DM applied to the Find-a-Supplier skill check.
+ * Starport DM applied to the Find-a-Supplier skill check. Distinct from
+ * MGT2022_STARPORT_TRAFFIC_DM (Freight/Mail's own starport DM) — same
+ * starport-class key, different mechanic, different values.
  * @param {string} starportClass — A/B/C/D/E/X
  * @returns {number}
  */
 export function starportBrokerDM(starportClass) {
-  return MGT2022_STARPORT_TRAFFIC_DM[starportClass?.toUpperCase()] ?? 0
+  return MGT2022_STARPORT_SUPPLIER_DM[starportClass?.toUpperCase()] ?? 0
+}
+
+/** Average(8+) target for the Find-a-Supplier check. */
+export const MGT2022_FIND_SUPPLIER_TARGET = 8
+
+/**
+ * Find-a-Supplier roll total: 2D + skill + starport DM - DM-1 per previous
+ * attempt on this world this (game) month. A fresh roll each attempt —
+ * the seeded 2D6 should vary per attempt at the call site (e.g. seed
+ * including the attempt count), not be the same roll reused.
+ * @param {object} opts
+ * @param {number} opts.twoDRoll          — pre-rolled 2D6 sum
+ * @param {number} [opts.skillLevel]      — Broker/Streetwise/Admin skill level
+ * @param {number} [opts.starportDM]      — from starportBrokerDM()
+ * @param {number} [opts.previousAttempts] — attempts already made this world/month
+ * @returns {{ total: number, success: boolean }}
+ */
+export function findSupplierRoll({ twoDRoll, skillLevel = 0, starportDM = 0, previousAttempts = 0 }) {
+  const total = twoDRoll + skillLevel + starportDM - previousAttempts
+  return { total, success: total >= MGT2022_FIND_SUPPLIER_TARGET }
 }
 
 // ── Determine Goods Available ──────────────────────────────────────────────────
@@ -71,23 +113,33 @@ export function resolveGood(die) {
   return MGT2022_TRADE_GOODS.find(g => g.die === die)
 }
 
-/** Sum trade-code-keyed DMs (purchaseDMs/saleDMs) against a world's codes. */
-export function sumTradeCodeDMs(dmList, worldCodes) {
-  let total = 0
+/**
+ * Largest matching trade-code-keyed DM (purchaseDMs/saleDMs) against a
+ * world's codes — "in cases where multiple Purchase or Sale DMs apply, use
+ * only the largest from each column," not their sum.
+ */
+export function maxTradeCodeDMs(dmList, worldCodes) {
+  let best = 0
+  let any  = false
   for (const { code, dm } of dmList ?? []) {
-    if (worldCodes.has(code)) total += dm
+    if (worldCodes.has(code) && (!any || dm > best)) { best = dm; any = true }
   }
-  return total
+  return best
 }
 
 // ── Determine Purchase / Sale Price ────────────────────────────────────────────
 
 /**
- * Purchase roll total: 3D + Broker skill + Purchase DM - supplier's Broker skill.
+ * Purchase roll total: 3D + Broker skill + Purchase DM - Sale DM -
+ * supplier's Broker skill. Both trade-code DM columns apply when
+ * purchasing (added Purchase DM, subtracted Sale DM per the book) — pass
+ * `purchaseDM` as the already-combined net value (maxTradeCodeDMs(good.purchaseDMs, codes)
+ * - maxTradeCodeDMs(good.saleDMs, codes)), not just the good's raw purchase
+ * column.
  * @param {object} opts
  * @param {number} opts.threeDRoll         — pre-rolled 3D6 sum
  * @param {number} [opts.brokerSkill]      — buyer's Broker skill
- * @param {number} [opts.purchaseDM]       — good's trade-code purchase DM
+ * @param {number} [opts.purchaseDM]       — net DM: Purchase column - Sale column
  * @param {number} [opts.supplierBrokerSkill] — assumed 2 if not otherwise specified
  * @returns {number}
  */
@@ -96,11 +148,14 @@ export function purchaseRollTotal({ threeDRoll, brokerSkill = 0, purchaseDM = 0,
 }
 
 /**
- * Sale roll total: 3D + Broker skill + Sale DM - purchaser's Broker skill.
+ * Sale roll total: 3D + Broker skill + Sale DM - Purchase DM - purchaser's
+ * Broker skill. Mirror of purchaseRollTotal — pass `saleDM` as the
+ * already-combined net value (maxTradeCodeDMs(good.saleDMs, codes) -
+ * maxTradeCodeDMs(good.purchaseDMs, codes)).
  * @param {object} opts
  * @param {number} opts.threeDRoll
  * @param {number} [opts.brokerSkill]        — seller's Broker skill
- * @param {number} [opts.saleDM]             — good's trade-code sale DM
+ * @param {number} [opts.saleDM]             — net DM: Sale column - Purchase column
  * @param {number} [opts.purchaserBrokerSkill] — assumed 2 if not otherwise specified
  * @returns {number}
  */
@@ -148,25 +203,24 @@ export function salePrice(basePriceCr, rollTotal) {
 // ── Freight ─────────────────────────────────────────────────────────────────────
 
 /**
- * @param {string} lotSize — 'major' | 'minor' | 'incidental'
+ * Freight pays a flat rate depending only on distance, not lot size —
+ * "Freight shipments pay a fixed rate as shown on the Passage and Freight
+ * table."
  * @param {number} parsecs — 1-6
  * @returns {number} Cr/ton
  */
-export function freightRate(lotSize, parsecs) {
-  const table = MGT2022_FREIGHT_RATES[lotSize]
-  if (!table) return 0
+export function freightRate(parsecs) {
   const idx = Math.min(6, Math.max(1, parsecs)) - 1
-  return table[idx]
+  return MGT2022_FREIGHT_RATES[idx]
 }
 
 /**
  * @param {number} tons
- * @param {string} lotSize
  * @param {number} parsecs
  * @returns {number} total Cr charge
  */
-export function freightCharge(tons, lotSize, parsecs) {
-  return tons * freightRate(lotSize, parsecs)
+export function freightCharge(tons, parsecs) {
+  return tons * freightRate(parsecs)
 }
 
 /**
@@ -206,18 +260,25 @@ export function mailPaymentMgT2022(containerCount) {
   return containerCount * MGT2022_MAIL_PAYMENT_PER_CONTAINER
 }
 
-// ── Smuggling risk (illegal goods vs. Law Level) ──────────────────────────────
+// ── Smuggling risk (banned goods vs. Law Level) ───────────────────────────────
 
 /**
- * Detection-risk DM for selling an illegal good: higher Law Level makes
- * smuggling riskier; a higher Sale DM (better fences/contacts) offsets it.
- * Positive result = greater detection risk.
- * @param {number} saleDM     — the good's sale DM at this transaction
- * @param {number} lawLevel   — destination world's Law Level (0-9+)
+ * Extra Sale DM for a good banned at a specific Law Level: "their Sale DM
+ * is the difference between the Law Level they are banned at and the Law
+ * Level of the world" — the book's own worked example: Military Weapons
+ * banned at LL3, smuggled onto an LL9 world, get Sale DM+6 (= 9 - 3). Zero
+ * (not negative) if the world's own Law Level hasn't reached the ban
+ * threshold — the good just isn't banned there. Only applies to the
+ * handful of goods with a book-given bannedLawLevel (see
+ * MGT2022_TRADE_GOODS); other illegal goods keep their flat elevated Sale
+ * DM as-is, with no per-good threshold to compute against.
+ * @param {number|null} bannedLawLevel — the good's `bannedLawLevel` field
+ * @param {number} worldLawLevel       — destination world's Law Level (0-15)
  * @returns {number}
  */
-export function smugglingRiskDM(saleDM, lawLevel) {
-  return lawLevel - saleDM
+export function smugglingRiskDM(bannedLawLevel, worldLawLevel) {
+  if (bannedLawLevel == null) return 0
+  return Math.max(0, worldLawLevel - bannedLawLevel)
 }
 
 // ── Traffic availability (passenger/freight/mail scarcity) ───────────────────

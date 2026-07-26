@@ -473,6 +473,316 @@ tracking down the `.env.test` issue above, but out of scope for this pass.
 
 ---
 
+## 2026-07-25 — MgT2022 trade/traffic rules-accuracy rebuild (Phases 1-3)
+
+### Goal
+
+Playtesting against the actual Mongoose Traveller 2022 Core Rulebook (not
+the reconstructed approximation this app shipped with) surfaced that most
+of the MgT2022 trade/traffic engine didn't match the book: wrong tables,
+inverted DM signs, mechanics that existed as unit-tested pure functions but
+were never wired into the live pipeline, and required data (characteristics,
+background/rank, ship armament) that didn't exist in the schema at all.
+`src/lib/traveller-data-mgt2022.js` even carried a header comment admitting
+it was "a best-effort reconstruction drafted without a live copy of the
+rulebook text." This is a full rebuild, done in 7 phases (plan:
+`hazy-conjuring-cerf`); this entry covers Phases 1-3, which are complete.
+Phases 4-7 (per-player pricing, Steward passenger-capacity gate, Freight
+overhaul, Mail DMs) are designed but not yet started.
+
+### Decisions
+
+**Rebuild, not patch.** The findings were too interconnected to fix one at
+a time — e.g. per-player Broker pricing (Phase 4) needs the buy-cargo
+concurrency bug fixed first (Phase 1); Mail's SOC/rank DMs (Phase 7) need
+the same characteristics/background schema Passengers' Steward gate (Phase
+5) needs. Phases are ordered so each is independently shippable.
+
+**Phase 1 — data correctness, no new mechanics.** Replaced
+`MGT2022_PASSAGE_FARES`, `MGT2022_MODIFIED_PRICE_TABLE`, and
+`MGT2022_FREIGHT_RATES` with exact rulebook values (freight rate collapsed
+from three lot-size tiers to one flat per-parsec table — the book prices by
+distance only). Replaced all 30 priced `MGT2022_TRADE_GOODS` entries: dice
+formulas, DM codes, and specifically a systematic **purchase-DM sign
+inversion** (e.g. Common Electronics' Industrial DM was `-2`, book says
+`+2` — this didn't just misprice goods, it made a good *more* expensive on
+the world that produces it). Added `availability` (which trade codes gate
+whether a world offers the good) and `bannedLawLevel` (nullable) fields,
+neither of which existed before. Removed Exotics (D66=66) from the priced
+pool entirely — GM-adjudicated special case per this session's design
+decision, never part of the normal buy/sell roll. Renamed
+`sumTradeCodeDMs()` → `maxTradeCodeDMs()` ("use only the largest DM from
+each column," not the sum). Fixed purchase/sale roll assembly so both
+directions apply *both* DM columns with opposite signs (previously each
+direction discarded the opposing column). Added real `lawFromUWP()` and
+replaced the invented `smugglingRiskDM()` heuristic with the book's actual
+formula (`world's Law Level − bannedLawLevel`, added as Sale DM when
+positive). Fixed a **pre-existing, unrelated concurrency bug** found while
+reasoning about per-player pricing: `buy-cargo` (`worker/src/routes/
+ships.js`) used a separate `SELECT` then a blind decrement — classic
+check-then-act race. Now a single guarded `UPDATE ... WHERE qty_available
+>= ?`, checked via `meta.changes`, rejects the purchase before touching
+cargo/credits/transactions if someone else already took the stock.
+
+**Illegal-goods Law-Level DM only applies where the book gives (or implies)
+a concrete threshold.** Advanced Weapons (LL3, the book's own worked
+example), Illegal Weapons (LL1), and Pharmaceuticals (LL8, anagathics/
+medicinal drugs — legal but Law-Level-sensitive above that threshold). The
+other four illegal-band goods (Biochemicals, Cybernetics, Drugs, Luxuries)
+keep their existing flat elevated Sale DM — no per-good threshold data
+exists for those in the book. The richer "legal / licensed-medical /
+military / black-market channel" model for drugs discussed during review
+is **explicitly deferred**, not part of this rebuild's RAW-accuracy scope.
+
+**Phase 2 — schema: characteristics, background, ship armament, mail
+tonnage.** New migration `014`: `players` gains all six characteristics
+(STR/DEX/END/INT/EDU/SOC) rather than just SOC — decided up front to avoid
+a second migration once other characteristic-based checks (Steward, EDU-
+gated skills, etc.) come up later — plus `background`/`rank`; `ships` and
+`ship_templates` gain `armed`; `obligations` gains `mail_containers`. All
+nullable/defaulted, so existing rows are unaffected. Editing follows the
+**existing dual-path pattern** already used for skills rather than a new
+one: referee-management routes under `/api/referee/...` plus a player
+self-service pair (`GET`/`PATCH /api/reports/characteristics`) with the
+same `session.player_id === player_id` ownership check `/skills` already
+uses.
+
+**Phase 3 — goods composition + Find a Supplier.**
+
+*Composition* (`market-tick.js`): replaced "show all ~35 goods
+unconditionally" with the book's actual "DETERMINE GOODS AVAILABLE"
+algorithm — Common Goods always present, Trade Goods whose `availability`
+matches one of the world's trade codes, plus a number of random D66 rolls
+equal to the world's Population *code* (not a DM), rerolling 61-65 unless
+seeking black market. Duplicate hits stack quantity rather than duplicating
+the row. This is a deliberate **narrowing** of what Phase 1 shipped (which
+showed everything) — resolves a filed issue asking for "show all the goods,
+only the available ones" in the RAW-accurate direction the rulebook
+actually specifies, at the cost of no longer matching that issue's literal
+ask; flagged as the user's call, not re-litigated here. Composition draws
+from a **separate seeded RNG stream** (`...composition:${tick}:v1`) from
+each good's own price-roll stream, so whether a good is randomly selected
+never shifts any other good's price-roll RNG position — determinism is
+preserved even though the row count is now variable per world/tick instead
+of fixed.
+
+*Find a Supplier*: modeled as a **character-based, one-click player
+action**, not an ambient world DM — the review specifically flagged that
+multiple players might hold Broker/Streetwise at different levels, so a
+world-level DM couldn't represent that. New table
+`supplier_search_attempts` (migration `015`) tracks attempts/success per
+`(player, world, sector, month)` — **month, not tick**: once a player finds
+a supplier, that relationship persists for the rest of the game-month
+rather than needing a fresh roll every tick, a refinement beyond the
+original plan sketch ("per world/tick"), made during implementation. No
+in-game time cost is modeled (the book's "1D days" doesn't map onto this
+app's tick granularity) — success/fail is immediate. `GET`/`POST
+/api/campaigns/:id/find-supplier` + `tick` store's `loadSupplierStatus`/
+`attemptFindSupplier` back a new `FindSupplierPanel.vue`, shown in
+`MapView.vue`'s Market tab instead of `MarketTable` whenever
+`auth.campaign.trade_rules === 'MgT2022'` and the player hasn't yet
+succeeded this month; switching worlds resets the local `supplierFound`/
+`supplierAttempts` state immediately (before the async status check
+resolves) so the previous world's result can't flash while the new one
+loads.
+
+**Black-market view scope-down.** Building a full black-market-exclusive
+goods view raises the same per-player-vs-shared-world-data tension flagged
+for Phase 4, and wasn't resolved during review. Scoped down to implementing
+just the underlying primitive — `mgt2022Composition()` already accepts a
+`seekingBlackMarket` flag, wired through `isRerollRequired()`/
+`resolveGood()` — without building the user-facing route/UI. Follow-up, not
+blocking.
+
+### Files changed
+
+`src/lib/traveller-data-mgt2022.js` (tables rewritten), `src/lib/
+trade-engine-ct7.js` (`lawFromUWP`, extended `KNOWN_TRADE_CODES`, `rollQty`
+DM param), `src/lib/trade-engine-mgt2022.js` (`maxTradeCodeDMs`,
+`characteristicDM`, `starportBrokerDM`, `findSupplierRoll`,
+`smugglingRiskDM` corrected), `src/lib/market-tick.js` (composition
+algorithm, dual-DM roll assembly), `worker/src/routes/ships.js` (buy-cargo
+race fix), `worker/src/routes/market.js` (Find-a-Supplier routes),
+`worker/src/routes/reports.js` + `referee.js` (characteristics dual-path),
+`d1/014_mgt2022_character_ship_fields.sql`, `d1/
+015_supplier_search_attempts.sql` (both mirrored into `d1/schema.sql` and
+`worker/src/lib/schema-version.js`'s `EXPECTED_MIGRATIONS`), `src/stores/
+tick.js` (`loadSupplierStatus`/`attemptFindSupplier`), `src/stores/
+referee.js`, `src/components/CharacterDialog.vue` (characteristics form),
+`src/components/FindSupplierPanel.vue` (new), `src/views/MapView.vue`
+(gating), `src/views/RefereeView.vue` (Armed checkbox), `src/components/
+FreightPanel.vue` (flat freight-rate signature).
+
+### Verified
+
+`npx vitest run` — 498/498 passing across 26 files, including a rewritten
+`tests/trade-engine-mgt2022.test.js` (54 tests — most fixtures asserted the
+*old wrong* values and needed rewriting, not extending), a rewritten
+`tests/market-tick.test.js` composition suite (bounds/presence checks
+rather than a brittle fixed-length assertion, since row count is now
+RNG-dependent), and new `findSupplierRoll` coverage (target, skill/starport
+DM stacking, per-attempt penalty).
+
+### Known gaps, not yet addressed
+
+Phases 4-7 (per-player pricing, Steward capacity gate, Freight overhaul,
+Mail DMs) are designed in the plan but not started. Migrations `014`/`015`
+have **not** been applied to the remote D1 database and the Worker has
+**not** been redeployed with any of this rebuild — nothing from Phases 1-3
+is live yet, only committed to the working tree. The black-market UI and
+the richer legal/licensed/military/black-market drug-channel model are
+both deferred, as noted above. Freight's "DMs for both source and
+destination world" and Law Level's per-route distance DM are not modeled
+(flagged in the plan as a follow-up, not blocking Phase 6).
+
+### Documentation
+
+Scanned all six formal docs (`docs/SRS.md`, `RTM.md`, `HLD.md`, `DD.md`,
+`UC.md`, `TEST_PLAN.md`) for staleness against this rebuild and updated
+each: corrected requirements/test fixtures that described the *old wrong*
+behavior (goods-shown count, freight lot-size pricing, the smuggling-DM
+formula, Low-passage flat-fare claim), filled schema-reference gaps (new
+`players`/`ships`/`ship_templates`/`obligations` fields, the new
+`supplier_search_attempts` table, migration count now 15), added a new
+HLD §7a documenting the MgT2022 price/composition pipeline (previously
+undocumented — HLD §7 only ever covered CT7), and added new
+requirements/use cases/test cases for Find-a-Supplier, MgT2022
+characteristics editing, and the buy-cargo concurrency guard. All six
+docs' version bumped 0.5.0 → 0.6.0 together, per this project's existing
+convention of bumping them as a set.
+
+---
+
+## 2026-07-25 — Per-player trade pricing (Phase 4) + CT7's parallel Broker gap
+
+### Goal
+
+Phase 4 of the MgT2022 rules-accuracy rebuild (plan: `hazy-conjuring-cerf`):
+move trade pricing from "one shared number every player at a world/tick
+sees" to "reflects the acting player's own Broker skill," per the review's
+decision back at the start of this rebuild. Playtesting had originally
+flagged this as "player Broker skill doesn't adjust trade rolls."
+
+### Discovery: the mechanism already existed, just wasn't wired up
+
+Designing this phase surfaced that `trade-engine-mgt2022.js`'s
+`purchaseRollTotal()`/`saleRollTotal()` **already accept a `brokerSkill`
+parameter** (added back in Phase 1, per the book's "3D + Broker skill +
+[Purchase/Sale] DM − opposing party's assumed Broker skill (2)" formula) —
+`market-tick.js`'s shared snapshot generator was just calling them with
+`brokerSkill: 0` by design (no live buyer to ask, for the automatic
+per-tick baseline). Phase 4 didn't need to invent the mechanic, only plug
+the real acting player's skill into a parameter that was already there.
+
+Tracing this surfaced a **second, independent instance of the identical
+gap**: CT7's `trade-engine-ct7.js` has a fully-implemented, unit-tested
+`brokerDM(skill)` (added to the Actual Value roll, capped at skill 4) and
+`brokerFee(skill, finalPrice)` (5% × skill × transaction value, paid
+regardless of profit/loss), bundled together in a `tradeResult()` helper —
+all three with zero callers anywhere outside their own tests.
+`generateCT7Snapshot()` computed its sale roll with no Broker term at all.
+Per RAW (confirmed by `tradeResult()`'s own design), CT7's Broker DM only
+ever applies to the **sale** roll, never purchase. Flagged this to the user
+alongside a third, smaller finding (below); asked which to bundle into this
+phase — approved: fix both, plus the color-coding issue.
+
+### Mechanism: replay the same seeded dice, swap only the skill term
+
+The world-luck dice for a given (world, good, tick) must stay identical for
+every player — only the Broker skill term added on top should differ.
+Since `makeRng(seed)` is a pure function of its seed string, calling it
+fresh and drawing dice in the same order the shared baseline generator
+draws them reproduces the exact same roll from anywhere, with nothing
+persisted. Added two new **standalone** functions to `market-tick.js`
+(`mgt2022PlayerGoodPrice`, `ct7PlayerSalePrice`) rather than refactoring the
+existing generators to share code with them — duplicating ~15 lines of
+already-correct, already-tested DM/roll logic was judged a smaller, safer
+diff than restructuring two working generators; a parity test (brokerSkill
+0 must reproduce the shared baseline exactly) locks the two independent
+implementations together and would catch any future drift.
+
+Since `buy-cargo`/`sell-cargo` already trust whatever price the client
+sends (true for every ruleset since Phase 1), and the client already has
+everything needed to recompute a good's price (the world object, the
+player's own skill), no schema change and no worker-side price validation
+was needed — only a new `tick.js` store computed (`displaySnapshots`)
+overlaying `worldSnapshots` with the per-player numbers, read by
+`MarketTable.vue` and `CargoHold.vue` instead of the raw snapshot. A new
+`tick.brokerSkill` + `loadBrokerSkill()` (fetched via the existing
+self-service `GET /api/reports/skills`) also **replaced**
+`FindSupplierPanel.vue`'s own independent copy of the same fetch — one
+source of truth for "the current player's Broker level" instead of two.
+
+CT7's Broker **fee** (the commission, distinct from the DM) is a lump
+deduction at the moment of sale, not a per-ton price adjustment — mirrors
+the existing freight late-delivery-penalty precedent (a separate clawback
+transaction, not baked into a rate). `ship.js`'s `sellCargo()` computes it
+client-side and sends `broker_fee_total`; `worker/src/routes/ships.js`'s
+`/sell-cargo` nets it out of the credited amount and records it as its own
+`'fee'`-type transaction (the generic type `src/lib/reports.js`'s
+`TYPE_LABEL`/`EXPENSE_TYPES` already renders and totals — deliberately not
+a new unmapped `'broker_fee'` type, which would silently fall through those
+the way `freight_penalty` already does today).
+
+### Bundled fix: MgT2022's price-color-coding used CT7's reference base
+
+`MarketTable.vue`'s "below/above base price" cell coloring compared every
+ruleset's price against a hardcoded `4000`/`5000` — exactly correct for
+CT7 (they're literally `costOfGoods()`/`marketBasePrice()`'s own starting
+constants) but meaningless for MgT2022, whose per-good `basePriceCr` ranges
+20,000–150,000+. Fixed by building a `die → basePriceCr` lookup from
+`MGT2022_TRADE_GOODS` (mirrors the file's existing `goodNameMap` pattern)
+and using each good's own base price as the reference for MgT2022 rows;
+CT7/T5 unchanged.
+
+### Explicitly out of scope
+
+- **T5**'s own already-unwired `t5BrokerFee` — the approved scope was CT7's
+  gap specifically, not T5's. Logged as a further follow-up.
+- Price/OHLC **charts** intentionally keep showing the shared baseline
+  (`brokerSkill = 0`) — an impartial market-index line, not any one
+  player's negotiated price; a chart that moved depending on who's looking
+  wouldn't be a sensible "history."
+- `CargoHold.vue`'s live profit-per-ton/hold-value estimates stay pre-fee
+  for CT7 — a close approximation shown before committing to a sale; the
+  fee-inclusive true figure surfaces in the post-sale flash (already
+  displays the server's `net_profit`) and in Reports, with no new UI added.
+- No automated worker-route test for the `sell-cargo` fee change — this
+  repo's Vitest suite covers pure functions and components; route-level
+  behavior needs a live `wrangler dev` + local D1, consistent with how
+  Phase 1's buy-cargo fix and Phase 3's Find-a-Supplier routes were also
+  verified manually rather than via an automated integration test.
+
+### Files changed
+
+`src/lib/market-tick.js` (`mgt2022PlayerGoodPrice`, `ct7PlayerSalePrice`),
+`src/stores/tick.js` (`brokerSkill`, `loadBrokerSkill`, `snapshotWorld`/
+`snapshotSector`, `displaySnapshots`), `src/stores/ship.js` (`sellCargo`'s
+`brokerSkill`/fee param), `worker/src/routes/ships.js` (`/sell-cargo`'s
+`broker_fee_total` handling), `src/components/MarketTable.vue`
+(`displaySnapshots` read site, `purchaseInfo`/`saleInfo` reference-base
+fix), `src/components/CargoHold.vue` (`displaySnapshots` read site,
+`brokerSkill` passthrough), `src/components/FindSupplierPanel.vue`
+(dropped its own skill fetch in favor of the store's), `src/views/
+MapView.vue` (`loadBrokerSkill()` call in the world-selection watcher).
+
+### Verified
+
+`npx vitest run` — 506/506 passing (up from 498; 8 new cases in
+`tests/market-tick.test.js` covering both new functions' parity with their
+respective shared baselines, skill-direction correctness, the `brokerDM`
+cap flowing through, and unknown-`goodDie` handling). `npx vite build`
+compiles cleanly.
+
+### Known gap, not addressed this session
+
+Migrations 014/015 (from Phases 2-3) are still not applied to the remote D1
+database and the Worker still hasn't been redeployed with any of this
+rebuild — Phase 4 adds no new migration, but nothing from Phases 1-4 is
+live yet, only committed to the working tree.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

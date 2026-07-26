@@ -4,7 +4,8 @@ import { api } from '../lib/api.js'
 import { useAuthStore } from './auth.js'
 import {
   generateWorldSnapshot, tickToCalendar, formatImperialDate,
-  TICKS_PER_YEAR, shouldRollupMonth, shouldRollupYear,
+  TICKS_PER_YEAR, TICKS_PER_MONTH, shouldRollupMonth, shouldRollupYear,
+  mgt2022PlayerGoodPrice, ct7PlayerSalePrice,
 } from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
 import { generateTrafficSnapshot } from '../lib/traffic-tick.js'
@@ -23,6 +24,15 @@ export const useTickStore = defineStore('tick', () => {
   // Cached snapshots for the currently viewed world: goodDie → snapshot row
   const worldSnapshots   = ref({})
   const snapshotWorldKey = ref('')   // '{campaignId}:{worldHex}:{sector}:{tick}'
+  // Full world object/sector behind the worldSnapshots cache above — needed
+  // by displaySnapshots' per-player recompute (Phase 4), which requires
+  // world.UWP/Remarks/Zone without every caller having to re-pass them.
+  const snapshotWorld  = ref(null)
+  const snapshotSector = ref('')
+
+  // Current player's own Broker skill level (CT7/MgT2022 per-player pricing,
+  // Phase 4) — loaded once per world selection, not push-updated live.
+  const brokerSkill = ref(0)
 
   // Active events for current campaign (loaded once per session / tick advance)
   const activeEvents = ref([])
@@ -48,6 +58,58 @@ export const useTickStore = defineStore('tick', () => {
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const imperialDate = computed(() => formatImperialDate(currentTick.value))
+
+  // Per-player pricing (Phase 4): for CT7/MgT2022, overlays worldSnapshots
+  // with each good's price recomputed for the current player's own Broker
+  // skill (MgT2022: both purchase and sale; CT7: sale only, per RAW — see
+  // mgt2022PlayerGoodPrice/ct7PlayerSalePrice in market-tick.js). T5 and any
+  // uncached state pass worldSnapshots through unchanged. This is the read
+  // site every display/transaction consumer should use instead of
+  // worldSnapshots directly, so a player's own skill actually changes the
+  // price they see and pay.
+  const displaySnapshots = computed(() => {
+    const rules = auth.campaign?.trade_rules
+    if (!snapshotWorld.value || (rules !== 'MgT2022' && rules !== 'CT7')) {
+      return worldSnapshots.value
+    }
+
+    const world      = snapshotWorld.value
+    const campaignId = auth.campaign.id
+    const eventsForWorld = activeEventsForWorld(
+      activeEvents.value, world.Hex, currentTick.value, snapshotSector.value,
+    )
+
+    const out = {}
+    for (const [die, row] of Object.entries(worldSnapshots.value)) {
+      if (rules === 'MgT2022') {
+        const priced = mgt2022PlayerGoodPrice({
+          campaignId, world, tick: currentTick.value, goodDie: die,
+          activeEvents: eventsForWorld, brokerSkill: brokerSkill.value,
+        })
+        out[die] = priced
+          ? { ...row, purchase_price: priced.purchasePrice, sale_price: priced.salePrice }
+          : row
+      } else { // CT7
+        const salePrice = ct7PlayerSalePrice({
+          campaignId, world, tick: currentTick.value, goodDie: die,
+          activeEvents: eventsForWorld, brokerSkill: brokerSkill.value,
+        })
+        out[die] = salePrice != null ? { ...row, sale_price: salePrice } : row
+      }
+    }
+    return out
+  })
+
+  // ── Broker skill (CT7/MgT2022 per-player pricing) ───────────────────────────
+
+  async function loadBrokerSkill() {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || !auth.player?.id) { brokerSkill.value = 0; return }
+    const { data } = await api.get('/api/reports/skills', {
+      campaign_id: campaignId, player_id: auth.player.id,
+    })
+    brokerSkill.value = (data ?? []).find(s => s.skill === 'Broker')?.level ?? 0
+  }
 
   // ── Calendar ───────────────────────────────────────────────────────────────
 
@@ -86,6 +148,8 @@ export const useTickStore = defineStore('tick', () => {
       // Invalidate snapshot cache — prices change each tick
       worldSnapshots.value   = {}
       snapshotWorldKey.value = ''
+      snapshotWorld.value    = null
+      snapshotSector.value   = ''
       trafficAvailability.value = null
 
       await loadActiveEvents()
@@ -257,6 +321,8 @@ export const useTickStore = defineStore('tick', () => {
         for (const row of rows) cache[row.trade_good_die] = row
         worldSnapshots.value   = cache
         snapshotWorldKey.value = cacheKey
+        snapshotWorld.value    = world
+        snapshotSector.value   = sectorName
         await ensureTrafficSnapshot(world, sectorName)
         return rows
       }
@@ -273,6 +339,8 @@ export const useTickStore = defineStore('tick', () => {
       for (const row of data ?? []) cache[row.trade_good_die] = row
       worldSnapshots.value   = cache
       snapshotWorldKey.value = cacheKey
+      snapshotWorld.value    = world
+      snapshotSector.value   = sectorName
       await ensureTrafficSnapshot(world, sectorName)
       return data ?? []
     } catch (e) {
@@ -359,11 +427,55 @@ export const useTickStore = defineStore('tick', () => {
     return data ?? []
   }
 
+  // ── Find a Supplier (MgT2022) ───────────────────────────────────────────────
+  // Character-based, one-click check gating whether the current player can
+  // see a world's market this (game) month — not an ambient world property.
+  // Deliberately per-world/month, not per-tick: once found, a supplier
+  // relationship persists for the rest of that month rather than needing a
+  // fresh roll every tick.
+
+  const supplierFound    = ref(false)
+  const supplierAttempts = ref(0)
+
+  async function loadSupplierStatus(worldHex, sectorName) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId) return
+    const { data } = await api.get(`/api/campaigns/${campaignId}/find-supplier`, {
+      player_id: auth.player?.id, world_hex: worldHex, sector: sectorName,
+      month_key: Math.floor(currentTick.value / TICKS_PER_MONTH),
+    })
+    supplierFound.value    = !!data?.succeeded
+    supplierAttempts.value = data?.attempts ?? 0
+  }
+
+  // @param {number} opts.skillLevel  — the player's own Broker/Streetwise/Admin skill
+  // @param {number} opts.starportDM  — from starportBrokerDM(starportFromUWP(world.UWP))
+  async function attemptFindSupplier(worldHex, sectorName, { skillLevel = 0, starportDM = 0 } = {}) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId) return { success: false }
+
+    const { data, error: apiErr } = await api.post(`/api/campaigns/${campaignId}/find-supplier`, {
+      player_id:   auth.player?.id,
+      world_hex:   worldHex,
+      sector:      sectorName,
+      month_key:   Math.floor(currentTick.value / TICKS_PER_MONTH),
+      skill_level: skillLevel,
+      starport_dm: starportDM,
+    })
+    if (apiErr) { error.value = apiErr; return { success: false } }
+
+    supplierFound.value    = !!data.success
+    supplierAttempts.value = data.attempts ?? supplierAttempts.value + 1
+    return data
+  }
+
   return {
     currentTick, currentYear, currentDay, currentMonth,
     loading, error, activeEvents, allEvents, worldSnapshots, worldEventHistory,
     customEventDefinitions,
     trafficAvailability,
+    supplierFound, supplierAttempts,
+    displaySnapshots, brokerSkill,
     imperialDate,
     loadCalendar,
     advanceTick,
@@ -377,5 +489,8 @@ export const useTickStore = defineStore('tick', () => {
     loadAnnualHistory,
     eventsForWorld,
     loadWorldEventHistory,
+    loadSupplierStatus,
+    attemptFindSupplier,
+    loadBrokerSkill,
   }
 })

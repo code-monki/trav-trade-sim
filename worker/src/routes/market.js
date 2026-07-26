@@ -367,4 +367,59 @@ app.post('/:id/traffic', requireAuth, async (c) => {
   return c.json({ data: { ok: true } }, 201)
 })
 
+// ── Find a Supplier (MgT2022) ──────────────────────────────────────────────────
+// Character-based, one-click check gating whether a player can see a
+// world's market this month — not an ambient world property. Plain
+// (non-seeded) dice: this is a one-shot player action, not a value that
+// needs to be reproducible on replay the way market snapshots are.
+
+function twoD6() { return Math.floor(Math.random() * 6) + 1 + Math.floor(Math.random() * 6) + 1 }
+
+// ── GET /:id/find-supplier — has this player already found a supplier
+// at this world this month? (gates the market view without re-rolling) ───────
+app.get('/:id/find-supplier', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { player_id, world_hex, sector, month_key } = c.req.query()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await c.env.DB.prepare(
+    `SELECT attempts, succeeded FROM supplier_search_attempts
+     WHERE player_id = ? AND world_hex = ? AND sector = ? AND month_key = ?`
+  ).bind(player_id, world_hex, sector, Number(month_key)).first()
+
+  return c.json({ data: { attempts: row?.attempts ?? 0, succeeded: !!row?.succeeded } })
+})
+
+// ── POST /:id/find-supplier — attempt the check ───────────────────────────────
+app.post('/:id/find-supplier', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { player_id, world_hex, sector, month_key, skill_level, starport_dm } = await c.req.json()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const db  = c.env.DB
+  const existing = await db.prepare(
+    `SELECT attempts, succeeded FROM supplier_search_attempts
+     WHERE player_id = ? AND world_hex = ? AND sector = ? AND month_key = ?`
+  ).bind(player_id, world_hex, sector, month_key).first()
+
+  if (existing?.succeeded) {
+    return c.json({ data: { success: true, alreadySucceeded: true, attempts: existing.attempts } })
+  }
+
+  const previousAttempts = existing?.attempts ?? 0
+  const total   = twoD6() + (skill_level ?? 0) + (starport_dm ?? 0) - previousAttempts
+  const success = total >= 8
+
+  await db.prepare(
+    `INSERT INTO supplier_search_attempts (id, campaign_id, player_id, world_hex, sector, month_key, attempts, succeeded)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+     ON CONFLICT (player_id, world_hex, sector, month_key)
+     DO UPDATE SET attempts = attempts + 1, succeeded = MAX(succeeded, excluded.succeeded), updated_at = datetime('now')`
+  ).bind(crypto.randomUUID(), id, player_id, world_hex, sector, month_key, success ? 1 : 0).run()
+
+  return c.json({ data: { success, total, attempts: previousAttempts + 1 } })
+})
+
 export default app

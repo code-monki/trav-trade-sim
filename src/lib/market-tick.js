@@ -28,6 +28,7 @@ import {
   actualValueMultiplier,
   actualPrice,
   rollQty,
+  brokerDM,
 } from './trade-engine-ct7.js'
 import {
   parseTradeCodes as t5ParseTradeCodes,
@@ -41,11 +42,16 @@ import {
 import {
   starportFromUWP as mgt2022StarportFromUWP,
   techFromUWP as mgt2022TechFromUWP,
-  sumTradeCodeDMs,
+  lawFromUWP as mgt2022LawFromUWP,
+  maxTradeCodeDMs,
   purchaseRollTotal,
   saleRollTotal,
   purchasePrice as mgt2022PurchasePrice,
   salePrice as mgt2022SalePrice,
+  goodsAvailableDM,
+  smugglingRiskDM,
+  isRerollRequired,
+  resolveGood,
 } from './trade-engine-mgt2022.js'
 import { parseTradeCodes as mgt2022ParseTradeCodes } from './traveller-data-mgt2022.js'
 
@@ -231,32 +237,99 @@ function generateT5Snapshot({ world, sectorName, campaignId, tick, activeEvents 
 // skill both assumed at 2 for automatic tick generation (no live NPC broker
 // is being simulated here — see trade-engine-mgt2022.js's docstring).
 
+function isGoodAvailableAt(good, codes) {
+  return good.availability === 'All' || good.availability.some(code => codes.has(code))
+}
+
+function rollD66(rng) { return `${d6(rng)}${d6(rng)}` }
+
+/**
+ * Determine goods composition per "Determine Goods Available": all Common
+ * Goods, Trade Goods matching the world's trade codes, plus a number of
+ * additional randomly-rolled goods equal to the world's Population code
+ * (not a DM — the actual digit/letter value), rerolling 61-65 unless
+ * seeking a black market supplier. A good rolled more than once (whether
+ * guaranteed + random, or random more than once) gets one extra quantity
+ * roll stacked on top per hit, not a duplicate row.
+ *
+ * @returns {Map<string, number>} die -> number of quantity rolls to sum
+ */
+function mgt2022Composition(compositionRng, codes, popDigit, seekingBlackMarket = false) {
+  const hits = new Map()
+  for (const good of MGT2022_TRADE_GOODS) {
+    if (isGoodAvailableAt(good, codes)) hits.set(good.die, 1)
+  }
+
+  const popCount = parseInt(popDigit, 16) || 0
+  for (let i = 0; i < popCount; i++) {
+    let die = rollD66(compositionRng)
+    while (isRerollRequired(die, seekingBlackMarket)) die = rollD66(compositionRng)
+    if (!resolveGood(die)) continue // shouldn't happen — the table covers 11-65
+    hits.set(die, (hits.get(die) ?? 0) + 1)
+  }
+  return hits
+}
+
 function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEvents = [] }) {
   const codes = mgt2022ParseTradeCodes(world.Remarks || '')
+  // Amber/Red Zone sale DMs are encoded as 'Am'/'Rz' pseudo-codes in
+  // MGT2022_TRADE_GOODS (Zone isn't a Remarks-tagged trade code, but the
+  // DM-matching mechanism only understands codes in this Set).
+  if (world.Zone === 'A') codes.add('Am')
+  if (world.Zone === 'R') codes.add('Rz')
+
   const { buyMods, sellMods } = buildEventMods(activeEvents)
   void mgt2022StarportFromUWP; void mgt2022TechFromUWP // reserved for Find-a-Supplier/TL-based extensions
 
+  const popDigit  = (world.UWP || '')[4]
+  const qtyDM     = goodsAvailableDM(popDigit)
+  const worldLaw  = mgt2022LawFromUWP(world.UWP || '')
+
+  // Composition (which goods a supplier has at all) uses its own seeded RNG
+  // stream, separate from each good's price/qty rolls below — otherwise
+  // adding/removing a good from the random-extras roll would shift the
+  // seed position of every good's price roll after it.
+  const compositionRng = makeRng(`${campaignId}:${world.Hex}:composition:${tick}:v1`)
+  const hits = mgt2022Composition(compositionRng, codes, popDigit)
+
   const rows = []
   for (const good of MGT2022_TRADE_GOODS) {
+    const hitCount = hits.get(good.die)
+    if (!hitCount) continue // not a Common Good, doesn't match the world's trade codes, and wasn't randomly rolled
+
     const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}:v1`)
 
-    const purchaseDM = sumTradeCodeDMs(good.purchaseDMs, codes)
-    const saleDM     = sumTradeCodeDMs(good.saleDMs,     codes)
+    // "Use only the largest [Purchase/Sale DM] from each column," then both
+    // columns apply to both rolls (purchasing adds Purchase, subtracts
+    // Sale; selling adds Sale, subtracts Purchase).
+    const goodPurchaseDM = maxTradeCodeDMs(good.purchaseDMs, codes)
+    const goodSaleDM     = maxTradeCodeDMs(good.saleDMs,     codes)
+    const lawLevelDM     = smugglingRiskDM(good.bannedLawLevel, worldLaw)
+
+    const netPurchaseDM = goodPurchaseDM - goodSaleDM
+    const netSaleDM     = goodSaleDM - goodPurchaseDM + lawLevelDM
 
     const purchaseThreeD = d6(rng) + d6(rng) + d6(rng)
-    const purchaseRoll   = purchaseRollTotal({ threeDRoll: purchaseThreeD, purchaseDM })
+    const purchaseRoll   = purchaseRollTotal({ threeDRoll: purchaseThreeD, purchaseDM: netPurchaseDM })
     let purchasePriceVal = mgt2022PurchasePrice(good.basePriceCr, purchaseRoll)
 
     const saleThreeD = d6(rng) + d6(rng) + d6(rng)
-    const saleRoll    = saleRollTotal({ threeDRoll: saleThreeD, saleDM })
+    const saleRoll    = saleRollTotal({ threeDRoll: saleThreeD, saleDM: netSaleDM })
     let salePriceVal  = mgt2022SalePrice(good.basePriceCr, saleRoll)
 
     const adjusted = applyEventMods(purchasePriceVal, salePriceVal, good.die, buyMods, sellMods)
     purchasePriceVal = adjusted.purchasePrice
     salePriceVal     = adjusted.salePrice
 
-    const qtyRolls = Array.from({ length: 8 }, () => d6(rng))
-    const qty      = rollQty(good.qty, qtyRolls)
+    // One quantity roll per "hit" (guaranteed inclusion counts as one; each
+    // random extra roll that lands on this good stacks another) — "if you
+    // roll the same type of goods multiple times, the supplier has extra
+    // amounts of those goods available."
+    let qty = 0
+    for (let i = 0; i < hitCount; i++) {
+      const qtyRolls = Array.from({ length: 8 }, () => d6(rng))
+      qty += rollQty(good.qty, qtyRolls, qtyDM)
+    }
 
     rows.push({
       campaign_id:     campaignId,
@@ -272,6 +345,89 @@ function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEv
     })
   }
   return rows
+}
+
+// ── Per-player live pricing (Phase 4) ───────────────────────────────────────────
+// generateCT7Snapshot/generateMgT2022Snapshot above compute a SHARED baseline
+// (no live buyer — brokerSkill defaults to 0/assumed-2) used for qty pools and
+// price history/charts. The functions below recompute one good's price for a
+// SPECIFIC acting player's real Broker skill, live, at display/transaction
+// time. They deliberately duplicate the DM/roll logic above rather than
+// share code with it: `makeRng(seed)` is a pure function of its seed string,
+// so calling it fresh and drawing dice in the same order reproduces the exact
+// same "world luck" roll the shared baseline drew — only the Broker skill
+// term differs. Keeping these standalone means the existing generators (and
+// their tests) are untouched; a parity test below locks the two together.
+
+/**
+ * Recompute one MgT2022 good's purchase/sale price for a specific acting
+ * player's Broker skill, reusing the exact same seeded dice the shared
+ * snapshot baseline drew for this (world, good, tick). The opposing party
+ * (supplier when buying, purchaser when selling) has no live character to
+ * look up, so their assumed Broker skill stays at purchaseRollTotal/
+ * saleRollTotal's own default of 2, same as the shared baseline.
+ *
+ * @returns {{purchasePrice: number, salePrice: number} | null} null if goodDie is unknown
+ */
+export function mgt2022PlayerGoodPrice({ campaignId, world, tick, goodDie, activeEvents = [], brokerSkill = 0 }) {
+  const good = MGT2022_TRADE_GOODS.find(g => g.die === goodDie)
+  if (!good) return null
+
+  const codes = mgt2022ParseTradeCodes(world.Remarks || '')
+  if (world.Zone === 'A') codes.add('Am')
+  if (world.Zone === 'R') codes.add('Rz')
+  const worldLaw = mgt2022LawFromUWP(world.UWP || '')
+
+  const goodPurchaseDM = maxTradeCodeDMs(good.purchaseDMs, codes)
+  const goodSaleDM     = maxTradeCodeDMs(good.saleDMs,     codes)
+  const lawLevelDM     = smugglingRiskDM(good.bannedLawLevel, worldLaw)
+  const netPurchaseDM  = goodPurchaseDM - goodSaleDM
+  const netSaleDM      = goodSaleDM - goodPurchaseDM + lawLevelDM
+
+  const { buyMods, sellMods } = buildEventMods(activeEvents)
+  const rng = makeRng(`${campaignId}:${world.Hex}:${goodDie}:${tick}:v1`)
+
+  const purchaseThreeD = d6(rng) + d6(rng) + d6(rng)
+  const purchaseRoll   = purchaseRollTotal({ threeDRoll: purchaseThreeD, brokerSkill, purchaseDM: netPurchaseDM })
+  let purchasePriceVal = mgt2022PurchasePrice(good.basePriceCr, purchaseRoll)
+
+  const saleThreeD = d6(rng) + d6(rng) + d6(rng)
+  const saleRoll    = saleRollTotal({ threeDRoll: saleThreeD, brokerSkill, saleDM: netSaleDM })
+  let salePriceVal  = mgt2022SalePrice(good.basePriceCr, saleRoll)
+
+  const adjusted = applyEventMods(purchasePriceVal, salePriceVal, goodDie, buyMods, sellMods)
+
+  return {
+    purchasePrice: Math.max(1, adjusted.purchasePrice),
+    salePrice:     Math.max(1, adjusted.salePrice),
+  }
+}
+
+/**
+ * Recompute one CT7 good's sale price for a specific acting player's Broker
+ * skill, reusing the exact same seeded dice the shared snapshot baseline
+ * drew. CT7's Broker DM only ever applies to the sale roll (per
+ * `tradeResult()`'s own design) — there is no purchase-side equivalent, so
+ * this returns just the adjusted sale price per ton.
+ *
+ * @returns {number | null} null if goodDie is unknown
+ */
+export function ct7PlayerSalePrice({ campaignId, world, tick, goodDie, activeEvents = [], brokerSkill = 0 }) {
+  const good = CT2_TRADE_GOODS.find(g => g.die === goodDie)
+  if (!good) return null
+
+  const codes = ct7ParseTradeCodes(world.Remarks || '')
+  const saleDM = sumCT2DMs(good.resaleDMs, codes)
+  const { sellMods } = buildEventMods(activeEvents)
+
+  const rng = makeRng(`${campaignId}:${world.Hex}:${goodDie}:${tick}:v1`)
+  d6(rng); d6(rng) // discard the purchase roll's 2 dice — must match generateCT7Snapshot's draw order
+
+  const saleRoll       = d6(rng) + d6(rng) + saleDM + brokerDM(brokerSkill)
+  const salePriceVal   = actualPrice(marketBasePrice(codes, codes), saleRoll)
+  const { salePrice }  = applyEventMods(0, salePriceVal, goodDie, {}, sellMods)
+
+  return Math.max(1, salePrice)
 }
 
 // ── Dispatch ───────────────────────────────────────────────────────────────────

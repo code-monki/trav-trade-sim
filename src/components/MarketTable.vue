@@ -101,14 +101,14 @@
               </td>
               <td class="good-name">{{ row.trade_good_name }}</td>
               <td class="ctr mono">{{ row.trade_good_die }}</td>
-              <td class="num" :class="priceInfo(row.purchase_price, 4000).cls">
-                <span class="price-indicator" aria-hidden="true">{{ priceInfo(row.purchase_price, 4000).symbol }}</span>
-                <span class="sr-only">{{ priceInfo(row.purchase_price, 4000).label }}</span>
+              <td class="num" :class="purchaseInfo(row).cls">
+                <span class="price-indicator" aria-hidden="true">{{ purchaseInfo(row).symbol }}</span>
+                <span class="sr-only">{{ purchaseInfo(row).label }}</span>
                 {{ fmt(row.purchase_price) }}
               </td>
-              <td class="num" :class="priceInfo(row.sale_price, 5000).cls">
-                <span class="price-indicator" aria-hidden="true">{{ priceInfo(row.sale_price, 5000).symbol }}</span>
-                <span class="sr-only">{{ priceInfo(row.sale_price, 5000).label }}</span>
+              <td class="num" :class="saleInfo(row).cls">
+                <span class="price-indicator" aria-hidden="true">{{ saleInfo(row).symbol }}</span>
+                <span class="sr-only">{{ saleInfo(row).label }}</span>
                 {{ fmt(row.sale_price) }}
               </td>
               <td class="num" :class="row.spread >= 0 ? 'pos' : 'neg'">
@@ -151,7 +151,9 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useTickStore } from '../stores/tick.js'
+import { useAuthStore } from '../stores/auth.js'
 import { CT2_TRADE_GOODS } from '../lib/traveller-data.js'
+import { MGT2022_TRADE_GOODS } from '../lib/traveller-data-mgt2022.js'
 
 const props = defineProps({
   world:         { type: Object,  required: true },
@@ -166,6 +168,7 @@ const props = defineProps({
 const emit = defineEmits(['select-good', 'toggle-chart', 'buy-good', 'view-chart', 'clear-chart'])
 
 const tick        = useTickStore()
+const auth        = useAuthStore()
 const filter      = ref('')
 const sortKey     = ref('trade_good_die')
 const sortAsc     = ref(true)
@@ -185,6 +188,11 @@ watch(() => props.mobile, (m) => { if (!m) compareMode.value = false })
 // Lookup map: goodDie → goodName
 const goodNameMap = Object.fromEntries(CT2_TRADE_GOODS.map(g => [g.die, g.name]))
 function goodName(die) { return goodNameMap[die] ?? die }
+
+// Lookup map: goodDie → basePriceCr, for MgT2022's price-color reference
+// (see priceInfo below) — CT7's costOfGoods()/marketBasePrice() base
+// constants (4000/5000) are meaningless for MgT2022's per-good base prices.
+const mgt2022BaseByDie = Object.fromEntries(MGT2022_TRADE_GOODS.map(g => [g.die, g.basePriceCr]))
 
 // ── Load snapshots when world changes ─────────────────────────────────────────
 async function loadSnapshots() {
@@ -216,7 +224,7 @@ const eventIndex = computed(() => {
 
 // ── Table rows ────────────────────────────────────────────────────────────────
 const rows = computed(() => {
-  const snaps = Object.values(tick.worldSnapshots)
+  const snaps = Object.values(tick.displaySnapshots)
   if (!snaps.length) return []
 
   return snaps.map(s => {
@@ -307,7 +315,20 @@ function fmt(n) { return n.toLocaleString() }
 
 // Price vs. base: colour AND a symbol/label pair, so the signal isn't
 // colour-only (WCAG 2.2 SC 1.4.1) — ▼ below base (buyer's market),
-// ▲ above base (seller's market).
+// ▲ above base (seller's market). CT7's costOfGoods()/marketBasePrice()
+// constants are 4000/5000, so those hardcoded defaults are correct for
+// CT7 (and used as-is for T5, which has no distinct base of its own in
+// this app) — but meaningless for MgT2022, whose per-good basePriceCr
+// ranges 20,000–150,000+, so MgT2022 rows compare against their own good's
+// base price instead.
+function purchaseInfo(row) {
+  const base = auth.campaign?.trade_rules === 'MgT2022' ? mgt2022BaseByDie[row.trade_good_die] ?? 4000 : 4000
+  return priceInfo(row.purchase_price, base)
+}
+function saleInfo(row) {
+  const base = auth.campaign?.trade_rules === 'MgT2022' ? mgt2022BaseByDie[row.trade_good_die] ?? 5000 : 5000
+  return priceInfo(row.sale_price, base)
+}
 function priceInfo(price, base) {
   const ratio = price / base
   if (ratio < 0.85) return { cls: 'price-low', symbol: '▼', label: 'Below base price: ' }

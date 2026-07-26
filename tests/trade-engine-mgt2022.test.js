@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  characteristicDM,
   starportBrokerDM,
+  MGT2022_FIND_SUPPLIER_TARGET,
+  findSupplierRoll,
   goodsAvailableDM,
   isRerollRequired,
   resolveGood,
-  sumTradeCodeDMs,
+  maxTradeCodeDMs,
   purchaseRollTotal,
   saleRollTotal,
   modifiedPricePct,
@@ -22,7 +25,30 @@ import {
   parseTradeCodes,
   starportFromUWP,
   techFromUWP,
+  lawFromUWP,
 } from '../src/lib/trade-engine-mgt2022.js'
+
+// ── Characteristics ───────────────────────────────────────────────────────────
+
+describe('characteristicDM', () => {
+  it('matches the standard Traveller characteristic-to-DM scale', () => {
+    expect(characteristicDM(1)).toBe(-2)
+    expect(characteristicDM(2)).toBe(-2)
+    expect(characteristicDM(3)).toBe(-1)
+    expect(characteristicDM(5)).toBe(-1)
+    expect(characteristicDM(6)).toBe(0)
+    expect(characteristicDM(8)).toBe(0)
+    expect(characteristicDM(9)).toBe(1)
+    expect(characteristicDM(11)).toBe(1)
+    expect(characteristicDM(12)).toBe(2)
+    expect(characteristicDM(15)).toBe(2)
+  })
+
+  it('returns 0 for an unrecorded characteristic', () => {
+    expect(characteristicDM(null)).toBe(0)
+    expect(characteristicDM(undefined)).toBe(0)
+  })
+})
 
 // ── Find-a-Supplier ────────────────────────────────────────────────────────────
 
@@ -44,17 +70,49 @@ describe('starportBrokerDM', () => {
   })
 })
 
+describe('findSupplierRoll', () => {
+  it('target is Average (8+)', () => {
+    expect(MGT2022_FIND_SUPPLIER_TARGET).toBe(8)
+  })
+
+  it('succeeds when total meets the target exactly', () => {
+    expect(findSupplierRoll({ twoDRoll: 8 })).toEqual({ total: 8, success: true })
+  })
+
+  it('fails when total is one short of the target', () => {
+    expect(findSupplierRoll({ twoDRoll: 7 })).toEqual({ total: 7, success: false })
+  })
+
+  it('adds skill level and starport DM to the roll', () => {
+    // 2 + 1 (skill) + 2 (starport C) = 5, still short of 8
+    expect(findSupplierRoll({ twoDRoll: 2, skillLevel: 1, starportDM: 2 })).toEqual({ total: 5, success: false })
+    // 6 + 1 + 2 = 9, meets the target
+    expect(findSupplierRoll({ twoDRoll: 6, skillLevel: 1, starportDM: 2 })).toEqual({ total: 9, success: true })
+  })
+
+  it('applies DM-1 per previous attempt this world/month', () => {
+    // A roll that would succeed cold fails after 3 prior attempts
+    expect(findSupplierRoll({ twoDRoll: 8, previousAttempts: 0 })).toEqual({ total: 8, success: true })
+    expect(findSupplierRoll({ twoDRoll: 8, previousAttempts: 3 })).toEqual({ total: 5, success: false })
+  })
+})
+
 // ── Determine Goods Available ──────────────────────────────────────────────────
 
 describe('goodsAvailableDM', () => {
-  it('low population reduces availability', () => {
-    expect(goodsAvailableDM(0)).toBeLessThan(0)
-    expect(goodsAvailableDM('1')).toBeLessThan(0)
+  it('Population 3 or less: DM-3', () => {
+    expect(goodsAvailableDM(0)).toBe(-3)
+    expect(goodsAvailableDM('3')).toBe(-3)
   })
 
-  it('high population increases availability', () => {
-    expect(goodsAvailableDM('A')).toBeGreaterThan(0)
-    expect(goodsAvailableDM('C')).toBeGreaterThan(goodsAvailableDM('A'))
+  it('Population 4-8: no DM', () => {
+    expect(goodsAvailableDM(4)).toBe(0)
+    expect(goodsAvailableDM(8)).toBe(0)
+  })
+
+  it('Population 9 or more: DM+3', () => {
+    expect(goodsAvailableDM('9')).toBe(3)
+    expect(goodsAvailableDM('C')).toBe(3)
   })
 
   it('unknown population digit defaults to 0', () => {
@@ -91,35 +149,39 @@ describe('resolveGood', () => {
     expect(resolveGood('99')).toBeUndefined()
   })
 
-  it('has exactly 36 entries covering the full D66 range', () => {
-    const dice = ['1', '2', '3', '4', '5', '6'].flatMap(a => ['1', '2', '3', '4', '5', '6'].map(b => a + b))
+  it('has exactly 30 priced entries covering D66 11-65', () => {
+    const dice = ['1', '2', '3', '4', '5', '6'].flatMap(a => ['1', '2', '3', '4', '5'].map(b => a + b))
     for (const die of dice) {
       expect(resolveGood(die)).toBeDefined()
     }
   })
+
+  it('excludes Exotics (66) — outside the normal trade rules, not a priced commodity', () => {
+    expect(resolveGood('66')).toBeUndefined()
+  })
 })
 
-describe('sumTradeCodeDMs', () => {
-  it('sums DMs for matching codes only', () => {
+describe('maxTradeCodeDMs', () => {
+  it('takes the single largest matching DM, not the sum', () => {
     const codes = new Set(['Ag', 'Ri'])
     const dms = [{ code: 'Ag', dm: -3 }, { code: 'In', dm: +2 }, { code: 'Ri', dm: +1 }]
-    expect(sumTradeCodeDMs(dms, codes)).toBe(-2)
+    expect(maxTradeCodeDMs(dms, codes)).toBe(1)
   })
 
   it('returns 0 for no matches', () => {
-    expect(sumTradeCodeDMs([{ code: 'Ag', dm: -3 }], new Set(['In']))).toBe(0)
+    expect(maxTradeCodeDMs([{ code: 'Ag', dm: -3 }], new Set(['In']))).toBe(0)
   })
 
   it('handles an empty DM list', () => {
-    expect(sumTradeCodeDMs([], new Set(['Ag']))).toBe(0)
-    expect(sumTradeCodeDMs(undefined, new Set(['Ag']))).toBe(0)
+    expect(maxTradeCodeDMs([], new Set(['Ag']))).toBe(0)
+    expect(maxTradeCodeDMs(undefined, new Set(['Ag']))).toBe(0)
   })
 })
 
 // ── Determine Purchase / Sale Price ────────────────────────────────────────────
 
 describe('purchaseRollTotal', () => {
-  it('3D + broker skill + purchase DM - supplier broker skill (default 2)', () => {
+  it('3D + broker skill + net purchase DM - supplier broker skill (default 2)', () => {
     expect(purchaseRollTotal({ threeDRoll: 10, brokerSkill: 2, purchaseDM: -3 })).toBe(10 + 2 - 3 - 2)
   })
 
@@ -133,7 +195,7 @@ describe('purchaseRollTotal', () => {
 })
 
 describe('saleRollTotal', () => {
-  it('3D + broker skill + sale DM - purchaser broker skill (default 2)', () => {
+  it('3D + broker skill + net sale DM - purchaser broker skill (default 2)', () => {
     expect(saleRollTotal({ threeDRoll: 10, brokerSkill: 1, saleDM: 4 })).toBe(10 + 1 + 4 - 2)
   })
 })
@@ -149,11 +211,17 @@ describe('modifiedPricePct', () => {
     expect(modifiedPricePct(40)).toEqual({ purchasePct: 15, salePct: 400 })
   })
 
-  it('15-17 band is the balanced middle (both 110%)', () => {
-    expect(modifiedPricePct(16)).toEqual({ purchasePct: 110, salePct: 110 })
+  it('0: 175% purchase, 40% sale (the unmodified baseline)', () => {
+    expect(modifiedPricePct(0)).toEqual({ purchasePct: 175, salePct: 40 })
   })
 
-  it('purchase% decreases and sale% increases monotonically across bands', () => {
+  it('one band per roll result, not coarser bands', () => {
+    expect(modifiedPricePct(15)).toEqual({ purchasePct: 65, salePct: 120 })
+    expect(modifiedPricePct(16)).toEqual({ purchasePct: 60, salePct: 125 })
+    expect(modifiedPricePct(17)).toEqual({ purchasePct: 55, salePct: 130 })
+  })
+
+  it('purchase% decreases and sale% increases monotonically across rolls', () => {
     const rolls = [-3, -1, 1, 4, 7, 10, 13, 16, 19, 22, 24, 25]
     const pcts = rolls.map(modifiedPricePct)
     for (let i = 1; i < pcts.length; i++) {
@@ -178,29 +246,25 @@ describe('purchasePrice / salePrice', () => {
 // ── Freight ─────────────────────────────────────────────────────────────────────
 
 describe('freightRate', () => {
-  it('increases with parsecs for each lot size', () => {
-    expect(freightRate('major', 6)).toBeGreaterThan(freightRate('major', 1))
+  it('increases with parsecs', () => {
+    expect(freightRate(6)).toBeGreaterThan(freightRate(1))
   })
 
-  it('incidental lots pay a higher per-ton rate than major lots', () => {
-    expect(freightRate('incidental', 1)).toBeGreaterThan(freightRate('minor', 1))
-    expect(freightRate('minor', 1)).toBeGreaterThan(freightRate('major', 1))
+  it('matches the Passage and Freight table (Cr/ton)', () => {
+    expect(freightRate(1)).toBe(1000)
+    expect(freightRate(6)).toBe(32000)
   })
 
   it('clamps parsecs to the 1-6 table range', () => {
-    expect(freightRate('major', 0)).toBe(freightRate('major', 1))
-    expect(freightRate('major', 10)).toBe(freightRate('major', 6))
-  })
-
-  it('unknown lot size returns 0', () => {
-    expect(freightRate('bogus', 1)).toBe(0)
+    expect(freightRate(0)).toBe(freightRate(1))
+    expect(freightRate(10)).toBe(freightRate(6))
   })
 })
 
 describe('freightCharge', () => {
-  it('tons × rate', () => {
-    const rate = freightRate('major', 2)
-    expect(freightCharge(10, 'major', 2)).toBe(10 * rate)
+  it('tons × rate, independent of lot size', () => {
+    const rate = freightRate(2)
+    expect(freightCharge(10, 2)).toBe(10 * rate)
   })
 })
 
@@ -243,15 +307,23 @@ describe('mailPaymentMgT2022', () => {
   })
 })
 
-// ── Smuggling risk ─────────────────────────────────────────────────────────────
+// ── Smuggling risk (banned goods vs. Law Level) ───────────────────────────────
 
 describe('smugglingRiskDM', () => {
-  it('higher law level increases risk', () => {
-    expect(smugglingRiskDM(0, 9)).toBeGreaterThan(smugglingRiskDM(0, 1))
+  it('matches the book\'s worked example: banned at LL3, smuggled onto an LL9 world = Sale DM+6', () => {
+    expect(smugglingRiskDM(3, 9)).toBe(6)
   })
 
-  it('higher sale DM (better fences) reduces risk', () => {
-    expect(smugglingRiskDM(5, 5)).toBeLessThan(smugglingRiskDM(0, 5))
+  it('is zero (not negative) when the world\'s Law Level is below the ban threshold', () => {
+    expect(smugglingRiskDM(8, 3)).toBe(0)
+  })
+
+  it('is zero when the good has no bannedLawLevel', () => {
+    expect(smugglingRiskDM(null, 9)).toBe(0)
+  })
+
+  it('increases with the world\'s Law Level once past the threshold', () => {
+    expect(smugglingRiskDM(1, 9)).toBeGreaterThan(smugglingRiskDM(1, 5))
   })
 })
 
@@ -274,9 +346,14 @@ describe('trafficCount', () => {
 // ── Re-exported UWP helpers (from trade-engine-ct7.js) ────────────────────────
 
 describe('re-exported UWP helpers', () => {
-  it('parseTradeCodes/starportFromUWP/techFromUWP are usable', () => {
+  it('parseTradeCodes/starportFromUWP/techFromUWP/lawFromUWP are usable', () => {
     expect(parseTradeCodes('Ag Ri')).toEqual(new Set(['Ag', 'Ri']))
     expect(starportFromUWP('A788899-C')).toBe('A')
     expect(techFromUWP('A788899-C')).toBe('C')
+    expect(lawFromUWP('A788899-C')).toBe(9)
+  })
+
+  it('parseTradeCodes recognizes Ga/Ht/Lt (added for the Trade Goods table)', () => {
+    expect(parseTradeCodes('Ga Ht Lt')).toEqual(new Set(['Ga', 'Ht', 'Lt']))
   })
 })

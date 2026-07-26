@@ -9,6 +9,8 @@ import {
   shouldRollupYear,
   makeRng,
   generateWorldSnapshot,
+  mgt2022PlayerGoodPrice,
+  ct7PlayerSalePrice,
 } from '../src/lib/market-tick.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -188,13 +190,40 @@ describe('generateWorldSnapshot dispatch', () => {
     expect(rows[0].trade_good_name).toBe('Textiles') // CT2_TRADE_GOODS[0]
   })
 
-  it('MgT2022 uses its own 36-entry goods table, not CT2', () => {
+  it('MgT2022 uses its own goods table, not CT2', () => {
     const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
-    expect(rows).toHaveLength(36)
-    expect(rows[0].trade_good_name).toBe('Common Electronics') // MGT2022_TRADE_GOODS[0]
+    expect(rows.some(r => r.trade_good_name === 'Common Electronics')).toBe(true) // MGT2022_TRADE_GOODS[0]
     // 'Liquor' (CT2 die 13) has no MgT2022 equivalent — confirms the CT2
     // table isn't being used under the hood.
     expect(rows.every(r => r.trade_good_name !== 'Liquor')).toBe(true)
+  })
+
+  it('MgT2022 composition never exceeds all 35 priced goods and excludes Exotics (66)', () => {
+    const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
+    expect(rows.length).toBeLessThanOrEqual(35)
+    expect(rows.every(r => r.trade_good_name !== 'Exotics')).toBe(true)
+  })
+
+  it('MgT2022 composition always includes all 6 Common Goods regardless of trade codes', () => {
+    const noCodesWorld = { Hex: '0202', UWP: 'A788899-C', Remarks: '' }
+    const rows = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
+    const commonNames = ['Common Electronics', 'Common Industrial Goods', 'Common Manufactured Goods',
+                          'Common Raw Materials', 'Common Consumables', 'Common Ore']
+    for (const name of commonNames) {
+      expect(rows.some(r => r.trade_good_name === name)).toBe(true)
+    }
+  })
+
+  it('MgT2022 composition includes Trade Goods matching the world\'s trade codes', () => {
+    // testWorld has Remarks 'Ag Ri' — Biochemicals' availability includes 'Ag'
+    const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
+    expect(rows.some(r => r.trade_good_name === 'Biochemicals')).toBe(true)
+  })
+
+  it('MgT2022 composition on Population 0 with no matching trade codes is just the 6 Common Goods', () => {
+    const emptyWorld = { Hex: '0303', UWP: 'A788000-C', Remarks: '' } // pop digit (index 4) '0' -> 0 random extras
+    const rows = generateWorldSnapshot({ world: emptyWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022' })
+    expect(rows).toHaveLength(6)
   })
 
   it('is deterministic — same inputs produce identical rows across calls', () => {
@@ -222,5 +251,78 @@ describe('generateWorldSnapshot dispatch', () => {
         expect(row.qty_available).toBeGreaterThanOrEqual(0)
       }
     }
+  })
+})
+
+// ── Per-player live pricing (Phase 4) ───────────────────────────────────────────
+
+describe('mgt2022PlayerGoodPrice', () => {
+  // Common Electronics (die '11') is always present per "Determine Goods
+  // Available" — safe to assume it's on offer regardless of composition.
+  const goodDie = '11'
+
+  it('with brokerSkill 0 reproduces the shared baseline snapshot exactly', () => {
+    const rows = generateWorldSnapshot({
+      world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 5, tradeRules: 'MgT2022',
+    })
+    const baseline = rows.find(r => r.trade_good_die === goodDie)
+
+    const priced = mgt2022PlayerGoodPrice({
+      campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0,
+    })
+
+    expect(priced.purchasePrice).toBe(baseline.purchase_price)
+    expect(priced.salePrice).toBe(baseline.sale_price)
+  })
+
+  it('a higher Broker skill lowers the purchase price and raises the sale price', () => {
+    const unskilled = mgt2022PlayerGoodPrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0 })
+    const skilled   = mgt2022PlayerGoodPrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 4 })
+
+    expect(skilled.purchasePrice).toBeLessThanOrEqual(unskilled.purchasePrice)
+    expect(skilled.salePrice).toBeGreaterThanOrEqual(unskilled.salePrice)
+  })
+
+  it('is deterministic across calls with the same inputs', () => {
+    const a = mgt2022PlayerGoodPrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 2 })
+    const b = mgt2022PlayerGoodPrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 2 })
+    expect(a).toEqual(b)
+  })
+
+  it('returns null for an unknown goodDie', () => {
+    expect(mgt2022PlayerGoodPrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie: '99' })).toBeNull()
+  })
+})
+
+describe('ct7PlayerSalePrice', () => {
+  const goodDie = '11'
+
+  it('with brokerSkill 0 reproduces the shared baseline snapshot exactly', () => {
+    const rows = generateWorldSnapshot({
+      world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 5, tradeRules: 'CT7',
+    })
+    const baseline = rows.find(r => r.trade_good_die === goodDie)
+
+    const salePrice = ct7PlayerSalePrice({
+      campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0,
+    })
+
+    expect(salePrice).toBe(baseline.sale_price)
+  })
+
+  it('a higher Broker skill raises the sale price', () => {
+    const unskilled = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0 })
+    const skilled   = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 4 })
+    expect(skilled).toBeGreaterThanOrEqual(unskilled)
+  })
+
+  it('skill above the brokerDM cap (4) has the same effect as skill 4', () => {
+    const capped   = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 4 })
+    const overCap  = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 10 })
+    expect(overCap).toBe(capped)
+  })
+
+  it('returns null for an unknown goodDie', () => {
+    expect(ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie: 'ZZ' })).toBeNull()
   })
 })

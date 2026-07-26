@@ -206,7 +206,7 @@ watch(() => [props.world?.Hex, props.sectorName, tick.currentTick], loadSnapshot
 // ── Sell price lookup from current world's snapshot cache ─────────────────
 
 function sellPriceFor(item) {
-  const snap = tick.worldSnapshots[item.trade_good_die]
+  const snap = tick.displaySnapshots[item.trade_good_die]
   return snap ? snap.sale_price : null
 }
 
@@ -262,6 +262,7 @@ async function doSell(item) {
     marketSector:    props.sectorName,
     tick:            tick.currentTick,
     tradeRules:      auth.campaign.trade_rules,
+    brokerSkill:     tick.brokerSkill,
   })
 
   pendingSellId.value = null

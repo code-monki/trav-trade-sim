@@ -50,6 +50,16 @@ CREATE TABLE IF NOT EXISTS players (
   failed_attempts INTEGER NOT NULL DEFAULT 0,
   locked_until    TEXT,
   last_seen       TEXT,
+  -- MgT2022 characteristics + background/rank (migration 014) — nullable,
+  -- referee fills these in per-character over time, same as skills.
+  strength        INTEGER,
+  dexterity       INTEGER,
+  endurance       INTEGER,
+  intelligence    INTEGER,
+  education       INTEGER,
+  social_standing INTEGER,
+  background      TEXT,
+  rank            INTEGER,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, character_name)
 );
@@ -88,6 +98,7 @@ CREATE TABLE IF NOT EXISTS ships (
   fuel_capacity         INTEGER NOT NULL DEFAULT 0,
   fuel_current          INTEGER NOT NULL DEFAULT 0,
   market_value          INTEGER NOT NULL DEFAULT 0,
+  armed                 INTEGER NOT NULL DEFAULT 0 CHECK (armed IN (0, 1)), -- migration 014
   created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, name)
 );
@@ -115,6 +126,7 @@ CREATE TABLE IF NOT EXISTS ship_templates (
   low_berth_capacity    INTEGER NOT NULL DEFAULT 0,
   fuel_capacity         INTEGER NOT NULL DEFAULT 0,
   market_value          INTEGER NOT NULL DEFAULT 0,
+  armed                 INTEGER NOT NULL DEFAULT 0 CHECK (armed IN (0, 1)), -- migration 014
   notes                 TEXT,
   created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (campaign_id, name)
@@ -555,6 +567,7 @@ CREATE TABLE IF NOT EXISTS obligations (
   freight_tons      INTEGER,  -- freight only
   freight_lot_size  TEXT,     -- freight only: 'major' | 'minor' | 'incidental'
   rate_per_ton      INTEGER,  -- freight only: agreed Cr/ton for the whole run
+  mail_containers   INTEGER,  -- mail only: 5 tons/container (migration 014)
   notes             TEXT,
   created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -625,6 +638,26 @@ WINDOW w AS (
   ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
 );
 
+-- ── Find a Supplier attempt tracking (migration 015) ──────────────────────────
+-- Character-based, one-click check gating whether a player can see a world's
+-- market this (game) month. month_key = floor(tick / TICKS_PER_MONTH).
+
+CREATE TABLE IF NOT EXISTS supplier_search_attempts (
+  id          TEXT    PRIMARY KEY,
+  campaign_id TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  player_id   TEXT    NOT NULL REFERENCES players(id)   ON DELETE CASCADE,
+  world_hex   TEXT    NOT NULL,
+  sector      TEXT    NOT NULL,
+  month_key   INTEGER NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  succeeded   INTEGER NOT NULL DEFAULT 0 CHECK (succeeded IN (0, 1)),
+  updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (player_id, world_hex, sector, month_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_search_player
+  ON supplier_search_attempts (campaign_id, player_id, world_hex, sector, month_key);
+
 -- ── Schema-drift detection ledger ─────────────────────────────────────────────
 -- This baseline already contains the end-state of migrations 002-011 (see
 -- d1/011_schema_ledger.sql), so a fresh install's ledger starts fully caught
@@ -639,4 +672,5 @@ INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
   ('001', unixepoch()), ('002', unixepoch()), ('003', unixepoch()),
   ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
   ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
-  ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch());
+  ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch()), ('014', unixepoch()),
+  ('015', unixepoch());

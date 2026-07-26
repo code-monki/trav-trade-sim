@@ -313,7 +313,13 @@
         <template v-if="topTab === 'port' && portTab === 'market'">
           <div class="market-layout" ref="marketLayoutEl"
                :style="isNarrow && chartSheetOpen ? { paddingBottom: sheetInset + 'px' } : {}">
+            <FindSupplierPanel
+              v-if="needsSupplier"
+              :world="map.selectedWorld"
+              :sector-name="map.selectedSectorName"
+            />
             <MarketTable
+              v-else
               :world="map.selectedWorld"
               :sector-name="map.selectedSectorName"
               :charted-dies="[...chartedGoods]"
@@ -500,6 +506,7 @@ import { useAuthStore } from '../stores/auth.js'
 import { useTickStore } from '../stores/tick.js'
 import { isStale }      from '../lib/travellermap-cache.js'
 import MarketTable      from '../components/MarketTable.vue'
+import FindSupplierPanel from '../components/FindSupplierPanel.vue'
 import PriceChart       from '../components/PriceChart.vue'
 import ChartSheet       from '../components/ChartSheet.vue'
 import EventsHistory    from '../components/EventsHistory.vue'
@@ -564,6 +571,12 @@ function clearChartedGoods() {
   chartedGoods.value  = new Set()
   chartSheetOpen.value = false
 }
+
+// Find a Supplier (MgT2022 only) gates the market view — other rulesets'
+// markets stay ambient/shared, so they never need this check.
+const needsSupplier = computed(() =>
+  auth.campaign?.trade_rules === 'MgT2022' && !tick.supplierFound
+)
 
 // Un-plotting the last good (e.g. one by one in compare mode) closes the
 // sheet for good — it shouldn't spring back on the next selection.
@@ -782,7 +795,22 @@ watch(() => map.selectedWorld, (world) => {
   selectedGood.value  = null
   chartedGoods.value  = new Set()
   chartSheetOpen.value = false
-  if (world) tick.loadWorldEventHistory(world.Hex, map.selectedSectorName)
+  if (world) {
+    tick.loadWorldEventHistory(world.Hex, map.selectedSectorName)
+    if (auth.campaign?.trade_rules === 'MgT2022') {
+      // Reset immediately so the previous world's result doesn't flash
+      // while this world's status is still loading.
+      tick.supplierFound    = false
+      tick.supplierAttempts = 0
+      tick.loadSupplierStatus(world.Hex, map.selectedSectorName)
+    }
+    // Per-player pricing (Phase 4): CT7's sale-price Broker DM and
+    // MgT2022's purchase/sale Broker DM both need the current player's own
+    // skill level refreshed as they move between worlds.
+    if (auth.campaign?.trade_rules === 'MgT2022' || auth.campaign?.trade_rules === 'CT7') {
+      tick.loadBrokerSkill()
+    }
+  }
 })
 
 function onWorldSelect(world) {

@@ -59,20 +59,20 @@ app.post('/ships', requireReferee, async (c) => {
   const session = c.var.session
   const { name, hull_type, hull_tons, cargo_capacity, credits, jump_rating,
           maneuver_drive_rating, stateroom_capacity, low_berth_capacity,
-          fuel_capacity, fuel_current, market_value } = await c.req.json()
+          fuel_capacity, fuel_current, market_value, armed } = await c.req.json()
 
   const shipId = crypto.randomUUID()
   await c.env.DB.prepare(
     `INSERT INTO ships (id, campaign_id, name, hull_type, hull_tons, cargo_capacity,
                         credits, jump_rating, maneuver_drive_rating,
                         stateroom_capacity, low_berth_capacity,
-                        fuel_capacity, fuel_current, market_value)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        fuel_capacity, fuel_current, market_value, armed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(shipId, session.campaign_id, name.trim(), hull_type || null,
          hull_tons ?? 200, cargo_capacity ?? 80, credits ?? 0,
          jump_rating || null, maneuver_drive_rating || null,
          stateroom_capacity ?? 0, low_berth_capacity ?? 0,
-         fuel_capacity ?? 0, fuel_current ?? 0, market_value ?? 0).run()
+         fuel_capacity ?? 0, fuel_current ?? 0, market_value ?? 0, armed ? 1 : 0).run()
 
   const ship = await c.env.DB.prepare(`SELECT * FROM ships WHERE id = ?`).bind(shipId).first()
   return c.json({ data: { ...ship, crew: [] } }, 201)
@@ -92,7 +92,7 @@ app.patch('/ships/:id', requireReferee, async (c) => {
   const allowed = ['name', 'hull_type', 'hull_tons', 'cargo_capacity', 'credits',
                    'current_world', 'current_sector', 'jump_rating', 'maneuver_drive_rating',
                    'stateroom_capacity', 'low_berth_capacity', 'fuel_capacity', 'fuel_current',
-                   'market_value']
+                   'market_value', 'armed']
   const setClauses = []
   const values     = []
   for (const [k, v] of Object.entries(fields)) {
@@ -158,7 +158,7 @@ app.get('/ship-templates', requireReferee, async (c) => {
 app.post('/ship-templates', requireReferee, async (c) => {
   const session = c.var.session
   const { name, hull_type, hull_tons, cargo_capacity, jump_rating, maneuver_drive_rating,
-          stateroom_capacity, low_berth_capacity, fuel_capacity, market_value, notes } = await c.req.json()
+          stateroom_capacity, low_berth_capacity, fuel_capacity, market_value, armed, notes } = await c.req.json()
 
   const db       = c.env.DB
   const campaign = await db.prepare(`SELECT trade_rules FROM campaigns WHERE id = ?`).bind(session.campaign_id).first()
@@ -174,12 +174,12 @@ app.post('/ship-templates', requireReferee, async (c) => {
     `INSERT INTO ship_templates
        (id, campaign_id, trade_rules, name, hull_type, hull_tons, cargo_capacity,
         jump_rating, maneuver_drive_rating, stateroom_capacity, low_berth_capacity,
-        fuel_capacity, market_value, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        fuel_capacity, market_value, armed, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(templateId, session.campaign_id, campaign.trade_rules, name.trim(), hull_type || null,
          hull_tons ?? 200, cargo_capacity ?? 80, jump_rating || null, maneuver_drive_rating || null,
          stateroom_capacity ?? 0, low_berth_capacity ?? 0, fuel_capacity ?? 0,
-         market_value ?? 0, notes || null).run()
+         market_value ?? 0, armed ? 1 : 0, notes || null).run()
 
   const row = await db.prepare(`SELECT * FROM ship_templates WHERE id = ?`).bind(templateId).first()
   return c.json({ data: row }, 201)
@@ -205,7 +205,7 @@ app.patch('/ship-templates/:id', requireReferee, async (c) => {
 
   const allowed = ['name', 'hull_type', 'hull_tons', 'cargo_capacity', 'jump_rating',
                    'maneuver_drive_rating', 'stateroom_capacity', 'low_berth_capacity',
-                   'fuel_capacity', 'market_value', 'notes']
+                   'fuel_capacity', 'market_value', 'armed', 'notes']
   const setClauses = []
   const values     = []
   for (const [k, v] of Object.entries(fields)) {
@@ -433,7 +433,12 @@ app.get('/players', requireReferee, async (c) => {
   const db         = c.env.DB
 
   const [{ results: playerRows }, { results: skillRows }, { results: crewRows }] = await Promise.all([
-    db.prepare(`SELECT id, character_name, role, credits FROM players WHERE campaign_id = ? ORDER BY character_name`).bind(campaignId).all(),
+    db.prepare(
+      `SELECT id, character_name, role, credits,
+              strength, dexterity, endurance, intelligence, education, social_standing,
+              background, rank
+       FROM players WHERE campaign_id = ? ORDER BY character_name`
+    ).bind(campaignId).all(),
     db.prepare(`SELECT id, player_id, skill, level FROM player_skills WHERE campaign_id = ?`).bind(campaignId).all(),
     db.prepare(
       `SELECT c.player_id, s.name as ship_name FROM crew c
@@ -456,6 +461,40 @@ app.get('/players', requireReferee, async (c) => {
   }))
 
   return c.json({ data: players })
+})
+
+// ── PATCH /api/referee/players/:id — characteristics + background/rank ────────
+// MgT2022 rules-accuracy fields (migration 014): STR/DEX/END/INT/EDU/SOC,
+// service background (e.g. 'Scout', 'Navy'), and rank within it. All
+// nullable — a referee fills these in per-character over time, same as skills.
+app.patch('/players/:id', requireReferee, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const fields  = await c.req.json()
+
+  const db     = c.env.DB
+  const player = await db.prepare(`SELECT campaign_id FROM players WHERE id = ?`).bind(id).first()
+  if (!player)                                     return c.json({ error: 'Player not found' }, 404)
+  if (player.campaign_id !== session.campaign_id)  return c.json({ error: 'Forbidden' }, 403)
+
+  const allowed = ['strength', 'dexterity', 'endurance', 'intelligence', 'education',
+                   'social_standing', 'background', 'rank']
+  const setClauses = []
+  const values     = []
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k)) { setClauses.push(`${k} = ?`); values.push(v) }
+  }
+  if (!setClauses.length) return c.json({ error: 'No valid fields' }, 400)
+
+  values.push(id)
+  await db.prepare(`UPDATE players SET ${setClauses.join(', ')} WHERE id = ?`).bind(...values).run()
+  const updated = await db.prepare(
+    `SELECT id, character_name, role, credits,
+            strength, dexterity, endurance, intelligence, education, social_standing,
+            background, rank
+     FROM players WHERE id = ?`
+  ).bind(id).first()
+  return c.json({ data: updated })
 })
 
 // ── POST /api/referee/skills — upsert a skill ─────────────────────────────────

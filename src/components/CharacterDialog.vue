@@ -14,6 +14,36 @@
 
         <div class="dialog-body">
 
+          <!-- Characteristics section (MgT2022) -->
+          <template v-if="auth.campaign?.trade_rules === 'MgT2022'">
+            <div class="section-header">
+              <h4>Characteristics</h4>
+            </div>
+            <div class="char-grid">
+              <label v-for="c in CHARACTERISTIC_FIELDS" :key="c.key" class="char-field">
+                <span>{{ c.label }}</span>
+                <input type="number" min="1" max="15"
+                       v-model.number="characteristics[c.key]"
+                       class="level-input"
+                       @change="saveCharacteristics" />
+              </label>
+            </div>
+            <div class="char-grid char-grid-wide">
+              <label class="char-field char-field-wide">
+                <span>Background</span>
+                <input type="text" v-model.trim="characteristics.background"
+                       placeholder="e.g. Scout, Navy, Merchant"
+                       class="skill-input" @change="saveCharacteristics" />
+              </label>
+              <label class="char-field">
+                <span>Rank</span>
+                <input type="number" min="0" max="6"
+                       v-model.number="characteristics.rank"
+                       class="level-input" @change="saveCharacteristics" />
+              </label>
+            </div>
+          </template>
+
           <!-- Skills section -->
           <div class="section-header">
             <h4>Skills</h4>
@@ -85,6 +115,21 @@ const error    = ref('')
 const newName  = ref('')
 const newLevel = ref(0)
 
+const CHARACTERISTIC_FIELDS = [
+  { key: 'strength',        label: 'STR' },
+  { key: 'dexterity',       label: 'DEX' },
+  { key: 'endurance',       label: 'END' },
+  { key: 'intelligence',    label: 'INT' },
+  { key: 'education',       label: 'EDU' },
+  { key: 'social_standing', label: 'SOC' },
+]
+
+const characteristics = ref({
+  strength: null, dexterity: null, endurance: null,
+  intelligence: null, education: null, social_standing: null,
+  background: '', rank: null,
+})
+
 const { activate, deactivate } = useFocusTrap(dialogEl)
 
 watch(() => props.modelValue, async (open) => {
@@ -92,6 +137,7 @@ watch(() => props.modelValue, async (open) => {
     await nextTick()
     activate()
     await loadSkills()
+    if (auth.campaign?.trade_rules === 'MgT2022') await loadCharacteristics()
   } else {
     deactivate()
   }
@@ -107,6 +153,31 @@ async function loadSkills() {
   loading.value = false
   if (err) { error.value = err; return }
   skills.value = data ?? []
+}
+
+async function loadCharacteristics() {
+  const { data, error: err } = await api.get('/api/reports/characteristics', {
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+  })
+  if (err) { error.value = err; return }
+  characteristics.value = {
+    strength: null, dexterity: null, endurance: null,
+    intelligence: null, education: null, social_standing: null,
+    background: '', rank: null,
+    ...data,
+  }
+}
+
+async function saveCharacteristics() {
+  error.value = ''
+  const { data, error: err } = await api.patch('/api/reports/characteristics', {
+    campaign_id: auth.campaign.id,
+    player_id:   auth.player.id,
+    ...characteristics.value,
+  })
+  if (err) { error.value = err; return }
+  characteristics.value = { ...characteristics.value, ...data }
 }
 
 async function saveSkill(skillName, level) {
@@ -232,6 +303,28 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   font-size: 0.82rem;
   color: var(--text-dim);
 }
+
+/* Characteristics grid */
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.char-grid-wide { grid-template-columns: 2fr 1fr; }
+
+.char-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.char-field-wide { text-transform: none; letter-spacing: normal; }
+
+.char-field .level-input { width: 100%; }
+.char-field .skill-input { width: 100%; text-transform: none; }
 
 /* Skills table */
 .skills-table {

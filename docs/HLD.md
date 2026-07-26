@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0
+**Version:** 0.7.0
 
 ---
 
@@ -64,6 +64,8 @@ src/
 │                             report) / Events / Campaign
 ├── components/
 │   ├── MarketTable.vue       Trade goods table with sort, filter, chart checkboxes, buy buttons
+│   ├── FindSupplierPanel.vue (MgT2022 only) "Find a Supplier" gate shown instead of MarketTable
+│   │                         until the player succeeds this game-month
 │   ├── PriceChart.vue        lightweight-charts chart — Weekly/Monthly/Annual/Realized tabs
 │   ├── CargoHold.vue         Ship > Cargo sub-tab: hold display + sell flow + live valuation
 │   ├── PassengersPanel.vue   Port > Passengers sub-tab: booking form, capacity check, fare preview
@@ -82,7 +84,7 @@ src/
 │   ├── EventsHistory.vue     World event log
 │   ├── WorldPicker.vue       Destination picker (dropdown or manual hex), used by PassengersPanel/MailPanel/FreightPanel
 │   ├── RecoveryCodeDialog.vue One-time recovery code display (teleported)
-│   ├── CharacterDialog.vue   Character stats display
+│   ├── CharacterDialog.vue   Character stats display (skills; MgT2022 also editable characteristics)
 │   ├── HamburgerMenu.vue     Navigation menu
 │   ├── HelpDialog.vue        In-app user manual (tabbed)
 │   ├── TutorialDialog.vue    Sidebar-nav tutorial viewer with cross-ref links
@@ -404,4 +406,74 @@ generateWorldSnapshot(world, sectorName, campaignId, tick, activeEvents)
    13. qty = rollQty(good.qty, [d6(rng), d6(rng), ...])
 ```
 
-All inputs are deterministic; same seed = same price on every client.
+All inputs are deterministic; same seed = same price on every client. (This pipeline is CT7's; T5 shares the same 36 `CT2_TRADE_GOODS` table but its own pricing formulas — see `trade-engine-t5.js` — and MgT2022 uses an entirely different table/pipeline, §7a below.)
+
+## 7a. MgT2022 Price/Composition Engine
+
+MgT2022 does not reuse CT7's pipeline — different goods table (`MGT2022_TRADE_GOODS`, 35 entries; D66=66 "Exotics" is deliberately excluded and treated as a GM-adjudicated special case, never part of the roll), different DM-combination rule, and an added goods-availability gate the CT7 pipeline has no equivalent of:
+
+```
+generateMgT2022Snapshot(world, sectorName, campaignId, tick, activeEvents)
+  codes = parseTradeCodes(world.Remarks) + Zone pseudo-codes ('Am'/'Rz' from world.Zone)
+  popDigit = UWP population digit; qtyDM = goodsAvailableDM(popDigit)
+  worldLaw = lawFromUWP(world.UWP)
+
+  # Composition uses its OWN seeded RNG stream, separate from any good's
+  # price/qty rolls — so which goods appear never shifts another good's
+  # price-roll seed position.
+  compositionRng = makeRng(`${campaignId}:${worldHex}:composition:${tick}:v1`)
+  hits = mgt2022Composition(compositionRng, codes, popDigit)
+    # Common Goods: always included.
+    # Trade Goods: included if `availability` matches a code in `codes`.
+    # Then roll D66 once per Population *code* digit (not a DM) for random
+    # extras, rerolling 61-65 unless seeking black market; duplicate hits
+    # stack quantity rather than duplicating the row.
+
+  For each good in MGT2022_TRADE_GOODS where hits.has(good.die):
+    rng = makeRng(`${campaignId}:${worldHex}:${good.die}:${tick}:v1`)
+
+    # "Use only the largest DM from each column" — not a sum.
+    purchaseDM  = maxTradeCodeDMs(good.purchaseDMs, codes)
+    saleDM      = maxTradeCodeDMs(good.saleDMs,     codes)
+    lawLevelDM  = smugglingRiskDM(good.bannedLawLevel, worldLaw)  # max(0, worldLaw - bannedLawLevel)
+
+    # Both directions apply BOTH columns, with opposite signs.
+    netPurchaseDM = purchaseDM - saleDM
+    netSaleDM     = saleDM - purchaseDM + lawLevelDM
+
+    purchaseRoll  = 3d6(rng) + brokerSkill + netPurchaseDM   # brokerSkill = 0 here — see §7b
+    purchasePrice = good.basePriceCr × modifiedPricePct(purchaseRoll)   # exact per-roll % table, not banded
+    saleRoll      = 3d6(rng) + brokerSkill + netSaleDM       # brokerSkill = 0 here — see §7b
+    salePrice     = good.basePriceCr × modifiedPricePct(saleRoll)
+
+    apply active-event buy/sell modifiers (same mechanism as CT7)
+
+    qty = Σ over each "hit" on this good: rollQty(good.qty, 8×d6(rng), qtyDM)
+```
+
+**Find a Supplier** is a separate, non-seeded gate in front of this pipeline, not part of it: a character-based one-click check (`findSupplierRoll` — 2D6 + Broker/Streetwise/Admin skill + starport DM (`starportBrokerDM`, from `MGT2022_STARPORT_SUPPLIER_DM`, distinct from the Freight/Mail traffic-DM table) − 1 per previous attempt this world/month, target Average 8+) tracked per `(player, world, sector, month)` in `supplier_search_attempts`. `MapView.vue`'s Market tab renders `FindSupplierPanel.vue` instead of `MarketTable.vue` until the current player has succeeded this game-month — deliberately plain `Math.random()` dice server-side, not `makeRng`, since a one-shot player action has no replay-determinism requirement.
+
+## 7b. Per-player pricing (CT7 sale-only, MgT2022 both)
+
+§7/§7a above describe the **shared baseline** stored in `market_snapshots` — generated once per (campaign, world, tick), `brokerSkill` fixed at `0` (no live buyer to ask), used for the stock pool (`qty_available`) and for price/OHLC history charts (an impartial market index, not any one player's negotiated price). Two standalone functions in `market-tick.js` recompute one good's price for a *specific acting player's* real Broker skill, live, at display/transaction time:
+
+```
+mgt2022PlayerGoodPrice(campaignId, world, tick, goodDie, activeEvents, brokerSkill)
+  rebuilds codes/worldLaw/netPurchaseDM/netSaleDM exactly as §7a
+  rng = makeRng(same seed §7a used for this good)   # reproduces the identical 3D rolls
+  purchaseRoll = 3d6(rng) + brokerSkill + netPurchaseDM   # supplier's assumed Broker stays 2 (no live NPC)
+  saleRoll     = 3d6(rng) + brokerSkill + netSaleDM       # purchaser's assumed Broker stays 2
+  → { purchasePrice, salePrice }
+
+ct7PlayerSalePrice(campaignId, world, tick, goodDie, activeEvents, brokerSkill)
+  rng = makeRng(same seed §7 used for this good)
+  discard the purchase roll's 2 dice (order must match §7 — CT7 has no purchase-side Broker term)
+  saleRoll = 2d6(rng) + saleDM + brokerDM(brokerSkill)    # brokerDM caps at skill 4
+  → salePrice via actualPrice(marketBasePrice(codes, codes), saleRoll) + event mod
+```
+
+Because `makeRng(seed)` is a pure function of its seed string, drawing the same dice in the same order from a fresh call reproduces the exact roll §7/§7a's shared baseline drew — no raw dice are persisted anywhere, and `brokerSkill: 0` reproduces the baseline exactly (this is exactly what locks the two independent implementations together in `tests/market-tick.test.js`).
+
+`tick.js`'s `displaySnapshots` computed overlays `worldSnapshots` with these per-player numbers (MgT2022: both prices; CT7: sale only) for the current player's own `brokerSkill` (fetched via `GET /api/reports/skills`, cached in `tick.brokerSkill`); `MarketTable.vue`/`CargoHold.vue` read `displaySnapshots` instead of `worldSnapshots`, so `BuyDialog.vue` and the actual `buy-cargo`/`sell-cargo` calls — which already send whatever price the client computed, unchanged since the Phase 1 concurrency fix — automatically use the adjusted number.
+
+CT7's Broker **fee** (`brokerFee(skill, finalPrice)` — 5% × skill × transaction value, paid regardless of profit/loss) is a lump deduction at the moment of sale, not a per-ton price term, mirroring the existing freight late-delivery-penalty pattern: `ship.js`'s `sellCargo()` computes it and sends `broker_fee_total`; `worker/src/routes/ships.js`'s `/sell-cargo` nets it out of the credited amount and records it as a distinct `'fee'`-type transaction.

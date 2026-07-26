@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.5.0
+**Version:** 0.7.0
 
 ---
 
@@ -115,21 +115,29 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 
 ### 3.6 `src/lib/trade-engine-mgt2022.js`, `src/lib/traffic-tick.js`, `src/lib/market-tick.js` dispatch
 
-Covers the new MgT2022 pricing/freight/mail/traffic pipeline (`tests/trade-engine-mgt2022.test.js`, 42 cases) and the new traffic-availability generator (`tests/traffic-tick.test.js`). Representative cases:
+Covers the MgT2022 pricing/freight/mail/traffic/composition pipeline (`tests/trade-engine-mgt2022.test.js`, 58 cases — rewritten during the Phase 1-3 rules-accuracy rebuild, since most original fixtures asserted the pre-rebuild *wrong* values) and the traffic-availability generator (`tests/traffic-tick.test.js`). Representative cases:
 
 | TC-ID | Function | Input | Expected Output |
 |-------|----------|-------|-----------------|
 | UT-601 | `modifiedPricePct` | roll = -3 | `{ purchasePct: 300, salePct: 10 }` |
 | UT-602 | `modifiedPricePct` | roll = 25 | `{ purchasePct: 15, salePct: 400 }` |
 | UT-603 | `modifiedPricePct` | rolls -3..25 | Purchase% monotonically non-increasing, Sale% monotonically non-decreasing |
-| UT-604 | `freightRate` | `'incidental'` vs `'major'`, same parsecs | Incidental > minor > major (smaller lots pay more per ton) |
+| UT-604 | `freightRate` | parsecs = 1 vs 6 | `1000` vs `32000` — rate depends only on parsecs; lot size (Major/Minor/Incidental) no longer affects rate at all, per rulebook correction |
 | UT-605 | `freightLatePenaltyPct` / `freightNetAfterPenalty` | 1D=6, charge=1000 | penalty 100%, net Cr0 (never negative) |
 | UT-606 | `mailAvailable` | 2D=11 vs 12 | `false` vs `true` (needs 12+) |
-| UT-607 | `smugglingRiskDM` | higher Law Level vs higher Sale DM | Risk increases with Law Level, decreases with Sale DM |
-| UT-608 | `generateWorldSnapshot` | `tradeRules: 'MgT2022'` | 36 rows from `MGT2022_TRADE_GOODS`, not `CT2_TRADE_GOODS` |
+| UT-607 | `smugglingRiskDM` | `bannedLawLevel=3, worldLawLevel=9` (book's worked example: military weapons banned at LL3, smuggled onto an LL9 world) | `6` — `max(0, worldLawLevel - bannedLawLevel)` |
+| UT-608 | `generateWorldSnapshot` | `tradeRules: 'MgT2022'` | Rows drawn from the 35-entry `MGT2022_TRADE_GOODS` (not `CT2_TRADE_GOODS`), never including Exotics (D66=66); row count is now variable per world/tick (composition-dependent, see UT-613), not a fixed 36 |
 | UT-609 | `generateWorldSnapshot` | `tradeRules: 'CT7'` vs `'T5'`, same seed | Purchase prices diverge — confirms the pre-existing T5-uses-CT7-pricing bug is fixed |
 | UT-610 | `generateTrafficSnapshot` | same inputs twice | Identical row (deterministic) |
 | UT-611 | `generateTrafficSnapshot` | high-population vs low-population world, 30 ticks | High-population world's summed traffic ≥ low-population world's |
+| UT-612 | `findSupplierRoll` | 2D=8, skill=0, starportDM=0, previousAttempts=0 | `{ total: 8, success: true }` (Average 8+ target); previousAttempts applies DM-1 each |
+| UT-613 | `mgt2022Composition` (via `generateWorldSnapshot`) | world with no matching trade codes, Population digit 0 | Exactly the 6 Common Goods, no random extras |
+| UT-614 | `mgt2022Composition` (via `generateWorldSnapshot`) | world Remarks include a code matching a Trade Good's `availability` | That Trade Good is present regardless of the random D66 rolls |
+| UT-615 | `maxTradeCodeDMs` | two matching DMs, e.g. +2 and +4 | `4` (largest only, not the sum `6`) |
+| UT-616 | `mgt2022PlayerGoodPrice` | `brokerSkill: 0`, same world/good/tick as a `generateWorldSnapshot` MgT2022 row | Reproduces that row's `purchase_price`/`sale_price` exactly (parity with the shared baseline) |
+| UT-617 | `mgt2022PlayerGoodPrice` | `brokerSkill: 4` vs `brokerSkill: 0`, same good | Purchase price lower or equal, sale price higher or equal (higher roll ⇒ cheaper purchasePct, pricier salePct) |
+| UT-618 | `ct7PlayerSalePrice` | `brokerSkill: 0`, same world/good/tick as a `generateWorldSnapshot` CT7 row | Reproduces that row's `sale_price` exactly |
+| UT-619 | `ct7PlayerSalePrice` | `brokerSkill: 10` vs `brokerSkill: 4` | Identical — confirms `brokerDM`'s existing skill-4 cap flows through the live recompute |
 
 ### 3.4 `src/utils/hexDistance.js`
 
@@ -496,14 +504,16 @@ Every subsection below fully catalogues its component's actual test file (`tests
 
 ### MTS-14: MgT2022 Trade Ruleset (Freight, Basic Passage, Traffic Availability)
 1. Create a campaign with Trade Rules = MgT2022; verify the option appears in the New Campaign dropdown alongside CT7/T5
-2. Open Campaign Management → Ships → Templates; verify a "Type A Free Trader" template is lazily seeded (parity with CT7)
-3. Select a world with the Market tab open; verify the 36 goods shown are MgT2022's own names (e.g. "Common Electronics"), not CT7/T5's Book 2 names
-4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity)
-5. Open Port → Freight (visible only for MgT2022 campaigns); book a Major/Minor/Incidental lot; verify the charge is collected upfront and the lot appears in Ship → Aboard → Freight in Transit
+2. Open Campaign Management → Ships → Templates; verify a "Type A Free Trader" template is lazily seeded (parity with CT7), and that the New Ship/Template forms expose an Armed checkbox
+3. Select a world with the Market tab open as a player who hasn't yet found a supplier there this game-month; verify a "Find a Supplier" prompt is shown instead of the market table. Click "Find a Supplier"; on success, verify the market table now shows MgT2022's own goods names (e.g. "Common Electronics"), not CT7/T5's Book 2 names, and that the goods shown are a subset (Common Goods + trade-code matches + a few random extras) rather than always all 35. On failure, verify the prompt persists and a repeat attempt applies a DM-1 penalty
+4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity); verify Low passage fare scales by parsec distance (not flat)
+5. Open Port → Freight (visible only for MgT2022 campaigns); book a Major/Minor/Incidental lot; verify the charge is collected upfront (per-parsec rate, same regardless of lot size), and the lot appears in Ship → Aboard → Freight in Transit
 6. Advance the tick past the freight's due tick, then navigate the ship to its destination; verify a late-delivery penalty is deducted from credits at delivery and the obligation clears
 7. Open Port → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
 8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
 9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
+10. Open the Character dialog as a player in an MgT2022 campaign; verify the six characteristics (STR/DEX/END/INT/EDU/SOC) are editable and persist; verify the referee can also edit them, plus background/rank, from the Players tab
+11. As two different players with different Broker skill levels, attempt "Find a Supplier" at the same world; verify each player's own attempts/success are tracked independently (one succeeding doesn't grant the other access)
 
 ### MTS-15: Accessibility (WCAG 2.2 AA)
 1. On each routed view (Login, Map, Referee), press Tab once on page load; verify the "Skip to main content" link becomes visible and focused, and activating it (Enter) moves focus into that view's `<main>` landmark

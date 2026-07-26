@@ -132,8 +132,9 @@ watch(() => destWorld.value.hex, (hex) => {
 const formError  = ref('')
 const successMsg = ref('')
 
-const ratePerTon = computed(() => freightRate(form.value.lotSize, form.value.parsecs))
-const charge     = computed(() => freightCharge(form.value.tons, form.value.lotSize, form.value.parsecs))
+// Rate depends only on distance, not lot size, per the corrected MgT2022 rules.
+const ratePerTon = computed(() => freightRate(form.value.parsecs))
+const charge     = computed(() => freightCharge(form.value.tons, form.value.parsecs))
 const dueTick    = computed(() => tick.currentTick + form.value.parsecs)
 
 const lotsAvailable = computed(() => {

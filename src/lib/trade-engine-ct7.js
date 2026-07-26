@@ -24,7 +24,7 @@ import {
 // ── Trade code parsing ────────────────────────────────────────────────────────
 
 const KNOWN_TRADE_CODES = new Set([
-  'Ag','As','Ba','De','Fl','Hi','Ic','In','Lo','Na','Ni','Po','Ri','Va','Wa',
+  'Ag','As','Ba','De','Fl','Ga','Hi','Ht','Ic','In','Lo','Lt','Na','Ni','Po','Ri','Va','Wa',
 ])
 
 /**
@@ -55,6 +55,17 @@ export function starportFromUWP(uwp = '') {
 export function techFromUWP(uwp = '') {
   const parts = uwp.split('-')
   return parts[1]?.trim() ?? '0'
+}
+
+/**
+ * Extract the Law Level (0-9, A-F hex glyph per UWP_LAW) as an integer from
+ * a UWP string. UWP format: SABCDEF-T (Law Level is the 7th character,
+ * index 6, before the dash).
+ */
+export function lawFromUWP(uwp = '') {
+  const main = uwp.split('-')[0] ?? ''
+  const n = parseInt(main[6], 16)
+  return isNaN(n) ? 0 : n
 }
 
 // Convert TL glyph (0–9, A–Z) to integer
@@ -196,14 +207,16 @@ export function brokerFee(brokerSkill, finalPrice) {
  *
  * @param {string}   expr   — qty expression from CT2_TRADE_GOODS[n].qty
  * @param {number[]} rolls  — array of d6 results (must have at least <numDice> entries)
+ * @param {number}   [dm]   — DM applied to the dice sum before the ×multiplier
+ *                            (MgT2022's population availability DM; unused by CT7/T5 callers)
  * @returns {number} quantity in tons
  */
-export function rollQty(expr, rolls) {
+export function rollQty(expr, rolls, dm = 0) {
   const match = expr.match(/^(\d+)D(?:x(\d+))?$/i)
   if (!match) return 0
   const numDice = parseInt(match[1], 10)
   const multiplier = match[2] ? parseInt(match[2], 10) : 1
-  let total = 0
+  let total = dm
   for (let i = 0; i < numDice; i++) {
     total += rolls[i] ?? 1
   }

@@ -166,4 +166,52 @@ app.delete('/skills/:id', requireAuth, async (c) => {
   return c.json({ data: { ok: true } })
 })
 
+// ── GET /api/reports/characteristics — player self-service characteristics ───
+// MgT2022 rules-accuracy fields (migration 014): STR/DEX/END/INT/EDU/SOC +
+// service background/rank. Same self-ownership pattern as /skills above.
+app.get('/characteristics', requireAuth, async (c) => {
+  const session = c.var.session
+  const { campaign_id, player_id } = c.req.query()
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+  if (player_id   !== session.player_id)   return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await c.env.DB.prepare(
+    `SELECT strength, dexterity, endurance, intelligence, education, social_standing,
+            background, rank
+     FROM players WHERE id = ? AND campaign_id = ?`
+  ).bind(player_id, campaign_id).first()
+
+  return c.json({ data: row ?? {} })
+})
+
+// ── PATCH /api/reports/characteristics — player self-service update ──────────
+app.patch('/characteristics', requireAuth, async (c) => {
+  const session = c.var.session
+  const { campaign_id, player_id, ...fields } = await c.req.json()
+
+  if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
+  if (player_id   !== session.player_id)   return c.json({ error: 'Forbidden' }, 403)
+
+  const allowed = ['strength', 'dexterity', 'endurance', 'intelligence', 'education',
+                   'social_standing', 'background', 'rank']
+  const setClauses = []
+  const values     = []
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k)) { setClauses.push(`${k} = ?`); values.push(v) }
+  }
+  if (!setClauses.length) return c.json({ error: 'No valid fields' }, 400)
+
+  values.push(player_id)
+  await c.env.DB.prepare(`UPDATE players SET ${setClauses.join(', ')} WHERE id = ?`).bind(...values).run()
+
+  const row = await c.env.DB.prepare(
+    `SELECT strength, dexterity, endurance, intelligence, education, social_standing,
+            background, rank
+     FROM players WHERE id = ?`
+  ).bind(player_id).first()
+
+  return c.json({ data: row })
+})
+
 export default app

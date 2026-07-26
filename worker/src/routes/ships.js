@@ -202,14 +202,26 @@ app.post('/:id/buy-cargo', requireAuth, async (c) => {
   const totalCost = good.purchase_price * tons
   if ((ship.credits ?? 0) < totalCost) return c.json({ error: 'Insufficient credits' }, 400)
 
-  // Check available quantity in the market snapshot for this tick
-  const snapshot = await db.prepare(
-    `SELECT qty_available FROM market_snapshots
-     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND trade_good_die = ? AND tick = ?`
-  ).bind(campaign_id, world_hex, sector, good.trade_good_die, tick).first()
+  // Reserve the stock atomically: the WHERE clause's qty_available >= ?
+  // makes this a check-and-decrement in one statement, run alone (not part
+  // of the batch below) so we can inspect how many rows it actually
+  // changed. Two concurrent buyers racing for the same lot's last tons
+  // will have this guard evaluated against the true, sequentially
+  // consistent value at each one's actual execution time — only one can
+  // win once the remaining stock can't satisfy both. A prior separate
+  // SELECT-then-batch-decrement here allowed both to pass a stale check.
+  const reserve = await db.prepare(
+    `UPDATE market_snapshots SET qty_available = qty_available - ?
+     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND trade_good_die = ? AND tick = ?
+       AND qty_available >= ?`
+  ).bind(tons, campaign_id, world_hex, sector, good.trade_good_die, tick, tons).run()
 
-  if (!snapshot) return c.json({ error: 'Market snapshot not found for this tick' }, 400)
-  if (tons > snapshot.qty_available) {
+  if (reserve.meta.changes === 0) {
+    const snapshot = await db.prepare(
+      `SELECT qty_available FROM market_snapshots
+       WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND trade_good_die = ? AND tick = ?`
+    ).bind(campaign_id, world_hex, sector, good.trade_good_die, tick).first()
+    if (!snapshot) return c.json({ error: 'Market snapshot not found for this tick' }, 400)
     return c.json({ error: `Only ${snapshot.qty_available}t available at this price` }, 400)
   }
 
@@ -222,8 +234,6 @@ app.post('/:id/buy-cargo', requireAuth, async (c) => {
                 VALUES (?, ?, ?, ?, ?, 'buy', ?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, good.trade_good_die, good.trade_good_name, tons, good.purchase_price, -totalCost, world_hex, sector),
     db.prepare(`UPDATE ships SET credits = credits - ? WHERE id = ?`).bind(totalCost, id),
-    db.prepare(`UPDATE market_snapshots SET qty_available = qty_available - ? WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND trade_good_die = ? AND tick = ?`)
-      .bind(tons, campaign_id, world_hex, sector, good.trade_good_die, tick),
   ])
 
   const cargoRow = await db.prepare(`SELECT * FROM cargo WHERE id = ?`).bind(cargoId).first()
@@ -234,15 +244,16 @@ app.post('/:id/buy-cargo', requireAuth, async (c) => {
 app.post('/:id/sell-cargo', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
-  const { campaign_id, cargo_item, sell_price_per_ton, market_world_hex, market_sector, tick, trade_rules } = await c.req.json()
+  const { campaign_id, cargo_item, sell_price_per_ton, market_world_hex, market_sector, tick, trade_rules, broker_fee_total = 0 } = await c.req.json()
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
   const totalRevenue = sell_price_per_ton * cargo_item.tons
   const totalCost    = cargo_item.purchase_price * cargo_item.tons
-  const netProfit    = totalRevenue - totalCost
+  const netCredited  = totalRevenue - broker_fee_total
+  const netProfit    = totalRevenue - totalCost - broker_fee_total
 
-  await c.env.DB.batch([
+  const stmts = [
     c.env.DB.prepare(`DELETE FROM cargo WHERE id = ?`).bind(cargo_item.id),
     c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, trade_good_die, trade_good_name, tons, price_per_ton, total_cr, world_hex, sector)
                       VALUES (?, ?, ?, ?, ?, 'sell', ?, ?, ?, ?, ?, ?, ?)`)
@@ -250,8 +261,25 @@ app.post('/:id/sell-cargo', requireAuth, async (c) => {
     c.env.DB.prepare(`INSERT INTO trade_records (id, campaign_id, player_id, ship_id, trade_rules, trade_good_die, trade_good_name, tons, source_world_hex, source_sector, purchase_tick, buy_price_per_ton, total_cost, market_world_hex, market_sector, sell_tick, trade_price_per_ton, sell_price_per_ton, total_revenue, net_profit)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, cargo_item.player_id, id, trade_rules, cargo_item.trade_good_die, cargo_item.trade_good_name, cargo_item.tons, cargo_item.purchase_world, cargo_item.purchase_sector, cargo_item.purchased_tick, cargo_item.purchase_price, totalCost, market_world_hex, market_sector, tick, sell_price_per_ton, sell_price_per_ton, totalRevenue, netProfit),
-    c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(totalRevenue, id),
-  ])
+    c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(netCredited, id),
+  ]
+
+  // CT7-only Broker commission — a lump deduction from this sale's proceeds,
+  // separate from the per-ton price (which already carries the Broker DM
+  // bonus). Recorded as its own 'fee' transaction (the generic type
+  // src/lib/reports.js's TYPE_LABEL/EXPENSE_TYPES already render/total)
+  // rather than folded silently into the 'sell' row, so it's visible in
+  // Reports/ledger like any other deduction.
+  if (broker_fee_total > 0) {
+    stmts.push(
+      c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+                        VALUES (?, ?, ?, ?, ?, 'fee', ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), campaign_id, cargo_item.player_id, id, tick, -broker_fee_total, market_world_hex, market_sector,
+              `Broker fee on ${cargo_item.trade_good_name} sale`)
+    )
+  }
+
+  await c.env.DB.batch(stmts)
 
   return c.json({ data: { ok: true, net_profit: netProfit } })
 })
