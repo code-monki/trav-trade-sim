@@ -65,7 +65,7 @@ const MAIL_SELECT = `
   SELECT id, campaign_id, ship_id, player_id,
          origin_world_hex, origin_sector, origin_world_name, accept_tick,
          dest_world_hex, dest_sector, dest_world_name,
-         parsecs, amount AS payment, status, resolve_tick, created_at
+         parsecs, amount AS payment, mail_containers, status, resolve_tick, created_at
   FROM obligations`
 
 const FREIGHT_SELECT = `
@@ -448,16 +448,17 @@ app.post('/:id/accept-mail', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
   const { campaign_id, player_id, origin_world_hex, origin_sector, origin_world_name,
-          dest_world_hex, dest_sector, dest_world_name, parsecs, payment, tick } = await c.req.json()
+          dest_world_hex, dest_sector, dest_world_name, parsecs, payment, tick,
+          mail_containers = null } = await c.req.json()
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
   const contractId = crypto.randomUUID()
   await c.env.DB.prepare(
-    `INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs)
-     VALUES (?, ?, ?, ?, 'mail', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, mail_containers)
+     VALUES (?, ?, ?, ?, 'mail', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(contractId, campaign_id, id, player_id, payment, origin_world_hex, origin_sector, origin_world_name ?? '',
-         tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs).run()
+         tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs, mail_containers).run()
 
   const contract = await c.env.DB.prepare(MAIL_SELECT + ` WHERE id = ?`).bind(contractId).first()
   return c.json({ data: contract }, 201)

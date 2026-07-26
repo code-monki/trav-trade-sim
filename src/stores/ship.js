@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../lib/api.js'
 import { useTickStore } from './tick.js'
-import { MGT2022_BASIC_PASSAGE_TONS } from '../lib/traveller-data-mgt2022.js'
+import { MGT2022_BASIC_PASSAGE_TONS, MGT2022_MAIL_CONTAINER_TONS } from '../lib/traveller-data-mgt2022.js'
 import { brokerFee } from '../lib/trade-engine-ct7.js'
 
 export const useShipStore = defineStore('ship', () => {
@@ -24,7 +24,13 @@ export const useShipStore = defineStore('ship', () => {
   const basicPassageTonsUsed = computed(() =>
     passengers.value.filter(p => p.passage_type === 'basic')
       .reduce((s, p) => s + p.count * MGT2022_BASIC_PASSAGE_TONS, 0))
-  const cargoAvailable = computed(() => cargoCapacity.value - cargoUsed.value - basicPassageTonsUsed.value)
+  // MgT2022 mail containers (5 tons each) reserve cargo space the same way
+  // Basic Passage does — accepted but not-yet-delivered mail_containers
+  // counts against the hold until delivery clears the obligation.
+  const mailContainerTonsUsed = computed(() =>
+    mailContracts.value.reduce((s, m) => s + (m.mail_containers ?? 0) * MGT2022_MAIL_CONTAINER_TONS, 0))
+  const cargoAvailable = computed(() =>
+    cargoCapacity.value - cargoUsed.value - basicPassageTonsUsed.value - mailContainerTonsUsed.value)
 
   const stateroomsTotal     = computed(() => ship.value?.stateroom_capacity ?? 0)
   const crewStateroomsUsed  = computed(() => ship.value?.crew_staterooms ?? 0)
@@ -439,7 +445,7 @@ export const useShipStore = defineStore('ship', () => {
     campaignId, playerId,
     originWorldHex, originSector, originWorldName,
     destWorldHex, destSector, destWorldName,
-    parsecs, payment, tick,
+    parsecs, payment, tick, mailContainers = null,
   }) {
     if (!ship.value) return { ok: false, error: 'No active ship' }
 
@@ -456,6 +462,7 @@ export const useShipStore = defineStore('ship', () => {
         dest_sector:       destSector,
         dest_world_name:   destWorldName ?? '',
         parsecs, payment, tick,
+        mail_containers:   mailContainers,
       })
       if (apiErr) throw new Error(apiErr)
       mailContracts.value = [...mailContracts.value, data]
@@ -550,7 +557,7 @@ export const useShipStore = defineStore('ship', () => {
   return {
     ship, cargo, passengers, mailContracts, freight, loading, error,
     hasShip, canTrade,
-    cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed,
+    cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed, mailContainerTonsUsed,
     stateroomsTotal, crewStateroomsUsed, stateroomsUsed, stateroomsAvailable,
     lowBerthsTotal, lowBerthsUsed, lowBerthsAvailable,
     crewStewardMax, crewPassengerCheckMax, crewFreightCheckMax,

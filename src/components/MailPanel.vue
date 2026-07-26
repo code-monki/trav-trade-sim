@@ -6,6 +6,16 @@
     </div>
 
     <template v-else>
+      <div v-if="tradeRules === 'MgT2022'" class="capacity-row">
+        <div class="cap-stat">
+          <label>Cargo Space</label>
+          <span>{{ ship.cargoAvailable }} / {{ ship.cargoCapacity }}t free</span>
+          <span v-if="ship.mailContainerTonsUsed > 0" class="cap-detail">
+            {{ ship.mailContainerTonsUsed }}t reserved for in-transit mail
+          </span>
+        </div>
+      </div>
+
       <section class="booking-section">
         <h3>Mail Contract</h3>
 
@@ -25,7 +35,7 @@
             <input id="mail-parsecs-input" v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
           </div>
           <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
-            {{ mailContainersAvailable }} container(s) offered this tick — take all or none, per MgT2022 rules
+            {{ mailContainersAvailable }} container(s) offered this tick ({{ mailTonsNeeded }}t of cargo space) — take all or none, per MgT2022 rules
           </p>
 
           <div class="fare-preview">
@@ -57,6 +67,7 @@ import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
 import { mailPayment }   from '../lib/passengers.js'
+import { MGT2022_MAIL_CONTAINER_TONS } from '../lib/traveller-data-mgt2022.js'
 import { hexDistance }   from '../utils/hexDistance.js'
 import WorldPicker       from './WorldPicker.vue'
 
@@ -92,10 +103,19 @@ const mailPay = computed(() =>
   mailPayment(tradeRules.value, mailParsecs.value, mailContainersAvailable.value)
 )
 
+// MgT2022: mail containers (5 tons each) reserve cargo space like Basic
+// Passage does — "take all or none" means the whole tick's rolled
+// container count, so the cargo check is against that full tonnage.
+const mailTonsNeeded = computed(() =>
+  tradeRules.value === 'MgT2022' ? mailContainersAvailable.value * MGT2022_MAIL_CONTAINER_TONS : 0)
+
 const canAcceptMail = computed(() => {
   if (mailDest.value.hex.trim().length === 0) return false
   if (mailDest.value.sector.trim().length === 0) return false
-  if (tradeRules.value === 'MgT2022') return mailContainersAvailable.value > 0
+  if (tradeRules.value === 'MgT2022') {
+    if (mailContainersAvailable.value <= 0) return false
+    if (mailTonsNeeded.value > ship.cargoAvailable) return false
+  }
   return true
 })
 
@@ -104,6 +124,11 @@ async function submitMail() {
   mailSuccess.value = ''
 
   if (!props.world) { mailError.value = 'No world selected'; return }
+
+  if (tradeRules.value === 'MgT2022' && mailTonsNeeded.value > ship.cargoAvailable) {
+    mailError.value = `Insufficient cargo space for ${mailContainersAvailable.value} container(s) (need ${mailTonsNeeded.value}t, have ${ship.cargoAvailable}t)`
+    return
+  }
 
   const result = await ship.acceptMailContract({
     campaignId:       auth.campaign.id,
@@ -117,6 +142,7 @@ async function submitMail() {
     parsecs:          mailParsecs.value,
     payment:          mailPay.value,
     tick:             tick.currentTick,
+    mailContainers:   tradeRules.value === 'MgT2022' ? mailContainersAvailable.value : null,
   })
 
   if (!result.ok) { mailError.value = result.error; return }
@@ -137,6 +163,20 @@ async function submitMail() {
   flex-direction: column;
   gap: 1rem;
 }
+
+.capacity-row {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.cap-stat { display: flex; flex-direction: column; gap: 0.2rem; }
+.cap-stat label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+.cap-stat span  { font-size: 0.85rem; font-weight: 500; color: var(--text); }
+.cap-detail     { font-size: 0.72rem !important; font-weight: 400 !important; color: var(--text-dim) !important; }
 
 .booking-section h3 { font-size: 0.85rem; margin-bottom: 0.75rem; color: var(--text-dim); }
 

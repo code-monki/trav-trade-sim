@@ -931,6 +931,70 @@ is live yet. `book-freight`/`accept-mail`'s missing server-side validation,
 reservation gap (from Phase 2/7) all remain separate, already-logged
 follow-ups.
 
+*(Update, same day: committed, pushed, and deployed via `make deploy`.
+`migrate` initially failed on a transient hiccup — `wrangler d1 execute
+--json`'s output didn't parse cleanly on the first attempt, so the status
+check misread the ledger as empty and tried re-applying already-applied
+migrations from `002` onward; `002` happened to be idempotent and no-op'd,
+but `003`'s `ALTER TABLE ADD COLUMN` isn't, and failed outright with
+`duplicate column name`, aborting before any real damage. Verified via
+direct queries that the remote ledger and schema were both untouched and
+correct (001-015 intact, no duplicate/partial columns) before retrying;
+the retry applied `016` cleanly with no recurrence. `/api/health` confirms
+`schema_ok: true` with `001`-`016` all present.)*
+
+---
+
+## 2026-07-26 — Mail cargo-space reservation (Phase 5 follow-up)
+
+### Goal
+
+First of the three follow-ups logged at the end of Phase 5's entry above:
+`obligations.mail_containers` (added back in Phase 2) was never actually
+populated by `POST /:id/accept-mail`, so accepted MgT2022 mail contracts
+consumed no tracked cargo space at all — a ship could accept unlimited
+mail regardless of how full its hold already was.
+
+### Fix
+
+Mirrors Basic Passage's existing pattern exactly (`ship.js`'s
+`basicPassageTonsUsed`): `MailPanel.vue` now computes `mailTonsNeeded`
+(rolled container count × `MGT2022_MAIL_CONTAINER_TONS`, MgT2022 only),
+gates acceptance on `ship.cargoAvailable` covering it, and passes the
+container count through `ship.acceptMailContract`'s new `mailContainers`
+param. `worker/src/routes/ships.js`'s `/accept-mail` now stores it in
+`obligations.mail_containers` (column already existed, just never
+written) and `MAIL_SELECT` now returns it. `ship.js` gained a
+`mailContainerTonsUsed` computed, folded into `cargoAvailable` alongside
+`basicPassageTonsUsed` — releases automatically on delivery, since
+delivery already filters the fulfilled contract out of `mailContracts`.
+
+Deliberately did **not** add server-side validation to `/accept-mail`
+(mirroring `book-passengers`'s new check) — that's a separate, still-open
+follow-up the user chose not to bundle into this pass; this fix is scoped
+to making the reservation actually happen, client-side, matching what was
+asked.
+
+While back in `DD.md` for this, fixed three more stale "not yet wired —
+Phase 7" notes (`players.social_standing`, `players.background`,
+`ships.armed`) that Phase 5 itself had already wired in but the doc pass
+at the time missed updating.
+
+### Verified
+
+`npx vitest run` — 516/516 (no new dedicated tests — this codebase has no
+existing direct unit tests for `ship.js`'s computed properties at all, not
+even `basicPassageTonsUsed`, so adding one just for this would be
+inconsistent with the established boundary; covered instead by existing
+component/manual-test conventions). `npx vite build` compiles cleanly.
+
+### Known gaps, still open
+
+`book-freight`/`accept-mail` still have no server-side capacity
+validation, and `ship.js`'s stateroom double-counting bug (Basic Passage
+wrongly counted against staterooms) remains — both explicitly deferred
+by the user's own choice this pass, not overlooked.
+
 ---
 
 ## Documentation TODO

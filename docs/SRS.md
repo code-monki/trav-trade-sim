@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.8.0  
+**Version:** 0.9.0  
 **Status:** Active development
 
 ---
@@ -167,7 +167,7 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-1301 | A player shall be able to accept a mail contract at the Port > Mail tab by specifying a destination and (for T5) parsecs; for MgT2022, acceptance is take-all-or-none for the tick's rolled container count |
+| FR-1301 | A player shall be able to accept a mail contract at the Port > Mail tab by specifying a destination and (for T5) parsecs; for MgT2022, acceptance is take-all-or-none for the tick's rolled container count, and requires enough free cargo space (5 tons/container) — accepted containers reserve that tonnage against cargo capacity, the same way Basic Passage reserves tonnage, until the mail is delivered |
 | FR-1302 | Mail payment shall be CT7: flat Cr25,000; T5: Cr25,000 × parsecs; MgT2022: Cr25,000 × rolled 5-ton container count, only available when the world's 2D mail-availability roll meets or beats 12 |
 | FR-1303 | Mail contracts shall be tracked in `obligations` (kind='mail') as `pending` until the ship arrives at the destination |
 | FR-1304 | On delivery, the mail payment shall be credited to the ship account and a `mail` transaction written |

@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.8.0
+**Version:** 0.9.0
 
 ---
 
@@ -67,8 +67,8 @@ Index: `idx_sessions_player (player_id)`
 | `endurance` | INTEGER | nullable | MgT2022 characteristic |
 | `intelligence` | INTEGER | nullable | MgT2022 characteristic |
 | `education` | INTEGER | nullable | MgT2022 characteristic |
-| `social_standing` | INTEGER | nullable | MgT2022 characteristic; feeds Mail's SOC DM (not yet wired — Phase 7) |
-| `background` | TEXT | nullable | e.g. `'Scout'`, `'Navy'`, `'Merchant'` — feeds Mail's Naval/Scout rank DM (not yet wired — Phase 7) |
+| `social_standing` | INTEGER | nullable | MgT2022 characteristic; feeds Mail's SOC DM via `characteristicDM()` (wired in Phase 5, HLD §7c) |
+| `background` | TEXT | nullable | e.g. `'Scout'`, `'Navy'`, `'Merchant'` — feeds Mail's Naval/Scout rank DM (wired in Phase 5, HLD §7c) |
 | `rank` | INTEGER | nullable | Rank within `background` |
 | UNIQUE | `(campaign_id, character_name)` | | |
 
@@ -94,7 +94,7 @@ All eight fields added by migration `014`, nullable/defaulted so existing rows a
 | `fuel_capacity` | INTEGER | NOT NULL, default 0 | Tons |
 | `fuel_current` | INTEGER | NOT NULL, default 0 | Tons |
 | `market_value` | INTEGER | NOT NULL, default 0 | Referee-entered valuation, populated via Ship Template selection or manual entry (§Asset Valuation) |
-| `armed` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | MgT2022: ship carries weapons — feeds Mail's armed-ship DM (not yet wired — Phase 7). Added by `d1/014_mgt2022_character_ship_fields.sql` |
+| `armed` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | MgT2022: ship carries weapons — feeds Mail's armed-ship DM (wired in Phase 5, HLD §7c). Added by `d1/014_mgt2022_character_ship_fields.sql` |
 | `created_at` | TEXT | NOT NULL | |
 | UNIQUE | `(campaign_id, name)` | | |
 
@@ -442,7 +442,7 @@ Indexes: `idx_trade_records_market`, `idx_trade_records_player`, `idx_trade_reco
 | `freight_tons` | INTEGER | nullable | freight only |
 | `freight_lot_size` | TEXT | nullable | freight only: `'major'` \| `'minor'` \| `'incidental'` (no `CHECK` constraint) |
 | `rate_per_ton` | INTEGER | nullable | freight only: agreed Cr/ton for the whole run |
-| `mail_containers` | INTEGER | nullable | mail only: 5 tons/container, meant to be reserved against cargo capacity on acceptance. Added by `d1/014_mgt2022_character_ship_fields.sql`; **not yet wired** — `POST /:id/accept-mail` doesn't populate it yet, so accepted mail still consumes no tracked cargo space (Phase 7, pending). Not to be confused with `traffic_snapshots.mail_containers` below, which is the *rolled availability count* for a world/tick, not a per-obligation reservation |
+| `mail_containers` | INTEGER | nullable | mail only: 5 tons/container (`MGT2022_MAIL_CONTAINER_TONS`), reserved against cargo capacity from acceptance until delivery. Added by `d1/014_mgt2022_character_ship_fields.sql`; populated by `POST /:id/accept-mail` and read back into `ship.js`'s `mailContainerTonsUsed` computed (mirrors `basicPassageTonsUsed`'s existing pattern), which `cargoAvailable` subtracts. Not to be confused with `traffic_snapshots.mail_containers` below, which is the *rolled availability count* for a (ship, world, tick), not a per-obligation reservation |
 | `notes` | TEXT | nullable | |
 | `created_at` | TEXT | NOT NULL | |
 
@@ -633,7 +633,7 @@ No emits. Fuel purchase only (availability badges, tonnage stepper capped at tan
 | `world` | Object | `null` | Origin world for the contract |
 | `sectorName` | String | `''` | |
 
-No emits. Destination fields, T5 parsecs input, payment preview; MgT2022 instead shows the tick's rolled container count and gates acceptance on it being > 0. Embeds `WorldPicker.vue` for destination selection; calls `ship.acceptMailContract`.
+No emits. Destination fields, T5 parsecs input, payment preview; MgT2022 instead shows the tick's rolled container count (and the cargo tonnage it needs), gating acceptance on the count being > 0 *and* `ship.cargoAvailable` covering that tonnage — mail containers reserve cargo space the same way Basic Passage does. Embeds `WorldPicker.vue` for destination selection; calls `ship.acceptMailContract` with `mailContainers` so the worker can persist `obligations.mail_containers`.
 
 ### `FreightPanel` (MgT2022 only)
 

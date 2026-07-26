@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.8.0  
+**Version:** 0.9.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -511,13 +511,13 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Main Flow:**
 1. Player specifies a destination (and parsecs, for T5) and accepts the contract; for MgT2022, acceptance is take-all-or-none against the tick's rolled container count
-2. System creates an obligation (kind = mail) with status `in_transit`; no upfront payment
+2. System creates an obligation (kind = mail) with status `in_transit`, recording the container count (MgT2022); no upfront payment
 3. When the ship arrives at the destination (Jump Select or referee move), system delivers the mail automatically
 4. System credits the ship account (CT7: flat Cr25,000; T5: Cr25,000 × parsecs; MgT2022: Cr25,000 × rolled container count) and writes a `mail` transaction
-5. Ship > Contracts tab reflects delivery
+5. Ship > Contracts tab reflects delivery; accepted containers' cargo-tonnage reservation (5t/container) is released now that the obligation is fulfilled
 
 **Alternate / Exception Flows:**
-- None
+- **A1 — MgT2022, insufficient cargo space for the tick's rolled container count:** Acceptance rejected — mail containers reserve cargo tonnage the same way Basic Passage does, and can't be accepted partially
 
 **Postconditions:**
 - Obligation resolved (fulfilled)
