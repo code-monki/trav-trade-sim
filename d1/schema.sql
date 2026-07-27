@@ -500,10 +500,14 @@ CREATE TABLE IF NOT EXISTS transactions (
   player_id       TEXT    NOT NULL REFERENCES players(id)   ON DELETE CASCADE,
   ship_id         TEXT    REFERENCES ships(id) ON DELETE SET NULL,
   tick            INTEGER NOT NULL,
+  -- broker_commission added by migration 019 — a player's own Broker
+  -- skill nets half the standard brokerage fee as income (see
+  -- brokerSelfServiceGain in trade-engine-ct7.js), not a 'fee' deduction.
   type            TEXT    NOT NULL CHECK (type IN (
                     'buy', 'sell', 'fee', 'event',
                     'fuel', 'passenger_fare', 'passenger_refund', 'mail',
-                    'freight_charge', 'freight_refund', 'freight_penalty'
+                    'freight_charge', 'freight_refund', 'freight_penalty',
+                    'broker_commission'
                   )),
   trade_good_die  TEXT,
   trade_good_name TEXT,
@@ -708,4 +712,4 @@ INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
   ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
   ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
   ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch()), ('014', unixepoch()),
-  ('015', unixepoch()), ('016', unixepoch()), ('017', unixepoch()), ('018', unixepoch());
+  ('015', unixepoch()), ('016', unixepoch()), ('017', unixepoch()), ('018', unixepoch()), ('019', unixepoch());

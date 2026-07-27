@@ -1,13 +1,13 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0
+**Version:** 0.11.0
 
 ---
 
 ## 1. Database Schema
 
-The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/018_black_market.sql` (18 migrations total, `001` being the baseline itself), applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
+The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/019_broker_commission_type.sql` (19 migrations total, `001` being the baseline itself), applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
 
 **Schema-drift detection:** as of migration `011`, a `schema_migrations` ledger table (`id`, `applied_at`) records every migration a given D1 database has actually received — `d1/schema.sql` seeds it fully caught-up for fresh installs, and every migration file from `011` onward ends with its own `INSERT` recording itself. `worker/src/lib/schema-version.js` holds the Worker's own `EXPECTED_MIGRATIONS` list (must be updated in the same commit as any new migration file) and is checked by `GET /api/health`, which returns `503` with `schema_ok: false` if the live database's ledger doesn't match — the frontend (`src/lib/health-check.js`, called once at startup from `main.js`) shows a blocking "database schema is out of date" screen instead of letting the app continue into confusing mid-action failures.
 
@@ -385,7 +385,7 @@ Indexes: `idx_cargo_player (campaign_id, player_id)`, `idx_cargo_ship (campaign_
 | `player_id` | TEXT | FK → players(id) ON DELETE CASCADE | |
 | `ship_id` | TEXT | FK → ships(id) ON DELETE SET NULL, nullable | |
 | `tick` | INTEGER | NOT NULL | |
-| `type` | TEXT | NOT NULL, CHECK IN (`buy`,`sell`,`fee`,`event`,`fuel`,`passenger_fare`,`passenger_refund`,`mail`,`freight_charge`,`freight_refund`,`freight_penalty`) | This `CHECK` can't be `ALTER`ed in place — why `debt_payments`/`dues_payments`/`disbursements` are separate tables rather than new `type` values (the three `freight_*` values were added via a table-rebuild migration, `d1/010_mgt2022_trade_rules.sql`, since a straight `ALTER` isn't possible in SQLite either) |
+| `type` | TEXT | NOT NULL, CHECK IN (`buy`,`sell`,`fee`,`event`,`fuel`,`passenger_fare`,`passenger_refund`,`mail`,`freight_charge`,`freight_refund`,`freight_penalty`,`broker_commission`) | This `CHECK` can't be `ALTER`ed in place — why `debt_payments`/`dues_payments`/`disbursements` are separate tables rather than new `type` values (the three `freight_*` values were added via a table-rebuild migration, `d1/010_mgt2022_trade_rules.sql`; `broker_commission` likewise via `d1/019_broker_commission_type.sql`, both copy-and-rename since a straight `ALTER` isn't possible in SQLite either) |
 | `trade_good_die` / `trade_good_name` / `tons` / `price_per_ton` | — | nullable | |
 | `total_cr` | INTEGER | NOT NULL | Positive = income, negative = expense |
 | `world_hex` / `sector` / `notes` | TEXT | nullable | |
@@ -607,7 +607,7 @@ Drag release snaps to the nearest detent, with velocity awareness: a fling skips
 | `world` | Object | `null` | Current world (sell price lookup) |
 | `sectorName` | String | `''` | |
 
-No emits. Reads `useTickStore().displaySnapshots` for sell prices (the player's own Broker-adjusted number, not the shared baseline); calls `ship.sellCargo` with `brokerSkill: tick.brokerSkill` so the CT7 commission is applied consistently. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
+No emits. For CT7, uses `ct7CargoLotSalePrice()` (`market-tick.js`, HLD §7) per lot — Book 7's real source-vs-market mechanic, since each lot's actual purchase world (`cargo.purchase_world`/`purchase_sector`) genuinely affects its sale price at a different market, unlike the ambient MarketTable listing. Resolves each distinct purchase world lazily via `map.fetchWorldsForSector()`, cached in a local `sourceWorldCache` (hex → world object) keyed on the hold's current lots; `sellPriceFor(item)` returns `null` (shown as "—", sell disabled) until that lot's source world resolves. Other rulesets keep reading `useTickStore().displaySnapshots` (the player's own Broker-adjusted number) unchanged. Calls `ship.sellCargo` with `brokerSkill: tick.brokerSkill` so the CT7 commission is applied consistently. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
 
 ### `BuyDialog`
 
@@ -825,7 +825,7 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `loadShip(playerId, campaignId)` | One-call fetch of ship + cargo + passengers + mail |
 | `createShip(...)` | |
 | `updateLocation(worldHex, sector, opts?)` | Moves the ship; if `{tick, campaignId, playerId}` given, also auto-delivers matching passengers/mail |
-| `buyCargo(opts)` / `sellCargo(opts)` | `sellCargo` takes an optional `brokerSkill` (default 0); for CT7 campaigns it computes a Broker commission (`brokerFee`) deducted from proceeds and sent as `broker_fee_total`, netted out of the optimistic local credit update to match the worker's own deduction |
+| `buyCargo(opts)` / `sellCargo(opts)` | `sellCargo` takes an optional `brokerSkill` (default 0); for CT7 campaigns it computes `brokerSelfServiceGain()` (half the standard Book 7 brokerage fee — this app has no NPC-hiring flow, so the player's own skill always nets the self-service case) and sends it as `broker_gain_total`, **added** to the optimistic local credit update to match the worker's own credit |
 | `bookPassengers(opts)` / `refundPassenger(...)` | |
 | `purchaseFuel(opts)` | Capped at `fuel_capacity − fuel_current` |
 | `payDebt(opts)` | Atomic decrement of `ships.credits` + `ship_debts.current_balance`, inserts a `debt_payments` row |

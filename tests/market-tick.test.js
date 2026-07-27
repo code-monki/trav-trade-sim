@@ -11,6 +11,7 @@ import {
   generateWorldSnapshot,
   mgt2022PlayerGoodPrice,
   ct7PlayerSalePrice,
+  ct7CargoLotSalePrice,
 } from '../src/lib/market-tick.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -370,5 +371,54 @@ describe('ct7PlayerSalePrice', () => {
 
   it('returns null for an unknown goodDie', () => {
     expect(ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie: 'ZZ' })).toBeNull()
+  })
+})
+
+// ── Per-lot sale pricing (real Book 7 source-vs-market mechanic) ────────────
+
+describe('ct7CargoLotSalePrice', () => {
+  const goodDie = '11'
+
+  it('when the lot was bought at the same world it is sold at, matches ct7PlayerSalePrice exactly', () => {
+    const selfReferenced = ct7PlayerSalePrice({
+      campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0,
+    })
+    const perLot = ct7CargoLotSalePrice({
+      campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie, brokerSkill: 0,
+    })
+    expect(perLot).toBe(selfReferenced)
+  })
+
+  it('a lot bought at a different world sells for a different price than one bought locally', () => {
+    const otherSource = { Hex: '0202', UWP: 'B000000-2', Remarks: '' } // no matching codes, low TL
+    const local = ct7CargoLotSalePrice({
+      campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie, brokerSkill: 0,
+    })
+    const imported = ct7CargoLotSalePrice({
+      campaignId: 'c1', marketWorld: testWorld, sourceWorld: otherSource, tick: 5, goodDie, brokerSkill: 0,
+    })
+    expect(imported).not.toBe(local)
+  })
+
+  it('a high-TL source selling into a low-TL market prices higher than a low-TL source selling into the same market', () => {
+    const highTLSource = { Hex: '0303', UWP: 'B000000-F', Remarks: '' } // TL 15
+    const lowTLSource  = { Hex: '0404', UWP: 'B000000-1', Remarks: '' } // TL 1
+    const lowTLMarket  = { Hex: '0505', UWP: 'B000000-1', Remarks: '' }
+
+    const fromHighTL = ct7CargoLotSalePrice({
+      campaignId: 'c1', marketWorld: lowTLMarket, sourceWorld: highTLSource, tick: 5, goodDie, brokerSkill: 0,
+    })
+    const fromLowTL = ct7CargoLotSalePrice({
+      campaignId: 'c1', marketWorld: lowTLMarket, sourceWorld: lowTLSource, tick: 5, goodDie, brokerSkill: 0,
+    })
+    expect(fromHighTL).toBeGreaterThan(fromLowTL)
+  })
+
+  it('returns null when sourceWorld is not provided (lot not yet resolved)', () => {
+    expect(ct7CargoLotSalePrice({ campaignId: 'c1', marketWorld: testWorld, sourceWorld: null, tick: 5, goodDie })).toBeNull()
+  })
+
+  it('returns null for an unknown goodDie', () => {
+    expect(ct7CargoLotSalePrice({ campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie: 'ZZ' })).toBeNull()
   })
 })

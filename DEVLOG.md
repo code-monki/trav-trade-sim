@@ -1190,6 +1190,133 @@ confirms `schema_ok: true` with `001`-`018` all present.)*
 
 ---
 
+## 2026-07-26 — CT7 (Book 7 Merchant Prince) rules-accuracy pass, Phases A-C
+
+### Goal
+
+Continue the rules-accuracy work into Classic Traveller — per the user's
+own hypothesis (flagged during the MgT2022 Phase 6 work), that CT7/T5
+likely had the same kind of unmodeled mechanics MgT2022 turned out to
+have. The user pasted the actual Book 7 Merchant Prince rules/tables
+verbatim (warning that the source PDF may have some page-mangling), which
+I cross-checked line-by-line against `trade-engine-ct7.js`/
+`traveller-data.js`. Found six real issues, ranked by confidence; the user
+chose to sequence them as: data fixes first (Phase A), then the two
+mechanic-shape bugs the data fixes exposed (Phases B-C), with the larger
+Passenger/Freight Availability system (Phase D — CT7's own destination-
+DM-shaped traffic mechanic, confirming the user's hypothesis) deferred to
+its own checkpoint given its size.
+
+### Phase A — Three table mismatches
+
+- **Cost of Goods**: `Po` (Poor) was `+1000` in code but should be
+  `-1000` (sign flipped); `Va` (Vacuum) was missing entirely (defaulted to
+  `0`) but should be `+1000`.
+- **Market Price Table**: the `Ic` (Ice-Capped) row modified the wrong
+  column — code had `Ic: { Ic: +1 }`, but Book 7's table has Ic's row
+  affecting the `In` (Industrial) market column, not itself.
+- **Alien Trade Effects**: `As`, `Hv`, `So`, `Va`, and `Zh` rows all
+  pointed at the wrong race columns (e.g. code had `As: { Hv: -2 }`,
+  should be `As: { Kk: -2 }`) — a systematic column-shift, only `Dr`, `Im`,
+  `Kk` were already correct. While fixing this, confirmed
+  `CT7_ALIEN_EFFECTS` has **zero callers anywhere** — no `alienEffect()`
+  helper exists, and no world/campaign data tracks race/nationality, so
+  even corrected, this table is still dead data. Left as a known gap
+  (wiring it in would need a race/nationality data source this app
+  doesn't have) rather than building that out unprompted.
+
+### Phase B — `tlAdjustment` was backwards, half-implemented, and self-referenced
+
+The real formula: `pct = (sourceTL - marketTL) × 10%`, applied as
+`basePrice × (1 + pct)` in **both directions** — a high-tech source
+selling into a low-tech market is advantageous (price increases); the
+reverse is disadvantageous. A decrease of 100% or more means the goods
+have no value at that market. The existing code only acted when delta was
+positive, and even then *subtracted* instead of adding — both the
+direction and the "when to apply" condition were inverted. Verified
+against the book's own Regina worked example (base+trade-class subtotal
+7000, delta -3 → -30% → 4900) before touching the code; the existing unit
+tests asserted the buggy (backwards) behavior and needed rewriting, not
+just extending.
+
+Worse: `tlAdjustment` was only ever called from `tradeResult()`, which
+itself has zero callers outside its own tests (a Phase 4 finding that
+turned out to matter again here) — the *live* snapshot generator
+(`generateCT7Snapshot`) never applied any TL adjustment at all, and
+computed sale price via `marketBasePrice(codes, codes)` — the SAME
+world's codes passed as both the source and market side of a function
+whose whole point is comparing two different worlds. That self-reference
+is actually fine for the shared, ambient baseline snapshot (no specific
+cargo lot is in play there — it's a reasonable "what would this good
+generically be worth here" index), but it's wrong for what a player's
+*actual owned cargo lot* sells for, since `cargo.purchase_world`/
+`purchase_sector` already tracks exactly where each lot was bought.
+
+Fixed `tlAdjustment` itself, then added a new function,
+`ct7CargoLotSalePrice()` (`market-tick.js`), that reuses the shared
+baseline's exact same seeded sale-roll dice (so "market luck" is
+consistent for every lot of a good sold at the same market/tick) but
+threads the *lot's real* source codes/TL through `marketBasePrice`/
+`tlAdjustment` instead of self-referencing — the real Book 7 mechanic.
+`CargoHold.vue` now resolves each distinct cargo lot's purchase world
+lazily (`map.fetchWorldsForSector()`, cached locally, mirroring the
+Phase 6 destination-world-lookup pattern) and calls the new function for
+CT7 campaigns specifically; other rulesets are unaffected. Net effect:
+two lots of the same good bought at different worlds now genuinely sell
+for different prices at the same market — previously every lot sold
+identically regardless of origin.
+
+### Phase C — CT7 Broker "fee" was backwards for the only case this app models
+
+The rules distinguish *hiring* an NPC broker (pays the full 5%×skill fee,
+deducted from proceeds) from a player-character using their *own* Broker
+skill to arrange the sale themselves — described as receiving the
+standard fee but "assumed to spend half of it arranging the sale," netting
+**half the fee as pure profit on top of the sale**, not a deduction. This
+app has no NPC-hiring flow anywhere — every Broker skill used is the
+acting player's own — so the self-service case is the *only* one that
+ever applies, and `ship.js`'s `sellCargo()` was deducting the full fee
+every time, the opposite of correct.
+
+Added `brokerSelfServiceGain()` (half of the existing `brokerFee()`,
+which is kept as-is — the raw Book 7 formula, useful if a hire-a-broker
+feature is ever added) and rewired the whole path: `ship.js` computes and
+**adds** it rather than subtracting; the worker's `/sell-cargo` route
+renamed `broker_fee_total` → `broker_gain_total` and credits it instead of
+deducting; the transaction type changed from `'fee'` (expense) to
+`'broker_commission'` (new income type in `reports.js`'s `TYPE_LABEL`/
+`INCOME_TYPES`), so it shows correctly in Reports/ledger. `tradeResult()`
+(still dead code outside its own tests) updated to match for consistency.
+Migration `019` adds `'broker_commission'` to `transactions.type`'s
+`CHECK` constraint — `transactions` holds real history, so rebuilt via
+the same copy-and-rename pattern as migration 018, not a destructive drop.
+
+### Verified
+
+`npx vitest run` — 541/541 passing (up from 524; new/rewritten coverage
+for the three table fixes, `tlAdjustment`'s corrected formula incl. the
+Book 7 worked examples and the "no value" floor, `ct7CargoLotSalePrice`
+parity/divergence/TL-direction cases, and `brokerSelfServiceGain`).
+`npx vite build` compiles cleanly. `node --check` on the touched worker
+route. No live `wrangler dev` verification this session (established
+precedent — worker-route behavior needs live D1, not covered by Vitest).
+
+### Known gaps, not addressed this session
+
+`CT7_ALIEN_EFFECTS` is now data-correct but still unwired (no race data
+source exists in this app). Phase D — CT7's own Passenger/Freight
+Availability system (population-based dice with market-world population/
+zone/TL DMs plus skill DMs, structurally the same "both worlds +
+destination" shape as MgT2022's Phase 6 traffic mechanic) — is deferred
+to its own checkpoint; CT7 currently still uses flat unlimited passenger
+fares and has no Freight tab at all. Two early "cargo identification"
+worked examples in the pasted text (Regina Cr7,000, Rethe Cr3,800) didn't
+cleanly reconcile against the cost formula — given the user's own warning
+about possible PDF page-mangling, these were treated as suspect rather
+than acted on.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

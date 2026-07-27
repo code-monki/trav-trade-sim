@@ -129,21 +129,25 @@ export function marketBasePrice(sourceCodes, marketCodes) {
 // ── TL adjustment ─────────────────────────────────────────────────────────────
 
 /**
- * TL adjustment: selling high-tech goods into a lower-tech market
- * reduces price; selling into a higher-tech market has no effect.
+ * TL adjustment: a high-tech source selling into a low-tech market is
+ * advantageous (price increases); a low-tech source selling into a
+ * high-tech market is disadvantageous (price decreases). Applies in both
+ * directions — unlike a simple "no effect unless advantageous" rule.
  *
- * Formula: (sourceTL - marketTL) × 10% × basePrice
- * Applied only when sourceTL > marketTL (positive delta hurts, negative delta = 0).
+ * Formula: pct = (sourceTL - marketTL) × 10%; adjusted = basePrice × (1 + pct)
+ * A decrease of 100% or more means the goods have no value at that market
+ * (floored at 0 here; callers apply their own "must be worth something"
+ * minimum on top, same as every other price floor in this codebase).
  *
  * @param {string|number} sourceTL
  * @param {string|number} marketTL
  * @param {number}        basePrice
- * @returns {number} adjusted price (may be less than basePrice)
+ * @returns {number} adjusted price (may be more or less than basePrice, never negative)
  */
 export function tlAdjustment(sourceTL, marketTL, basePrice) {
   const delta = tlToInt(sourceTL) - tlToInt(marketTL)
-  if (delta <= 0) return basePrice
-  return Math.max(0, basePrice - delta * 0.1 * basePrice)
+  const pct   = delta * 0.1
+  return Math.max(0, basePrice * (1 + pct))
 }
 
 // ── Actual Value table ────────────────────────────────────────────────────────
@@ -185,8 +189,11 @@ export function brokerDM(brokerSkill) {
 }
 
 /**
- * Broker fee: 5% × skill × final transaction price.
- * Fee is paid regardless of profit/loss.
+ * Broker fee: 5% × skill × final transaction price — what a HIRED NPC
+ * broker charges, paid regardless of profit/loss. This app has no NPC-
+ * hiring flow (every Broker skill used is the acting player's own), so
+ * this raw formula isn't charged directly anywhere — see
+ * `brokerSelfServiceGain` below for what actually applies.
  *
  * @param {number} brokerSkill  — broker's skill level
  * @param {number} finalPrice   — total transaction value (price × tons)
@@ -195,6 +202,21 @@ export function brokerDM(brokerSkill) {
 export function brokerFee(brokerSkill, finalPrice) {
   const skill = Math.min(4, Math.max(0, brokerSkill))
   return Math.round(0.05 * skill * finalPrice)
+}
+
+/**
+ * A player-character using their OWN Broker skill to arrange a sale
+ * (rather than hiring an NPC) receives the standard brokerage fee for
+ * doing so, but is assumed to spend half of it arranging the sale — net
+ * effect: they keep half of `brokerFee()` as pure profit on top of the
+ * sale, rather than paying the full fee out as a hired broker would.
+ *
+ * @param {number} brokerSkill
+ * @param {number} finalPrice
+ * @returns {number} net gain in Credits, added to sale proceeds
+ */
+export function brokerSelfServiceGain(brokerSkill, finalPrice) {
+  return Math.round(0.5 * brokerFee(brokerSkill, finalPrice))
 }
 
 // ── Quantity resolver (Book 2) ────────────────────────────────────────────────
@@ -247,7 +269,7 @@ export function rollQty(expr, rolls, dm = 0) {
  *   purchasePricePerTon: number,
  *   salePricePerTon: number,
  *   totalRevenue: number,
- *   brokerFeeTotal: number,
+ *   brokerGainTotal: number,
  *   netProfit: number,
  * }}
  */
@@ -274,8 +296,8 @@ export function tradeResult(opts) {
   const saleRollTotal      = saleRoll + brokerDM(brokerSkill)
   const salePricePerTon    = actualPrice(tlAdjustedPerTon, saleRollTotal)
   const totalRevenue       = salePricePerTon * tons
-  const brokerFeeTotal     = brokerFee(brokerSkill, totalRevenue)
-  const netProfit          = totalRevenue - totalCost - brokerFeeTotal
+  const brokerGainTotal    = brokerSelfServiceGain(brokerSkill, totalRevenue)
+  const netProfit          = totalRevenue - totalCost + brokerGainTotal
 
   return {
     costPerTon,
@@ -286,7 +308,7 @@ export function tradeResult(opts) {
     purchasePricePerTon,
     salePricePerTon,
     totalRevenue,
-    brokerFeeTotal,
+    brokerGainTotal,
     netProfit,
   }
 }

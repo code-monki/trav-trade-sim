@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0
+**Version:** 0.11.0
 
 ---
 
@@ -398,15 +398,16 @@ generateWorldSnapshot(world, sectorName, campaignId, tick, activeEvents)
     5. saleRoll     = 2d6(rng) + saleDM
     6. costPerTon   = costOfGoods(tradeCodes, starport, tl)
     7. purchasePrice = costPerTon × actualValueMultiplier(purchaseRoll)
-    8. marketBase    = marketBasePrice(tradeCodes, tradeCodes)
-    9. tlAdjusted    = tlAdjustment(sourceTL, worldTL, marketBase)
-   10. salePrice     = tlAdjusted × actualValueMultiplier(saleRoll)
-   11. eventMod     = Σ effect_pct for active events matching die or '__all__'
-   12. salePrice   *= (1 + eventMod/100)
-   13. qty = rollQty(good.qty, [d6(rng), d6(rng), ...])
+    8. marketBase    = marketBasePrice(tradeCodes, tradeCodes)   # self-referenced — see note below
+    9. salePrice     = marketBase × actualValueMultiplier(saleRoll)   # no TL adjustment here — see note below
+   10. eventMod     = Σ effect_pct for active events matching die or '__all__'
+   11. salePrice   *= (1 + eventMod/100)
+   12. qty = rollQty(good.qty, [d6(rng), d6(rng), ...])
 ```
 
 All inputs are deterministic; same seed = same price on every client. (This pipeline is CT7's; T5 shares the same 36 `CT2_TRADE_GOODS` table but its own pricing formulas — see `trade-engine-t5.js` — and MgT2022 uses an entirely different table/pipeline, §7a below.)
+
+**Deliberate self-reference, and why it's a baseline only.** `marketBasePrice(tradeCodes, tradeCodes)` treats this world as both source and market — a reasonable stand-in for the *ambient* MarketTable listing, where no specific owned cargo lot is in play, so there's no real "source world" to ask about. Because source==market here, `tlAdjustment`'s delta is always 0 and applying it would be a no-op, so this baseline never calls it at all. This is **not** what a real owned cargo lot sells for, though: `marketBasePrice` and `tlAdjustment` are both genuinely two-world Book 7 functions (source codes/TL vs. market codes/TL), and a real lot has a real, known purchase world (`cargo.purchase_world`/`purchase_sector`). `ct7CargoLotSalePrice()` in `market-tick.js` is the function that does this correctly — it reuses this same seed's sale-roll dice (so "market luck" is shared across every lot of the same good sold at the same market/tick) but threads the *lot's actual* source codes/TL through `marketBasePrice`/`tlAdjustment` instead of self-referencing. `CargoHold.vue` calls it once each cargo lot's purchase world resolves (via `map.fetchWorldsForSector`, cached locally); until then `sellPriceFor` returns `null`, same as any other not-yet-appraised good. `ct7PlayerSalePrice()` (§7b) keeps the self-referenced baseline behavior — it's for the ambient listing, not a specific lot.
 
 ## 7a. MgT2022 Price/Composition Engine
 
@@ -476,7 +477,7 @@ Because `makeRng(seed)` is a pure function of its seed string, drawing the same 
 
 `tick.js`'s `displaySnapshots` computed overlays `worldSnapshots` with these per-player numbers (MgT2022: both prices; CT7: sale only) for the current player's own `brokerSkill` (fetched via `GET /api/reports/skills`, cached in `tick.brokerSkill`); `MarketTable.vue`/`CargoHold.vue` read `displaySnapshots` instead of `worldSnapshots`, so `BuyDialog.vue` and the actual `buy-cargo`/`sell-cargo` calls — which already send whatever price the client computed, unchanged since the Phase 1 concurrency fix — automatically use the adjusted number.
 
-CT7's Broker **fee** (`brokerFee(skill, finalPrice)` — 5% × skill × transaction value, paid regardless of profit/loss) is a lump deduction at the moment of sale, not a per-ton price term, mirroring the existing freight late-delivery-penalty pattern: `ship.js`'s `sellCargo()` computes it and sends `broker_fee_total`; `worker/src/routes/ships.js`'s `/sell-cargo` nets it out of the credited amount and records it as a distinct `'fee'`-type transaction.
+CT7's Broker commission is a lump adjustment at the moment of sale, not a per-ton price term, mirroring the existing freight late-delivery-penalty pattern's use of a separate transaction row. Book 7 draws a real distinction between *hiring* an NPC broker (pays the full `brokerFee(skill, finalPrice)` — 5% × skill × transaction value, regardless of profit/loss) and a player-character using their *own* Broker skill to arrange the sale (receives that same fee, but is assumed to spend half of it arranging the sale — nets `brokerSelfServiceGain()`, exactly half, as pure profit *on top of* the sale). This app has no NPC-hiring flow — every Broker skill used is the acting player's own — so the self-service case is the only one that applies: `ship.js`'s `sellCargo()` computes `brokerSelfServiceGain()` and sends it as `broker_gain_total`; `worker/src/routes/ships.js`'s `/sell-cargo` **adds** it to the credited amount and records it as a distinct `'broker_commission'`-type transaction (income, not a fee).
 
 ## 7c. Traffic Availability (Passengers/Freight/Mail)
 

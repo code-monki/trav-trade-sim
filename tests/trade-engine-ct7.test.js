@@ -10,9 +10,11 @@ import {
   actualPrice,
   brokerDM,
   brokerFee,
+  brokerSelfServiceGain,
   rollQty,
   tradeResult,
 } from '../src/lib/trade-engine-ct7.js'
+import { CT7_ALIEN_EFFECTS } from '../src/lib/traveller-data.js'
 
 // ── parseTradeCodes ───────────────────────────────────────────────────────────
 
@@ -123,6 +125,14 @@ describe('costOfGoods', () => {
     // Extreme negative scenario
     expect(costOfGoods(new Set(['Ag', 'Hi', 'In']), 'A', '0')).toBeGreaterThanOrEqual(0)
   })
+
+  it('applies Poor trade code as a discount, not a premium (Book 7 table: Po -1000)', () => {
+    expect(costOfGoods(new Set(['Po']), 'B', '0')).toBe(3000)
+  })
+
+  it('applies Vacuum trade code as a premium (Book 7 table: Va +1000)', () => {
+    expect(costOfGoods(new Set(['Va']), 'B', '0')).toBe(5000)
+  })
 })
 
 // ── marketBasePrice ───────────────────────────────────────────────────────────
@@ -148,6 +158,31 @@ describe('marketBasePrice', () => {
     // Ag→Ag (+1000) and Ag→In (+1000) → 5000 + 2000 = 7000
     expect(marketBasePrice(new Set(['Ag']), new Set(['Ag', 'In']))).toBe(7000)
   })
+
+  it('Ic source only modifies the In market column, not Ic (Book 7 table row is Ic -> In +1)', () => {
+    expect(marketBasePrice(new Set(['Ic']), new Set(['In']))).toBe(6000)
+    expect(marketBasePrice(new Set(['Ic']), new Set(['Ic']))).toBe(5000)
+  })
+})
+
+// ── CT7_ALIEN_EFFECTS ────────────────────────────────────────────────────────
+// Currently dead data (zero callers anywhere in the app — no alienEffect()
+// helper exists, and no world/campaign data tracks race/nationality), but the
+// table itself should still match Book 7's Alien Market Effects Table.
+
+describe('CT7_ALIEN_EFFECTS', () => {
+  it('matches the Book 7 Alien Market Effects Table exactly', () => {
+    expect(CT7_ALIEN_EFFECTS).toEqual({
+      As: { Kk: -2, Va: +1 },
+      Dr: { Zh: +2 },
+      Hv: { As: +1, Im: -2 },
+      Im: { Zh: -1 },
+      Kk: { Va: -2 },
+      So: { Hv: +1, Im: -1 },
+      Va: { Kk: -4 },
+      Zh: { As: +1, Dr: +1, Im: -2 },
+    })
+  })
 })
 
 // ── tlAdjustment ──────────────────────────────────────────────────────────────
@@ -157,21 +192,41 @@ describe('tlAdjustment', () => {
     expect(tlAdjustment('7', '7', 10000)).toBe(10000)
   })
 
-  it('returns base price unchanged when source TL is lower than market TL', () => {
-    expect(tlAdjustment('5', '9', 10000)).toBe(10000)
+  it('decreases price when source TL is lower than market TL (disadvantageous)', () => {
+    // delta = 5-9 = -4: 10000 × (1 - 0.4) = 6000
+    expect(tlAdjustment('5', '9', 10000)).toBe(6000)
   })
 
-  it('reduces price by 10% per TL point when source exceeds market', () => {
-    // delta = 2: 10000 - 2 × 0.1 × 10000 = 8000
-    expect(tlAdjustment('9', '7', 10000)).toBe(8000)
+  it('increases price when source TL exceeds market TL (advantageous)', () => {
+    // delta = 2: 10000 × (1 + 0.2) = 12000
+    expect(tlAdjustment('9', '7', 10000)).toBe(12000)
   })
 
   it('accepts integer TL values', () => {
-    expect(tlAdjustment(9, 7, 10000)).toBe(8000)
+    expect(tlAdjustment(9, 7, 10000)).toBe(12000)
   })
 
-  it('handles hex TL correctly: A (10) vs 7 → delta 3', () => {
-    expect(tlAdjustment('A', '7', 10000)).toBe(7000)
+  it('handles hex TL correctly: A (10) vs 7 → delta 3 → +30%', () => {
+    expect(tlAdjustment('A', '7', 10000)).toBe(13000)
+  })
+
+  it('a decrease of 100% or more floors at 0 (goods have no value at that market)', () => {
+    // delta = -10: pct = -100%
+    expect(tlAdjustment('2', 'C', 10000)).toBe(0)
+    // delta = -15: pct = -150%, still floors at 0 (not negative)
+    expect(tlAdjustment('0', 'F', 10000)).toBe(0)
+  })
+
+  it('matches the Book 7 worked example: TL 15 source, TL 1 market → +140%', () => {
+    expect(tlAdjustment('F', '1', 10000)).toBeCloseTo(24000)
+  })
+
+  it('matches the Book 7 worked example: TL 10 source, TL 15 market → -50%', () => {
+    expect(tlAdjustment('A', 'F', 10000)).toBe(5000)
+  })
+
+  it('reproduces the Regina worked example exactly (base+trade-class subtotal 7000, delta -3 → -30% → 4900)', () => {
+    expect(tlAdjustment('7', 'A', 7000)).toBe(4900)
   })
 })
 
@@ -256,6 +311,26 @@ describe('brokerFee', () => {
   })
 })
 
+// ── brokerSelfServiceGain ────────────────────────────────────────────────────
+// A player-character using their OWN Broker skill (this app's only case —
+// no NPC-hiring flow exists) keeps HALF the standard brokerage fee as pure
+// profit, rather than paying the full fee out as a hired broker would.
+
+describe('brokerSelfServiceGain', () => {
+  it('is 0 for skill 0', () => {
+    expect(brokerSelfServiceGain(0, 100000)).toBe(0)
+  })
+
+  it('is half of brokerFee for the same inputs', () => {
+    expect(brokerSelfServiceGain(2, 10000)).toBe(brokerFee(2, 10000) / 2)
+    expect(brokerSelfServiceGain(4, 20000)).toBe(brokerFee(4, 20000) / 2)
+  })
+
+  it('clamps skill at 4, same as brokerFee', () => {
+    expect(brokerSelfServiceGain(6, 20000)).toBe(brokerSelfServiceGain(4, 20000))
+  })
+})
+
 // ── rollQty ───────────────────────────────────────────────────────────────────
 
 describe('rollQty', () => {
@@ -311,16 +386,16 @@ describe('tradeResult', () => {
     // marketBase: 5000 + 1000 (Ag→In) = 6000
     expect(result.marketBasePerTon).toBe(6000)
 
-    // TL adjustment: source 7, market 9 → delta ≤ 0 → no reduction
-    expect(result.tlAdjustedPerTon).toBe(6000)
+    // TL adjustment: source 7, market 9 → delta -2 → -20% → 6000 × 0.8 = 4800
+    expect(result.tlAdjustedPerTon).toBe(4800)
 
-    expect(result.salePricePerTon).toBe(6000)
-    expect(result.totalRevenue).toBe(60000)
-    expect(result.brokerFeeTotal).toBe(0)
-    expect(result.netProfit).toBe(23000)
+    expect(result.salePricePerTon).toBe(4800)
+    expect(result.totalRevenue).toBe(48000)
+    expect(result.brokerGainTotal).toBe(0)
+    expect(result.netProfit).toBe(11000)
   })
 
-  it('applies broker fee and DM correctly', () => {
+  it('applies broker self-service gain and DM correctly', () => {
     const result = tradeResult({
       sourceCodes:  new Set(),
       sourceUWP:    'B000000-7',
@@ -335,11 +410,11 @@ describe('tradeResult', () => {
     // saleRoll 7 + brokerDM 2 = 9 → multiplier 1.20
     // marketBase = 5000, no TL adj
     expect(result.salePricePerTon).toBe(6000)   // 5000 × 1.20
-    // brokerFee = 0.05 × 2 × 6000 = 600
-    expect(result.brokerFeeTotal).toBe(600)
+    // brokerFee = 0.05 × 2 × 6000 = 600; self-service gain = half = 300
+    expect(result.brokerGainTotal).toBe(300)
   })
 
-  it('applies TL penalty when source TL exceeds market TL', () => {
+  it('applies TL advantage when source TL exceeds market TL (high-tech source, low-tech market)', () => {
     const result = tradeResult({
       sourceCodes:  new Set(),
       sourceUWP:    'B000000-A',   // TL A = 10
@@ -351,7 +426,24 @@ describe('tradeResult', () => {
       brokerSkill:  0,
     })
 
-    // delta = 10 - 7 = 3; penalty = 3 × 10% = 30%
+    // delta = 10 - 7 = 3; advantage = 3 × 10% = +30%
+    // marketBase 5000 → tlAdjusted = 5000 × 1.30 = 6500
+    expect(result.tlAdjustedPerTon).toBe(6500)
+  })
+
+  it('applies TL disadvantage when market TL exceeds source TL (low-tech source, high-tech market)', () => {
+    const result = tradeResult({
+      sourceCodes:  new Set(),
+      sourceUWP:    'B000000-7',   // TL 7
+      marketCodes:  new Set(),
+      marketUWP:    'B000000-A',   // TL A = 10
+      tons:         1,
+      purchaseRoll: 7,
+      saleRoll:     7,
+      brokerSkill:  0,
+    })
+
+    // delta = 7 - 10 = -3; penalty = 3 × 10% = -30%
     // marketBase 5000 → tlAdjusted = 5000 × 0.70 = 3500
     expect(result.tlAdjustedPerTon).toBe(3500)
   })

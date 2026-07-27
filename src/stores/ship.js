@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { api } from '../lib/api.js'
 import { useTickStore } from './tick.js'
 import { MGT2022_BASIC_PASSAGE_TONS, MGT2022_MAIL_CONTAINER_TONS } from '../lib/traveller-data-mgt2022.js'
-import { brokerFee } from '../lib/trade-engine-ct7.js'
+import { brokerSelfServiceGain } from '../lib/trade-engine-ct7.js'
 
 export const useShipStore = defineStore('ship', () => {
   const ship          = ref(null)   // current ship record (or null if not aboard one)
@@ -286,11 +286,13 @@ export const useShipStore = defineStore('ship', () => {
     if (!canTrade.value) return { ok: false, error: 'Not authorized to trade — check with your referee' }
 
     const totalRevenue = sellPricePerTon * cargoItem.tons
-    // CT7 Broker fee: a commission taken regardless of profit/loss, separate
-    // from the DM already baked into sellPricePerTon — RAW, per-ton price
-    // and the negotiator's cut are two different things. MgT2022 has no
-    // equivalent (its Broker benefit is entirely inside the roll/price).
-    const brokerFeeTotal = tradeRules === 'CT7' ? brokerFee(brokerSkill, totalRevenue) : 0
+    // CT7 Broker self-service gain: a player using their OWN Broker skill to
+    // arrange the sale (this app has no NPC-hiring flow) receives half the
+    // standard brokerage fee as pure profit, on top of the DM already baked
+    // into sellPricePerTon — RAW, per-ton price and the negotiator's cut are
+    // two different things. MgT2022 has no equivalent (its Broker benefit is
+    // entirely inside the roll/price).
+    const brokerGainTotal = tradeRules === 'CT7' ? brokerSelfServiceGain(brokerSkill, totalRevenue) : 0
 
     loading.value = true
     error.value   = null
@@ -303,12 +305,12 @@ export const useShipStore = defineStore('ship', () => {
         market_sector:      marketSector,
         tick,
         trade_rules:        tradeRules,
-        broker_fee_total:   brokerFeeTotal,
+        broker_gain_total:  brokerGainTotal,
       })
       if (apiErr) throw new Error(apiErr)
 
       cargo.value = cargo.value.filter(c => c.id !== cargoItem.id)
-      ship.value  = { ...ship.value, credits: (ship.value.credits ?? 0) + totalRevenue - brokerFeeTotal }
+      ship.value  = { ...ship.value, credits: (ship.value.credits ?? 0) + totalRevenue + brokerGainTotal }
       return { ok: true, netProfit: data.net_profit }
     } catch (e) {
       error.value = e.message

@@ -280,14 +280,14 @@ app.post('/:id/buy-cargo', requireAuth, async (c) => {
 app.post('/:id/sell-cargo', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
-  const { campaign_id, cargo_item, sell_price_per_ton, market_world_hex, market_sector, tick, trade_rules, broker_fee_total = 0 } = await c.req.json()
+  const { campaign_id, cargo_item, sell_price_per_ton, market_world_hex, market_sector, tick, trade_rules, broker_gain_total = 0 } = await c.req.json()
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
   const totalRevenue = sell_price_per_ton * cargo_item.tons
   const totalCost    = cargo_item.purchase_price * cargo_item.tons
-  const netCredited  = totalRevenue - broker_fee_total
-  const netProfit    = totalRevenue - totalCost - broker_fee_total
+  const netCredited  = totalRevenue + broker_gain_total
+  const netProfit    = totalRevenue - totalCost + broker_gain_total
 
   const stmts = [
     c.env.DB.prepare(`DELETE FROM cargo WHERE id = ?`).bind(cargo_item.id),
@@ -300,18 +300,19 @@ app.post('/:id/sell-cargo', requireAuth, async (c) => {
     c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(netCredited, id),
   ]
 
-  // CT7-only Broker commission — a lump deduction from this sale's proceeds,
-  // separate from the per-ton price (which already carries the Broker DM
-  // bonus). Recorded as its own 'fee' transaction (the generic type
-  // src/lib/reports.js's TYPE_LABEL/EXPENSE_TYPES already render/total)
-  // rather than folded silently into the 'sell' row, so it's visible in
-  // Reports/ledger like any other deduction.
-  if (broker_fee_total > 0) {
+  // CT7-only Broker self-service gain — a player using their own Broker
+  // skill to arrange the sale keeps half the standard brokerage fee as
+  // pure profit (see brokerSelfServiceGain), separate from the per-ton
+  // price (which already carries the Broker DM bonus). Recorded as its
+  // own 'broker_commission' transaction (src/lib/reports.js's TYPE_LABEL/
+  // INCOME_TYPES render/total it) rather than folded silently into the
+  // 'sell' row, so it's visible in Reports/ledger like any other income.
+  if (broker_gain_total > 0) {
     stmts.push(
       c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
-                        VALUES (?, ?, ?, ?, ?, 'fee', ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), campaign_id, cargo_item.player_id, id, tick, -broker_fee_total, market_world_hex, market_sector,
-              `Broker fee on ${cargo_item.trade_good_name} sale`)
+                        VALUES (?, ?, ?, ?, ?, 'broker_commission', ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), campaign_id, cargo_item.player_id, id, tick, broker_gain_total, market_world_hex, market_sector,
+              `Broker commission on ${cargo_item.trade_good_name} sale`)
     )
   }
 

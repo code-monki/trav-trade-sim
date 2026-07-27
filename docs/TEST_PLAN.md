@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0
+**Version:** 0.11.0
 
 ---
 
@@ -71,8 +71,9 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 | UT-206 | `costOfGoods` | empty codes, starport A, TL 12 | 4000 + starport mod + 1200 |
 | UT-207 | `costOfGoods` | `{'Ag'}`, starport B, TL 6 | base + Ag mod + B mod + 600 |
 | UT-208 | `marketBasePrice` | source `{'Ag'}`, market `{'In'}` | 5000 + CT7_MARKET_PRICE_TABLE['Ag']['In'] × 1000 |
-| UT-209 | `tlAdjustment` | sourceTL=12, marketTL=8, base=10000 | 10000 - (4 × 0.1 × 10000) = 6000 |
-| UT-210 | `tlAdjustment` | sourceTL ≤ marketTL | returns basePrice unchanged |
+| UT-209 | `tlAdjustment` | sourceTL=12, marketTL=8, base=10000 | 10000 × (1 + 0.4) = 14000 — high-tech source, low-tech market is *advantageous* (corrected: previously implemented as a decrease) |
+| UT-210 | `tlAdjustment` | sourceTL < marketTL, e.g. 5 vs 9, base=10000 | 10000 × (1 - 0.4) = 6000 — now applies a decrease rather than being a no-op (corrected) |
+| UT-210b | `tlAdjustment` | delta ≤ -10 (decrease ≥100%) | floors at 0 — goods have no value at that market |
 | UT-211 | `actualValueMultiplier` | roll=2 | CT7_ACTUAL_VALUE[2] |
 | UT-212 | `actualValueMultiplier` | roll=7 | CT7_ACTUAL_VALUE[7] (≈1.0) |
 | UT-213 | `actualValueMultiplier` | roll=20 | CT7_ACTUAL_VALUE[15] (clamped) |
@@ -80,7 +81,14 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 | UT-215 | `rollQty` | `"1D"`, rolls=[5] | 5 |
 | UT-216 | `brokerDM` | skill=3 | 3 |
 | UT-217 | `brokerDM` | skill=6 | 4 (capped) |
-| UT-218 | `brokerFee` | skill=2, finalPrice=100000 | 0.05 × 2 × 100000 = 10000 |
+| UT-218 | `brokerFee` | skill=2, finalPrice=100000 | 0.05 × 2 × 100000 = 10000 — the raw Book 7 fee a *hired* NPC broker would charge; this app has no NPC-hiring flow, see UT-219 |
+| UT-219 | `brokerSelfServiceGain` | skill=2, finalPrice=6000 | 300 — half of `brokerFee`, since a PC using their own skill nets half the fee as profit rather than paying it out |
+| UT-220 | `costOfGoods` | `{'Po'}` | base - 1000 (corrected: Book 7 table has Po as a *discount*, code previously had it as a premium) |
+| UT-221 | `costOfGoods` | `{'Va'}` | base + 1000 (corrected: code previously had no Va entry at all, defaulting to 0) |
+| UT-222 | `marketBasePrice` | source `{'Ic'}`, market `{'In'}` vs `{'Ic'}` | +1000 vs +0 — Book 7's Ic row modifies the In market column, not Ic (corrected: code previously had it self-referencing Ic) |
+| UT-223 | `CT7_ALIEN_EFFECTS` | table contents | Matches Book 7's Alien Market Effects Table exactly (corrected: `As`, `Hv`, `So`, `Va`, `Zh` rows previously pointed at wrong race columns). Still dead data — no caller wires race/nationality into a live price |
+| UT-224 | `ct7CargoLotSalePrice` | `sourceWorld === marketWorld` | Matches `ct7PlayerSalePrice`'s self-referenced result exactly (parity check) |
+| UT-225 | `ct7CargoLotSalePrice` | lot bought at a genuinely different world than the market | Differs from a lot bought locally — this is Book 7's real per-lot source-vs-market mechanic, previously self-referenced (a real bug, not just a data-accuracy gap: every lot of a good sold for the same price regardless of where it was bought) |
 
 ### 3.3 `src/lib/market-events.js`
 
@@ -567,6 +575,14 @@ Every subsection below fully catalogues its component's actual test file (`tests
 7. Toggle to the Black Market view; verify the goods shown differ from the normal listing and can include illegal-category goods (e.g. Illegal Weapons, Illegal Drugs) that don't appear in the normal listing for the same world/tick; verify Exotics never appears in either view
 8. As a second player on the same ship, open the Market tab at the same world; verify the Black Market toggle is already available to them too (ship-wide, not per-player) without needing to repeat the check
 9. Advance to a new game-month; verify the Black Market toggle disappears again until re-attempted
+
+### MTS-19: CT7 Rules-Accuracy Fixes (Cost/Price Tables, TL Adjustment, Broker Commission)
+1. Create a CT7 campaign; buy a lot of the same good at two different worlds with different trade codes/TL (e.g. one Poor, one Vacuum, or worlds at different Tech Levels)
+2. Travel to a third world and open Cargo; verify the two lots of the same good now show **different** sell prices (previously every lot of a good sold identically at a given market regardless of where it was bought — confirms the per-lot source-vs-market fix)
+3. Verify a lot bought at a higher-TL world than the current market sells for *more* than an otherwise-identical lot bought at a lower-TL world (Tech Level adjustment now applies in both directions, not just as a one-sided penalty)
+4. As a player with Broker skill, sell a lot; verify a separate "Broker Commission" line appears in the Reports > Ledger as **income**, not a deduction (previously modeled as a fee subtracted from proceeds) — check the amount is roughly half of `5% × skill × sale value`
+5. As a player with 0 Broker skill, sell a lot; verify no Broker Commission line appears and net profit matches the sale price exactly
+6. Spot-check a Poor-world cargo lot's purchase cost against the Cost of Goods table (Po is a *discount*, not a premium) and a Vacuum-world lot (Va is a premium) — verify against `docs/DD.md`'s Cost of Goods table if uncertain
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

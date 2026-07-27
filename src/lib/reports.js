@@ -17,20 +17,22 @@ export function yearToTickRange(yearFrom, yearTo) {
 // Shared between ReportsPanel.vue (per-ship) and OrganizationsPanel.vue's
 // Fleet Report (aggregated) — both render the same transaction-type breakdown.
 export const TYPE_LABEL = {
-  buy:              'Buy',
-  sell:             'Sell',
-  fuel:             'Fuel',
-  passenger_fare:   'Passage',
-  passenger_refund: 'Refund',
-  mail:             'Mail',
-  fee:              'Fee',
-  event:            'Event',
+  buy:               'Buy',
+  sell:              'Sell',
+  fuel:              'Fuel',
+  passenger_fare:    'Passage',
+  passenger_refund:  'Refund',
+  mail:              'Mail',
+  fee:               'Fee',
+  broker_commission: 'Broker Commission',
+  event:             'Event',
 }
 
 export const INCOME_TYPES = {
-  sell:           'Cargo Sales',
-  passenger_fare: 'Passenger Fares',
-  mail:           'Mail Deliveries',
+  sell:              'Cargo Sales',
+  passenger_fare:    'Passenger Fares',
+  mail:              'Mail Deliveries',
+  broker_commission: 'Broker Commission',
 }
 
 export const EXPENSE_TYPES = {

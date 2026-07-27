@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0
+**Version:** 0.11.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -99,7 +99,8 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-602 | Sell confirmation with profit/loss | HLD §4.5 | `CargoHold.vue` confirm row | — | — | E2E-303 | MTS-1 |
 | FR-603 | Sell removes cargo, logs transaction + trade_record | HLD §4.5 | `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` | — | — | E2E-303 | MTS-1 |
 | FR-604 | Profit flash notification | DD §2 | `CargoHold.vue` flash animation | — | — | E2E-303 | MTS-1 |
-| FR-605 | CT7 Broker commission deducted at sale, recorded as a distinct fee transaction | HLD §7a, DD §1.1 `transactions` | `trade-engine-ct7.js:brokerFee`, `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` (`broker_fee_total` handling) | — | — | — | MTS-14 |
+| FR-605 | CT7 Broker self-service gain added at sale, recorded as a distinct income transaction | HLD §7b, DD §1.1 `transactions` | `trade-engine-ct7.js:brokerSelfServiceGain`, `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` (`broker_gain_total` handling) | UT-219 | — | — | MTS-19 |
+| FR-606 | CT7 per-lot sale price uses the lot's real purchase-world codes/TL vs. the current market's, incl. bidirectional TL adjustment | HLD §7 | `trade-engine-ct7.js:tlAdjustment`, `market-tick.js:ct7CargoLotSalePrice`, `CargoHold.vue` (`sourceWorldCache`) | UT-209–210b, UT-224–225 | — | — | MTS-19 |
 
 ## 2.7 Route Analysis
 

@@ -128,7 +128,7 @@ export const TRAVEL_ZONE = {
 export const CT7_COST_MODS = {
   Ag: -1000, As: -1000, Ba: +1000, De: +1000, Fl: +1000,
   Hi: -1000, Ic:     0, In: -1000, Lo: +1000, Na:     0,
-  Ni: +1000, Po: +1000, Ri: +1000, Va:     0, Wa:     0,
+  Ni: +1000, Po: -1000, Ri: +1000, Va: +1000, Wa:     0,
 }
 
 // Starport cost modifier (source world)
@@ -203,7 +203,7 @@ export const CT7_MARKET_PRICE_TABLE = {
   De: { De:+1, Na:+1 },
   Fl: { Fl:+1, In:+1 },
   Hi: { Hi:+1, Lo:+1, Ri:+1 },
-  Ic: { Ic:+1 },
+  Ic: { In:+1 },
   In: { Ag:+1, As:+1, De:+1, Fl:+1, Hi:+1, In:+1, Ni:+1, Po:+1, Ri:+1, Va:+1, Wa:+1 },
   Lo: { In:+1, Ri:+1 },
   Na: { As:+1, De:+1, Va:+1 },
@@ -217,12 +217,12 @@ export const CT7_MARKET_PRICE_TABLE = {
 // CT Book 7 Alien Trade Effects (source race → market race → Cr1,000 DM)
 // Positive = goods from row race sell better in column race markets.
 export const CT7_ALIEN_EFFECTS = {
-  As: { Hv: -2, Va: +1 },
+  As: { Kk: -2, Va: +1 },
   Dr: { Zh: +2 },
-  Hv: { As: +1, Zh: -2 },
+  Hv: { As: +1, Im: -2 },
   Im: { Zh: -1 },
   Kk: { Va: -2 },
-  So: { Im: +1, As: -1 },
-  Va: { Im: -4 },
-  Zh: { As: +1, Im: +1, Hv: -2 },
+  So: { Hv: +1, Im: -1 },
+  Va: { Kk: -4 },
+  Zh: { As: +1, Dr: +1, Im: -2 },
 }

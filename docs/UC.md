@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0  
+**Version:** 0.11.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -255,28 +255,30 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-10: Sell Cargo
 
 **Actor:** Player
-**Related Requirements:** FR-601, FR-602, FR-603, FR-604, FR-605
+**Related Requirements:** FR-601, FR-602, FR-603, FR-604, FR-605, FR-606
 **Trigger:** Player selects a held cargo item at the current world and opens Sell
 
 **Preconditions:**
 - Player's character has `can_trade`
 - Player holds the cargo item being sold
+- CT7 only: the cargo lot's purchase-world data has resolved (briefly unavailable — shown as "—", sell disabled — right after the lot appears in the hold at a newly-viewed market)
 
 **Main Flow:**
 1. Player selects a cargo row and opens the Sell confirmation
-2. System displays the sale price (for CT7/MgT2022, already reflecting this player's own Broker skill — a different player with a different skill level would see a different number for the same cargo) and profit/loss versus purchase price
+2. System displays the sale price — for CT7, computed from BOTH this specific lot's purchase-world trade codes/Tech Level and the current market's (Book 7's real mechanic; two lots of the same good bought at different worlds sell for different prices at the same market), further reflecting this player's own Broker skill; for MgT2022, reflecting this player's own Broker skill against a single-world price roll — and profit/loss versus purchase price
 3. Player confirms the sale
-4. System deletes the cargo row, credits the ship account (for CT7, net of the Broker commission — see A2), writes a `sell` transaction, and inserts a trade record
-5. System displays a profit flash notification (net of any Broker commission)
+4. System deletes the cargo row, credits the ship account (for CT7, plus any Broker self-service gain — see A2), writes a `sell` transaction, and inserts a trade record
+5. System displays a profit flash notification (inclusive of any Broker self-service gain)
 
 **Alternate / Exception Flows:**
 - **A1 — Player lacks `can_trade`:** Sell action is not available
-- **A2 — CT7 campaign, player has a Broker skill:** A commission (5% × skill × sale value, capped at skill 4) is deducted from proceeds and recorded as a separate fee transaction, distinct from the per-ton sale price itself
+- **A2 — CT7 campaign, player has a Broker skill:** The player nets half the standard brokerage fee (5% × skill × sale value, capped at skill 4) as pure profit, added to proceeds and recorded as a separate income transaction, distinct from the per-ton sale price itself — this app has no NPC-hiring flow, so only the self-service case ever applies
+- **A3 — CT7 campaign, cargo lot's purchase world hasn't resolved yet:** Sale price shown as unavailable; Sell action disabled until it resolves (typically immediate)
 
 **Postconditions:**
 - Cargo row removed
-- Ship credits increased by the sale price, less any CT7 Broker commission
-- A `sell` transaction (and, for CT7 with a Broker commission, a `fee` transaction) and a trade record are recorded
+- Ship credits increased by the sale price, plus any CT7 Broker self-service gain
+- A `sell` transaction (and, for CT7 with a Broker gain, a `broker_commission` transaction) and a trade record are recorded
 
 ---
 

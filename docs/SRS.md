@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.10.0  
+**Version:** 0.11.0  
 **Status:** Active development
 
 ---
@@ -97,7 +97,8 @@
 | FR-602 | The sell confirmation shall display the sale price, profit/loss versus purchase price, and require explicit confirmation |
 | FR-603 | A successful sale shall delete the cargo row, credit the ship's account, insert a transaction record, and insert a trade record |
 | FR-604 | Profit shall be displayed as a flash notification after a successful sale |
-| FR-605 | For CT7 campaigns, a Broker-skill-based commission (5% × skill × total sale value, skill capped at 4) shall be deducted from sale proceeds at the moment of sale — paid regardless of profit or loss — and recorded as its own fee transaction, distinct from the per-ton sale price (which already carries the Broker DM bonus). MgT2022 has no equivalent separate commission; its Broker benefit is entirely inside the roll/price itself |
+| FR-605 | For CT7 campaigns, a player-character selling cargo using their own Broker skill shall receive half of the standard brokerage fee (5% × skill × total sale value, skill capped at 4) as a net gain, added to sale proceeds at the moment of sale, and recorded as its own income transaction, distinct from the per-ton sale price (which already carries the Broker DM bonus) — this app has no NPC-hiring flow, under which the full fee would instead be paid out; only the self-service case applies. MgT2022 has no equivalent separate commission; its Broker benefit is entirely inside the roll/price itself |
+| FR-606 | For CT7 campaigns, the sale price of a specific owned cargo lot shall depend on the trade codes and Tech Level of BOTH the world the lot was purchased at and the world it is being sold at (Book 7's Cost of Goods/Market Price mechanic), including a Tech-Level-delta price adjustment that applies in both directions (advantageous when the source is higher-tech than the market, disadvantageous otherwise, floored at zero when the disadvantage reaches 100%) — two lots of the same good bought at different worlds shall generally sell for different prices at the same market/tick |
 
 ### 2.7 Route Analysis
 

@@ -25,6 +25,7 @@ import {
   techFromUWP as ct7TechFromUWP,
   costOfGoods,
   marketBasePrice,
+  tlAdjustment,
   actualValueMultiplier,
   actualPrice,
   rollQty,
@@ -439,6 +440,57 @@ export function ct7PlayerSalePrice({ campaignId, world, tick, goodDie, activeEve
   const saleRoll       = d6(rng) + d6(rng) + saleDM + brokerDM(brokerSkill)
   const salePriceVal   = actualPrice(marketBasePrice(codes, codes), saleRoll)
   const { salePrice }  = applyEventMods(0, salePriceVal, goodDie, {}, sellMods)
+
+  return Math.max(1, salePrice)
+}
+
+/**
+ * Compute the real sale price for a SPECIFIC owned CT7 cargo lot, at a
+ * specific market world/tick. Unlike `ct7PlayerSalePrice` above (which
+ * self-references the same world as both source and market — a reasonable
+ * stand-in for "what would this good generically be worth here," used by
+ * the ambient MarketTable listing where no particular lot is in play),
+ * this is Book 7's actual two-world mechanic: `marketBasePrice` and
+ * `tlAdjustment` both take the LOT's real purchase-world codes/TL as the
+ * source side, not the market world's own codes/TL. A lot bought at a
+ * Rich Agricultural world and one bought at a Poor Industrial world sell
+ * for genuinely different prices at the same market, same tick.
+ *
+ * The "market luck" dice (the 2D6 sale roll) are drawn from the same seed
+ * as the shared baseline (`${campaignId}:${marketWorld.Hex}:${goodDie}:${tick}:v1`)
+ * — that roll represents conditions at THIS market, independent of any
+ * specific lot's origin, so every lot of the same good sold at the same
+ * market/tick shares the same underlying roll, just a different base price
+ * feeding into it.
+ *
+ * @param {object} opts.marketWorld  — world object {Hex, UWP, Remarks, ...} where the sale happens
+ * @param {object} opts.sourceWorld  — world object {UWP, Remarks, ...} where the lot was purchased
+ * @param {number} opts.tick
+ * @param {string} opts.goodDie
+ * @param {object[]} [opts.activeEvents]
+ * @param {number} [opts.brokerSkill]
+ * @returns {number | null} null if goodDie or sourceWorld is unknown
+ */
+export function ct7CargoLotSalePrice({ campaignId, marketWorld, sourceWorld, tick, goodDie, activeEvents = [], brokerSkill = 0 }) {
+  const good = CT2_TRADE_GOODS.find(g => g.die === goodDie)
+  if (!good || !sourceWorld) return null
+
+  const marketCodes = ct7ParseTradeCodes(marketWorld.Remarks || '')
+  const sourceCodes  = ct7ParseTradeCodes(sourceWorld.Remarks || '')
+  const marketTL     = ct7TechFromUWP(marketWorld.UWP || '')
+  const sourceTL     = ct7TechFromUWP(sourceWorld.UWP || '')
+
+  const saleDM = sumCT2DMs(good.resaleDMs, marketCodes)
+  const { sellMods } = buildEventMods(activeEvents)
+
+  const rng = makeRng(`${campaignId}:${marketWorld.Hex}:${goodDie}:${tick}:v1`)
+  d6(rng); d6(rng) // discard the purchase roll's 2 dice — must match generateCT7Snapshot's draw order
+
+  const saleRoll     = d6(rng) + d6(rng) + saleDM + brokerDM(brokerSkill)
+  const marketBase   = marketBasePrice(sourceCodes, marketCodes)
+  const tlAdjusted   = tlAdjustment(sourceTL, marketTL, marketBase)
+  const salePriceVal = actualPrice(tlAdjusted, saleRoll)
+  const { salePrice } = applyEventMods(0, salePriceVal, goodDie, {}, sellMods)
 
   return Math.max(1, salePrice)
 }
