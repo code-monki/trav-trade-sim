@@ -52,36 +52,57 @@
               </div>
             </div>
 
-            <div class="form-row two-col">
-              <div>
-                <label>Lot Tonnage</label>
-                <div class="lot-tonnage">{{ lotTons }}t</div>
+            <!-- MgT2022: a lot's tonnage is rolled, not chosen, and rate scales with distance -->
+            <template v-if="tradeRules === 'MgT2022'">
+              <div class="form-row two-col">
+                <div>
+                  <label>Lot Tonnage</label>
+                  <div class="lot-tonnage">{{ lotTons }}t</div>
+                </div>
+                <div>
+                  <label for="freight-parsecs-input">Parsecs</label>
+                  <input id="freight-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
+                         class="parsec-input" />
+                </div>
               </div>
-              <div>
-                <label for="freight-parsecs-input">Parsecs</label>
-                <input id="freight-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
-                       class="parsec-input" />
-              </div>
-            </div>
-            <p class="hint">
-              A {{ LOT_SIZE_LABELS[form.lotSize] }} lot is {{ MGT2022_FREIGHT_LOT_SIZE_DICE[form.lotSize] }} tons,
-              rolled once per lot size/tick — lots can't be split or resized.
-            </p>
+              <p class="hint">
+                A {{ LOT_SIZE_LABELS[form.lotSize] }} lot is {{ MGT2022_FREIGHT_LOT_SIZE_DICE[form.lotSize] }} tons,
+                rolled once per lot size/tick — lots can't be split or resized.
+              </p>
+              <p class="traffic-note">
+                {{ trafficAvailable }} {{ LOT_SIZE_LABELS[form.lotSize] }} lot(s) available this tick
+              </p>
+            </template>
 
-            <p class="traffic-note">
-              {{ lotsAvailable }} {{ LOT_SIZE_LABELS[form.lotSize] }} lot(s) available this tick
-            </p>
+            <!-- CT7: Major/Minor/Incidental are continuous tonnage pools, not
+                 discrete lots — book any amount up to what's available. -->
+            <template v-else>
+              <p class="traffic-note">
+                {{ trafficAvailable }}t of {{ LOT_SIZE_LABELS[form.lotSize] }} cargo available this tick
+              </p>
+              <div class="form-row">
+                <label for="freight-tons-input">Tons to Book</label>
+                <div class="stepper">
+                  <button type="button" aria-label="Decrease tonnage"
+                          @click="decTons" :disabled="ct7Tons <= 1">−</button>
+                  <input id="freight-tons-input" v-model.number="ct7Tons" type="number" min="1"
+                         :max="ct7MaxTons" class="count-input" />
+                  <button type="button" aria-label="Increase tonnage"
+                          @click="incTons" :disabled="ct7Tons >= ct7MaxTons">+</button>
+                </div>
+              </div>
+            </template>
 
             <!-- Charge preview -->
-            <div class="fare-preview" v-if="lotTons > 0">
+            <div class="fare-preview" v-if="effectiveTons > 0">
               <span class="fare-label">Charge</span>
               <span class="fare-amount">
-                {{ lotTons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
+                {{ effectiveTons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
                 = <strong>Cr{{ charge.toLocaleString() }}</strong>
               </span>
             </div>
 
-            <p class="hint">
+            <p v-if="tradeRules === 'MgT2022'" class="hint">
               Due by tick {{ dueTick }} — late delivery incurs a penalty (1D+4)×10% deducted from the charge.
             </p>
 
@@ -110,7 +131,7 @@ import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
 import { useMapStore }   from '../stores/map.js'
 import { freightRate, freightCharge } from '../lib/trade-engine-mgt2022.js'
-import { rollQty } from '../lib/trade-engine-ct7.js'
+import { rollQty, ct7FreightCharge, CT7_FREIGHT_RATE_PER_TON } from '../lib/trade-engine-ct7.js'
 import { makeRng } from '../lib/market-tick.js'
 import { MGT2022_FREIGHT_LOT_SIZE_DICE } from '../lib/traveller-data-mgt2022.js'
 import { hexDistance }   from '../utils/hexDistance.js'
@@ -126,8 +147,11 @@ const auth = useAuthStore()
 const tick = useTickStore()
 const map  = useMapStore()
 
+const tradeRules = computed(() => auth.campaign?.trade_rules ?? 'CT7')
+
 const LOT_SIZES = ['major', 'minor', 'incidental']
 const LOT_SIZE_LABELS = { major: 'Major', minor: 'Minor', incidental: 'Incidental' }
+const LOT_COLUMN = { major: 'major_freight_lots', minor: 'minor_freight_lots', incidental: 'incidental_freight_lots' }
 
 const form = ref({ lotSize: 'major', parsecs: 1 })
 const destWorld = ref({ hex: '', name: '', sector: '' })
@@ -141,10 +165,11 @@ watch(() => destWorld.value.hex, (hex) => {
   }
 })
 
-// No ambient "how many freight lots are waiting" number independent of a
-// destination — RAW applies population/starport DMs from *both* worlds
-// plus a distance penalty, so traffic is rolled fresh whenever the
-// destination or distance changes.
+// No ambient "how much freight is waiting" number independent of a
+// destination — MgT2022 applies population/starport DMs from *both*
+// worlds plus a distance penalty; CT7 applies population/zone/TL DMs from
+// the destination world (Book 7's own "Cargo Available" table) — so
+// traffic is rolled fresh whenever the destination or distance changes.
 watch(
   () => [destWorld.value.hex, destWorld.value.sector, form.value.parsecs],
   async ([hex, sector, parsecs]) => {
@@ -167,33 +192,54 @@ const successMsg = ref('')
 
 function d6(rng) { return Math.floor(rng() * 6) + 1 }
 
-// A lot's tonnage is rolled, not chosen — "Major = 1Dx10, Minor = 1Dx5,
-// Incidental = 1D" — and can't be split or resized once booked. Seeded so
-// the same lot size/tick/ship/world always shows the same tonnage rather
-// than re-rolling on every render.
+// MgT2022: a lot's tonnage is rolled, not chosen — "Major = 1Dx10, Minor =
+// 1Dx5, Incidental = 1D" — and can't be split or resized once booked.
+// Seeded so the same lot size/tick/ship/world always shows the same
+// tonnage rather than re-rolling on every render.
 const lotTons = computed(() => {
   if (!ship.hasShip || !props.world?.Hex) return 0
   const rng = makeRng(`${auth.campaign?.id}:${props.world.Hex}:${ship.ship.id}:freight-lot:${form.value.lotSize}:${tick.currentTick}:v1`)
   return rollQty(MGT2022_FREIGHT_LOT_SIZE_DICE[form.value.lotSize], [d6(rng)])
 })
 
-// Rate depends only on distance, not lot size, per the corrected MgT2022 rules.
-const ratePerTon = computed(() => freightRate(form.value.parsecs))
-const charge     = computed(() => freightCharge(lotTons.value, form.value.parsecs))
-const dueTick    = computed(() => tick.currentTick + form.value.parsecs)
+// This tick's rolled traffic pool for the selected tier — a LOT count for
+// MgT2022, or TONS for CT7 (Book 7's Major/Minor/Incidental are continuous
+// tonnage pools, not discrete lots).
+const trafficAvailable = computed(() => tick.trafficAvailability?.[LOT_COLUMN[form.value.lotSize]] ?? 0)
 
-const lotsAvailable = computed(() => {
-  const key = { major: 'major_freight_lots', minor: 'minor_freight_lots', incidental: 'incidental_freight_lots' }[form.value.lotSize]
-  return tick.trafficAvailability?.[key] ?? 0
-})
+// CT7: player chooses how much to book, up to whichever is smaller — the
+// pool remaining this tick, or the ship's own free hold space.
+const ct7Tons    = ref(1)
+const ct7MaxTons = computed(() => Math.max(0, Math.min(trafficAvailable.value, ship.cargoAvailable)))
+watch(ct7MaxTons, (max) => { if (ct7Tons.value > max) ct7Tons.value = Math.max(1, max) })
+watch(() => form.value.lotSize, () => { ct7Tons.value = Math.max(1, Math.min(ct7Tons.value, ct7MaxTons.value)) })
+function incTons() { if (ct7Tons.value < ct7MaxTons.value) ct7Tons.value++ }
+function decTons() { if (ct7Tons.value > 1) ct7Tons.value-- }
+
+const effectiveTons = computed(() => tradeRules.value === 'MgT2022' ? lotTons.value : ct7Tons.value)
+
+// MgT2022's rate depends only on distance, not lot size; CT7's is a flat
+// Cr1,000/ton regardless of distance or lot size (Book 7's Ship Revenues table).
+const ratePerTon = computed(() =>
+  tradeRules.value === 'MgT2022' ? freightRate(form.value.parsecs) : CT7_FREIGHT_RATE_PER_TON
+)
+const charge = computed(() =>
+  tradeRules.value === 'MgT2022' ? freightCharge(lotTons.value, form.value.parsecs) : ct7FreightCharge(ct7Tons.value)
+)
+// CT7 has no due-tick/late-delivery-penalty mechanic in Book 7's text.
+const dueTick = computed(() => tick.currentTick + form.value.parsecs)
 
 const canBook = computed(() => {
   if (!ship.hasShip) return false
-  if (lotTons.value < 1) return false
-  if (lotTons.value > ship.cargoAvailable) return false
+  if (effectiveTons.value < 1) return false
+  if (effectiveTons.value > ship.cargoAvailable) return false
   if (!destWorld.value.hex.trim()) return false
   if (!destWorld.value.sector.trim()) return false
-  if (lotsAvailable.value <= 0) return false
+  if (tradeRules.value === 'MgT2022') {
+    if (trafficAvailable.value <= 0) return false
+  } else if (effectiveTons.value > trafficAvailable.value) {
+    return false
+  }
   return true
 })
 
@@ -201,15 +247,20 @@ async function submitBooking() {
   formError.value  = ''
   successMsg.value = ''
 
-  if (lotTons.value > ship.cargoAvailable) {
-    formError.value = `Insufficient cargo space (need ${lotTons.value}t, have ${ship.cargoAvailable}t)`
+  if (effectiveTons.value > ship.cargoAvailable) {
+    formError.value = `Insufficient cargo space (need ${effectiveTons.value}t, have ${ship.cargoAvailable}t)`
     return
   }
-  if (lotsAvailable.value <= 0) {
+  if (tradeRules.value === 'MgT2022' && trafficAvailable.value <= 0) {
     formError.value = `No ${LOT_SIZE_LABELS[form.value.lotSize]} freight lots available this tick`
     return
   }
+  if (tradeRules.value !== 'MgT2022' && effectiveTons.value > trafficAvailable.value) {
+    formError.value = `Only ${trafficAvailable.value}t of ${LOT_SIZE_LABELS[form.value.lotSize]} cargo available this tick`
+    return
+  }
 
+  const isMgT2022 = tradeRules.value === 'MgT2022'
   const result = await ship.bookFreight({
     campaignId:       auth.campaign.id,
     playerId:         auth.player.id,
@@ -219,13 +270,14 @@ async function submitBooking() {
     destWorldHex:     destWorld.value.hex,
     destSector:       destWorld.value.sector,
     destWorldName:    destWorld.value.name,
-    parsecs:          form.value.parsecs,
-    freightTons:      lotTons.value,
+    parsecs:          isMgT2022 ? form.value.parsecs : null,
+    freightTons:      effectiveTons.value,
     freightLotSize:   form.value.lotSize,
     ratePerTon:       ratePerTon.value,
     charge:           charge.value,
-    dueTick:          dueTick.value,
+    dueTick:          isMgT2022 ? dueTick.value : null,
     tick:             tick.currentTick,
+    trafficConsumed:  isMgT2022 ? undefined : effectiveTons.value,
   })
 
   if (!result.ok) {
@@ -233,8 +285,9 @@ async function submitBooking() {
     return
   }
 
-  successMsg.value = `Booked ${lotTons.value}t ${LOT_SIZE_LABELS[form.value.lotSize]} freight — Cr${charge.value.toLocaleString()} collected`
+  successMsg.value = `Booked ${effectiveTons.value}t ${LOT_SIZE_LABELS[form.value.lotSize]} freight — Cr${charge.value.toLocaleString()} collected`
   form.value.parsecs = 1
+  ct7Tons.value      = 1
   destWorld.value    = { hex: '', name: '', sector: '' }
   setTimeout(() => { successMsg.value = '' }, 3500)
 }
@@ -307,6 +360,18 @@ async function submitBooking() {
   width: fit-content;
 }
 .parsec-input { width: 60px; }
+
+.stepper { display: flex; align-items: center; gap: 0.25rem; }
+.stepper button {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  width: 28px; height: 28px;
+  font-size: 1rem; cursor: pointer;
+}
+.stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
+.count-input { width: 52px; text-align: center; }
 
 .fare-preview {
   display: flex;

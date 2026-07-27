@@ -107,7 +107,7 @@
         Mail contracts are automatically paid when the ship arrives at the destination world.
       </p>
 
-      <!-- ── Freight (MgT2022 only) ─────────────────────────────────────── -->
+      <!-- ── Freight (MgT2022/CT7 only) ─────────────────────────────────── -->
       <template v-if="ship.freight.length">
         <div class="section-divider"></div>
         <div class="section-header">Freight in Transit</div>

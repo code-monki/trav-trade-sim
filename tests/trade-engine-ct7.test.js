@@ -13,6 +13,13 @@ import {
   brokerSelfServiceGain,
   rollQty,
   tradeResult,
+  rollCT7Availability,
+  ct7PassengerPopulationDM,
+  ct7CargoPopulationDM,
+  ct7PassengerZoneDM,
+  ct7PassengerZoneBlocked,
+  ct7CargoZoneBlocked,
+  ct7TrafficTLDM,
 } from '../src/lib/trade-engine-ct7.js'
 import { CT7_ALIEN_EFFECTS } from '../src/lib/traveller-data.js'
 
@@ -355,6 +362,87 @@ describe('rollQty', () => {
   it('returns 0 for unrecognised expression', () => {
     expect(rollQty('', [])).toBe(0)
     expect(rollQty('bad', [])).toBe(0)
+  })
+})
+
+// ── rollCT7Availability (Book 7 Passengers/Cargo Available tables) ──────────
+
+describe('rollCT7Availability', () => {
+  it("'-' is always 0, regardless of DM, consuming no dice", () => {
+    expect(rollCT7Availability('-', [], 99)).toBe(0)
+  })
+
+  it('flat "XD" sums X dice', () => {
+    expect(rollCT7Availability('3D', [2, 2, 2])).toBe(6)
+  })
+
+  it('flat "XD+N" adds a flat modifier', () => {
+    expect(rollCT7Availability('1D+4', [3])).toBe(7)
+  })
+
+  it('flat "XD-N" subtracts a flat modifier, floored at 0', () => {
+    expect(rollCT7Availability('1D-4', [3])).toBe(0) // 3 - 4 = -1 -> 0
+    expect(rollCT7Availability('1D-2', [5])).toBe(3)
+  })
+
+  it('"XD-YD" rolls two separate dice pools and subtracts, floored at 0', () => {
+    // 2D (rolls[0..1]=3,3 -> 6) - 2D (rolls[2..3]=1,1 -> 2) = 4
+    expect(rollCT7Availability('2D-2D', [3, 3, 1, 1])).toBe(4)
+    // 1D (rolls[0]=2) - 1D (rolls[1]=6) = -4 -> floors at 0
+    expect(rollCT7Availability('1D-1D', [2, 6])).toBe(0)
+  })
+
+  it('applies an additional flat DM on top of the expression result, still floored at 0', () => {
+    expect(rollCT7Availability('3D', [2, 2, 2], 5)).toBe(11)
+    expect(rollCT7Availability('1D', [1], -10)).toBe(0)
+  })
+
+  it('returns 0 for an unrecognised expression', () => {
+    expect(rollCT7Availability('bad', [])).toBe(0)
+  })
+})
+
+describe('CT7 traffic DM helpers', () => {
+  it('ct7PassengerPopulationDM: -3 at pop 4-, +3 at pop 8+, else 0', () => {
+    expect(ct7PassengerPopulationDM('4')).toBe(-3)
+    expect(ct7PassengerPopulationDM('0')).toBe(-3)
+    expect(ct7PassengerPopulationDM('6')).toBe(0)
+    expect(ct7PassengerPopulationDM('8')).toBe(3)
+    expect(ct7PassengerPopulationDM('A')).toBe(3)
+  })
+
+  it('ct7CargoPopulationDM: -3 at pop 4-, +1 at pop 8+, else 0', () => {
+    expect(ct7CargoPopulationDM('4')).toBe(-3)
+    expect(ct7CargoPopulationDM('6')).toBe(0)
+    expect(ct7CargoPopulationDM('8')).toBe(1)
+  })
+
+  it('ct7PassengerZoneDM: Red -12, Amber -6, else 0', () => {
+    expect(ct7PassengerZoneDM('R')).toBe(-12)
+    expect(ct7PassengerZoneDM('A')).toBe(-6)
+    expect(ct7PassengerZoneDM(null)).toBe(0)
+  })
+
+  it('ct7PassengerZoneBlocked: Red blocks Middle/Low but not High', () => {
+    expect(ct7PassengerZoneBlocked('R', 'high')).toBe(false)
+    expect(ct7PassengerZoneBlocked('R', 'middle')).toBe(true)
+    expect(ct7PassengerZoneBlocked('R', 'low')).toBe(true)
+    expect(ct7PassengerZoneBlocked('A', 'middle')).toBe(false)
+  })
+
+  it('ct7CargoZoneBlocked: Red blocks everything, Amber blocks Major only', () => {
+    expect(ct7CargoZoneBlocked('R', 'major')).toBe(true)
+    expect(ct7CargoZoneBlocked('R', 'minor')).toBe(true)
+    expect(ct7CargoZoneBlocked('R', 'incidental')).toBe(true)
+    expect(ct7CargoZoneBlocked('A', 'major')).toBe(true)
+    expect(ct7CargoZoneBlocked('A', 'minor')).toBe(false)
+    expect(ct7CargoZoneBlocked('A', 'incidental')).toBe(false)
+  })
+
+  it('ct7TrafficTLDM: source TL minus market TL', () => {
+    expect(ct7TrafficTLDM('9', '7')).toBe(2)
+    expect(ct7TrafficTLDM('7', '9')).toBe(-2)
+    expect(ct7TrafficTLDM('A', '7')).toBe(3)
   })
 })
 

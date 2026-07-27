@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0
+**Version:** 0.12.0
 
 ---
 
@@ -159,6 +159,18 @@ Covers the MgT2022 pricing/freight/mail/traffic/composition pipeline (`tests/tra
 | UT-630 | `generateWorldSnapshot` (`seekingBlackMarket: true`) | 40 ticks | Never surfaces Exotics (die 66), even when seeking |
 | UT-631 | `generateWorldSnapshot` (`seekingBlackMarket: true`) | any world | Still includes all 6 Common Goods, same as the normal listing |
 | UT-632 | `generateWorldSnapshot` (`seekingBlackMarket: true` vs `false`) | same world/tick | Black-market composition is deterministic on replay, and differs from the normal composition (independent seed) |
+| UT-633 | `rollCT7Availability` | `'-'` | `0`, consumes no dice regardless of DM |
+| UT-634 | `rollCT7Availability` | `'1D-4'`, roll=[3] | `0` (3-4=-1, floored) |
+| UT-635 | `rollCT7Availability` | `'2D-2D'`, rolls=[3,3,1,1] | `4` — two SEPARATE dice pools (2D=6, 2D=2), subtracted, not a flat "-N" |
+| UT-636 | `rollCT7Availability` | `'1D-1D'`, rolls=[2,6] | `0` (2-6=-4, floored) |
+| UT-637 | `rollCT7Availability` | `'3D'`, rolls=[2,2,2], dm=5 | `11` — an additional flat DM applies on top of the expression's own result |
+| UT-638 | `ct7PassengerPopulationDM` / `ct7CargoPopulationDM` | pop 4-, 6, 8+ | -3/0/+3 (Passengers), -3/0/+1 (Freight) — destination-world DM, per Book 7's "DMs for Market World" |
+| UT-639 | `ct7PassengerZoneBlocked` / `ct7CargoZoneBlocked` | Red destination | Blocks Middle/Low passengers (High still rolls) and ALL freight tiers outright, regardless of DM |
+| UT-640 | `ct7CargoZoneBlocked` | Amber destination | Blocks Major freight only; Minor/Incidental unaffected |
+| UT-641 | `ct7TrafficTLDM` | sourceTL=9, marketTL=7 | `2` — same source-minus-market convention as `tlAdjustment` |
+| UT-642 | `generateCT7TrafficSnapshot` | same inputs twice, incl. `shipId` and route | Identical row (deterministic); basic_passages/mail_containers always `0` (not modeled for CT7) |
+| UT-643 | `generateCT7TrafficSnapshot` | same origin/tick, two different destinations | Independent results — route-aware, matching MgT2022's own model |
+| UT-644 | `generateCT7TrafficSnapshot` | `crewStewardMax`/`crewAdminMax`/`crewStreetwiseMax`/`crewLiaisonMax` boosted vs 0, 40 ticks each | Each skill raises only its own tier (High/Middle/Low/Minor respectively) on average, with every other tier's summed total byte-identical — confirms no cross-tier contamination (each tier draws a fixed 8-dice batch per evaluation regardless of DM, so there's nothing to isolate via separate streams beyond the existing Passenger/Freight split) |
 
 ### 3.4 `src/utils/hexDistance.js`
 
@@ -583,6 +595,16 @@ Every subsection below fully catalogues its component's actual test file (`tests
 4. As a player with Broker skill, sell a lot; verify a separate "Broker Commission" line appears in the Reports > Ledger as **income**, not a deduction (previously modeled as a fee subtracted from proceeds) — check the amount is roughly half of `5% × skill × sale value`
 5. As a player with 0 Broker skill, sell a lot; verify no Broker Commission line appears and net profit matches the sale price exactly
 6. Spot-check a Poor-world cargo lot's purchase cost against the Cost of Goods table (Po is a *discount*, not a premium) and a Vacuum-world lot (Va is a premium) — verify against `docs/DD.md`'s Cost of Goods table if uncertain
+
+### MTS-20: CT7 Passenger/Freight Availability
+1. Create a CT7 campaign; open Port → Passengers with no destination picked; verify no availability count is shown and the rest of the form is hidden (same destination-first gating as MgT2022)
+2. Pick a destination; verify a "rolling…" state then a specific High/Middle/Low count appears. Pick a *different* destination and verify the counts change
+3. Pick a Red Zone destination; verify Middle and Low show 0 available (blocked outright) while High can still show a nonzero count; pick an Amber Zone destination and verify Middle/Low are unaffected
+4. Verify a Port → Freight tab now appears for CT7 campaigns (previously MgT2022 only); pick a destination, then a lot size (Major/Minor/Incidental); verify a specific tonnage figure is shown as available, and a tonnage stepper (not a fixed rolled value) lets you choose how much to book, up to the smaller of that availability or your free cargo space
+5. Book some tonnage; verify the charge is exactly `tons × Cr1,000` regardless of distance, no "Parsecs" field is shown, and no due-tick/late-penalty note appears anywhere in the form
+6. Advance the tick past when the freight would have been "due" under MgT2022's rules and deliver it; verify no late-delivery penalty is ever deducted for a CT7 freight lot
+7. Book the last available ton of a tier; verify a second booking attempt for more of that same tier/route/tick is rejected with the remaining tonnage reflected accurately (not off-by-lot the way a discrete-lot model would be)
+8. With a crew member holding Admin, Steward, Streetwise, or Liaison skill, verify their respective passenger tier (Middle/High/Low) or Minor cargo tends to show higher availability than an unskilled crew, across a few tick advances
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

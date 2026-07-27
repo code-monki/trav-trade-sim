@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0
+**Version:** 0.12.0
 
 ---
 
@@ -56,7 +56,7 @@ src/
 │   ├── LoginView.vue         Sign In / Join / New Campaign / Reset PIN
 │   ├── MapView.vue           Main dashboard — two-level tabs:
 │   │                           TOP_TABS: overview / port / ship / events / jump
-│   │                           PORT_TABS: market / passengers / services
+│   │                           PORT_TABS: market / passengers / mail / services / freight (MgT2022, CT7)
 │   │                           SHIP_TABS: cargo / aboard / reports / organizations
 │   └── RefereeView.vue       Campaign management, five tabs: Ships (incl. Templates,
 │                             Debts, Ownership sub-panels) / Players / Organizations
@@ -96,6 +96,7 @@ src/
 │   ├── trade-engine-mgt2022.js   MgT2022 price/freight/mail/traffic formulas (pure functions)
 │   ├── market-tick.js        Snapshot generation dispatch (CT7/T5/MgT2022), seeded RNG, calendar helpers
 │   ├── traffic-tick.js       MgT2022-only passenger/freight/mail traffic-availability roll generation
+│   ├── ct7-traffic-tick.js   CT7-only passenger/freight traffic-availability roll generation (§7e)
 │   ├── market-events.js      Event table, probability engine, active event filter
 │   ├── passengers.js         passengerFare, passageCapacityNeeded, availableFuelTypes,
 │   │                         jumpFuelTons, fuelCost, mailPayment (all pure functions)
@@ -629,3 +630,81 @@ Market" one-click button (with an attempts-so-far hint, mirroring
 `FindSupplierPanel.vue`) until success, then a toggle switching the
 table's row source between `displaySnapshots` and
 `displayBlackMarketSnapshots`.
+
+## 7e. CT7 Passenger/Freight Availability
+
+Distinct from §7c's MgT2022 mechanic — same underlying motivation (the
+user's own hypothesis that CT had an unmodeled destination-DM traffic gap,
+confirmed correct on inspection), but Book 7's own "Passengers"/"Cargo"
+tables have a genuinely different shape: the SOURCE world's Population
+digit picks a dice EXPRESSION directly (no intermediate 2D6+DM → dice-
+count lookup, unlike MgT2022), and flat DMs from the destination world
+apply on top of the rolled sum. No Basic passage tier and no Mail
+availability roll exist in this text — Mail stays a flat Cr25,000
+payment, unaffected.
+
+```
+# Passengers — own stream. Population row picked directly (not via 2D+DM).
+row = CT7_PASSENGER_AVAILABILITY[originPopDigit]   # {high, middle, low} dice expressions
+for tier in {high, middle, low}:
+  if ct7PassengerZoneBlocked(destZone, tier): count = 0; continue   # Red blocks Middle/Low
+  dm = ct7PassengerPopulationDM(destPopDigit) + ct7PassengerZoneDM(destZone)
+     + ct7TrafficTLDM(sourceTL, destTL) + crewSkillDM[tier]   # Steward/Admin/Streetwise
+  count = rollCT7Availability(row[tier], rollDiceBatch(passengerRng, 8), dm)
+
+# Freight — own stream, same dice-batch-per-tier discipline.
+row = CT7_CARGO_AVAILABILITY[originPopDigit]   # {major, minor, incidental}
+for tier in {major, minor, incidental}:
+  if ct7CargoZoneBlocked(destZone, tier): count = 0; continue   # Red blocks all, Amber blocks Major
+  dm = ct7CargoPopulationDM(destPopDigit) + ct7TrafficTLDM(sourceTL, destTL) + crewLiaisonMax (Minor only)
+  count = rollCT7Availability(row[tier], rollDiceBatch(freightRng, 8), dm)
+```
+
+`rollCT7Availability(expr, rolls, dm)` handles two Book 7 dice notations:
+flat `"XD+N"`/`"XD-N"` (sum X dice, add/subtract a flat modifier) and
+`"XD-YD"` (sum X dice, sum a SEPARATE Y dice, subtract the second from the
+first) — both floor at 0. Each tier evaluation draws a FIXED 8-dice batch
+from its stream regardless of which dice the expression actually
+consumes or what DM applies — this makes the RNG-isolation discipline
+that MgT2022's traffic mechanic needed dedicated per-tier streams for
+(§7c) automatic here: since dice consumption per tier never varies, one
+tier's DM can never shift where the next tier's draws start from, even
+within the same stream. Passengers and Freight still use separate
+streams from each other, same reasoning as always.
+
+**Destination DM values**: Population 4- is DM-3 for both Passengers and
+Freight; Population 8+ is DM+3 (Passengers) or DM+1 (Freight) — Book 7's
+own asymmetry, distinct from MgT2022's. Red Zone: DM-12 and Middle/Low
+passengers blocked outright (High still rolls); all Freight blocked
+outright. Amber Zone: DM-6 for Passengers (no block); Major Freight
+blocked, Minor/Incidental unaffected. Tech Level: `sourceTL - marketTL`
+(`ct7TrafficTLDM`) — the rulebook text doesn't give a worked example to
+pin the sign down, so this mirrors the one Book 7 mechanic that does
+(§7, `tlAdjustment`) rather than guessing independently.
+
+**Crew skill DMs** reuse `crew_steward_max`/`crew_streetwise_max` (already
+computed for MgT2022) and add two new aggregates,
+`crew_admin_max`/`crew_liaison_max`, at the same ship-load `MAX(...)`
+query site. Steward → High passengers, Admin → Middle, Streetwise → Low,
+Liaison → Minor cargo (Major/Incidental have no skill DM per the text).
+
+**Freight has no discrete "lot" concept.** Book 7's Major/Minor/Incidental
+are continuous tonnage *pools* — "how much cargo of this size class exists
+to be booked," not "how many indivisible lots." `FreightPanel.vue` shows a
+tonnage stepper (bounded by whichever is smaller: the pool remaining this
+tick, or the ship's free cargo space) instead of MgT2022's fixed rolled
+lot size. Rate is a flat Cr1,000/ton (`CT7_FREIGHT_RATE_PER_TON`) regardless
+of distance or tier — Book 7's Ship Revenues table, no per-parsec scaling.
+Book-freight's traffic-availability decrement (`worker/src/routes/ships.js`)
+now takes a `traffic_consumed` amount instead of a hardcoded `1`: MgT2022
+still sends nothing (defaults to 1 lot), CT7 sends the actual tonnage
+booked. No due-tick or late-delivery-penalty mechanic exists in this
+text, so CT7 bookings pass `due_tick: null` — `deliver-freight`'s existing
+`isLate` check already treats a null due_tick as never late, so no worker
+change was needed there.
+
+`PassengersPanel.vue`/`FreightPanel.vue` gate on `tradeRules === 'MgT2022'
+|| tradeRules === 'CT7'` for the shared destination-first flow, branching
+internally on `tradeRules` only where the mechanics actually diverge
+(parsecs field, lot tonnage display, due-tick note). T5 is unaffected —
+still flagged for its own future pass.

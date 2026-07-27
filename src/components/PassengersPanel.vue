@@ -36,10 +36,10 @@
       <section class="booking-section">
         <h3>Book Passengers</h3>
 
-        <!-- MgT2022: destination first — no traffic count exists independent
-             of where the ship is going, so the rest of the form is gated
-             behind having picked one. -->
-        <form v-if="tradeRules === 'MgT2022'" class="booking-form" @submit.prevent="submitBooking">
+        <!-- MgT2022/CT7: destination first — no traffic count exists
+             independent of where the ship is going, so the rest of the
+             form is gated behind having picked one. -->
+        <form v-if="tradeRules === 'MgT2022' || tradeRules === 'CT7'" class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
             <label>Destination World</label>
             <WorldPicker
@@ -81,7 +81,7 @@
                           @click="incCount" :disabled="form.count >= maxCount">+</button>
                 </div>
               </div>
-              <div>
+              <div v-if="tradeRules === 'MgT2022'">
                 <label for="passenger-parsecs-input">Parsecs</label>
                 <input id="passenger-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
                        class="parsec-input" />
@@ -112,7 +112,7 @@
           </template>
         </form>
 
-        <!-- CT7/T5: today's order, unchanged — no traffic-availability concept to gate on. -->
+        <!-- T5: today's order, unchanged — no traffic-availability concept to gate on. -->
         <form v-else class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
             <label id="passage-type-label">Passage Type</label>
@@ -227,14 +227,14 @@ watch(() => destWorld.value.hex, (hex) => {
   }
 })
 
-// MgT2022 only — there's no ambient "how many passengers are waiting"
-// number independent of a destination (RAW applies population/starport DMs
-// from *both* worlds plus a distance penalty), so traffic is rolled fresh
-// whenever the destination or distance changes.
+// MgT2022/CT7 only — there's no ambient "how many passengers are waiting"
+// number independent of a destination (both rulesets apply DMs from the
+// destination world, MgT2022 also a distance penalty), so traffic is
+// rolled fresh whenever the destination or distance changes.
 watch(
   () => [tradeRules.value, destWorld.value.hex, destWorld.value.sector, form.value.parsecs],
   async ([rules, hex, sector, parsecs]) => {
-    if (rules !== 'MgT2022' || !hex || !sector) { tick.trafficAvailability = null; return }
+    if ((rules !== 'MgT2022' && rules !== 'CT7') || !hex || !sector) { tick.trafficAvailability = null; return }
     trafficLoading.value = true
     try {
       const worlds  = await map.fetchWorldsForSector(sector)
@@ -261,16 +261,17 @@ const passageTypes = computed(() =>
 
 const trafficLabel = computed(() => `${PASSAGE_TYPE_LABELS[form.value.passageType]} traffic`)
 
-// MgT2022 only — the current tick's rolled availability for the selected
-// tier (see traffic-tick.js). Always Infinity for CT7/T5 (unlimited, as today).
+// MgT2022/CT7 only — the current tick's rolled availability for the
+// selected tier (see traffic-tick.js / ct7-traffic-tick.js). Always
+// Infinity for T5 (unlimited, as today).
 const trafficAvailableForType = computed(() => {
-  if (tradeRules.value !== 'MgT2022' || !tick.trafficAvailability) return '∞'
+  if ((tradeRules.value !== 'MgT2022' && tradeRules.value !== 'CT7') || !tick.trafficAvailability) return '∞'
   const key = { high: 'high_passages', middle: 'middle_passages', basic: 'basic_passages', low: 'low_passages' }[form.value.passageType]
   return tick.trafficAvailability[key] ?? 0
 })
 
 const trafficCapForType = computed(() => {
-  if (tradeRules.value !== 'MgT2022' || !tick.trafficAvailability) return Infinity
+  if ((tradeRules.value !== 'MgT2022' && tradeRules.value !== 'CT7') || !tick.trafficAvailability) return Infinity
   const key = { high: 'high_passages', middle: 'middle_passages', basic: 'basic_passages', low: 'low_passages' }[form.value.passageType]
   return tick.trafficAvailability[key] ?? 0
 })

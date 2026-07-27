@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0  
+**Version:** 0.12.0  
 **Status:** Active development
 
 ---
@@ -249,7 +249,7 @@
 | FR-2005 | The referee or player shall be able to cancel a pending freight obligation for a full refund via a "refund freight" action, mirroring passenger refunds |
 | FR-2006 | The system shall generate one deterministic, seeded Traffic Availability roll per **(ship, origin world, destination world, tick)** — not per world/tick alone, since the roll depends on the ship's own crew (FR-2009) and, per FR-2011, on the chosen destination — covering passenger counts per tier, freight lots per size, and mail container count via the rulebook's own Passenger/Freight Traffic tables (2D6+DM → dice-formula → roll and sum), generated automatically with no referee action required once a destination is chosen, following the same precedent as goods-quantity availability |
 | FR-2007 | Passenger, freight, and mail booking forms shall require a destination to be chosen before displaying any availability count, and shall enforce the resulting count for the selected tier/lot size, capping bookings at that count and decrementing it as bookings are made (atomically, so two concurrent bookings cannot both claim the same seat/lot/container) |
-| FR-2008 | Traffic-availability data shall be scoped to MgT2022 campaigns only; CT7/T5 campaigns shall remain unlimited-subject-to-ship-capacity, unaffected by this feature |
+| FR-2008 | This section's Traffic Availability mechanic (2D6+DM dice-formula tables, destination-DM shape) is MgT2022-specific; CT7 has its own distinct Passenger/Freight Availability mechanic (§2.22); T5 campaigns remain unlimited-subject-to-ship-capacity, unaffected by either |
 | FR-2009 | The Traffic Availability roll shall incorporate the ship's own current crew: the highest `Steward` skill level (Passenger traffic only, ambient — no check required) and, separately, the Effect of an automatic Average (8+) check (2D6 + skill − 8, can be negative) using whichever crew member holds the single highest Broker/Carouse/Streetwise skill (Passengers) or Broker/Streetwise skill (Freight); a ship with no qualifying crew receives a DM of 0 for that term, not a penalty |
 | FR-2010 | Mail's own DM shall be derived from the banded Freight Traffic DM (excluding Freight's lot-size-tier adjustment) plus: +2 if the ship is armed, −2 if the world's Tech Level is 5 or less, the highest Naval-or-Scout `rank` among current crew, and the highest `social_standing` characteristic's DM among current crew |
 | FR-2011 | The Passenger and Freight Traffic rolls shall apply population and starport DMs from **both** the origin and destination world, plus a distance penalty of DM−1 for each parsec of the route beyond the first; Freight's Tech Level and Zone DMs remain origin-only |
@@ -261,6 +261,17 @@
 | FR-2101 | The system shall offer a ship-wide "Seek Black Market" one-click check (Average 8+ target: 2D6 + the highest Streetwise skill among current crew + a starport DM, minus DM-1 per prior attempt this world/month), tracked per `(ship, world, sector, month)`; success shall unlock black-market access for the whole ship's crew for the rest of the game-month, not just the player who attempted it |
 | FR-2102 | Once unlocked, the market view shall offer a toggle between the normal goods listing and a black-market listing for the same world/tick; the black-market listing's population-code "extra" draws shall be forced into the illegal die range (61-66, excluding Exotics at 66) rather than drawn from the full die range |
 | FR-2103 | Black-market goods pricing shall use the same per-player Broker-skill overlay as the normal listing (FR-412) |
+
+### 2.22 CT7 Passenger/Freight Availability
+
+| ID | Requirement |
+|----|------------|
+| FR-2201 | For CT7 campaigns, Passenger and Freight booking forms shall require a destination to be chosen before displaying any availability, gated the same way as MgT2022 (FR-2007) |
+| FR-2202 | The system shall generate one deterministic, seeded availability roll per (ship, origin world, destination world, tick) using Book 7's own "Passengers/Cargo Available at Source World" dice-expression tables, indexed directly by the origin world's Population digit (not via an intermediate 2D6+DM lookup, unlike FR-2006) |
+| FR-2203 | The roll shall apply flat DMs from the destination world: Population 4- is -3 (Passengers) or -3 (Freight), Population 8+ is +3 (Passengers) or +1 (Freight); a Red Zone destination applies DM-12 to and blocks Middle/Low passengers outright (High still rolls) and blocks all Freight tiers outright; an Amber Zone destination applies DM-6 to Passengers (no block) and blocks Major Freight only; the destination's Tech Level minus the origin's is added as a further DM (same direction convention as FR-606's `tlAdjustment`) |
+| FR-2204 | The roll shall incorporate the ship's own current crew as flat DMs: the highest Steward skill for High passengers, the highest Admin skill for Middle passengers, the highest Streetwise skill for Low passengers, and the highest Liaison skill for Minor cargo; a ship with no qualifying crew receives a DM of 0 for that term |
+| FR-2205 | CT7's Major/Minor/Incidental Freight tiers represent continuous tonnage pools (not discrete lots, unlike MgT2022's FR-2001): the booking form shall let the player choose any tonnage up to whichever is smaller of the tick's remaining pool or the ship's free cargo space, charged at a flat Cr1,000/ton (Book 7's Ship Revenues table) regardless of distance or tier. CT7 freight has no due-tick or late-delivery-penalty mechanic |
+| FR-2206 | CT7 has no Mail availability roll or Basic passage tier — Mail remains a flat Cr25,000 payment regardless of availability, and passenger tiers stay High/Middle/Low only |
 
 ---
 

@@ -226,3 +226,40 @@ export const CT7_ALIEN_EFFECTS = {
   Va: { Kk: -4 },
   Zh: { As: +1, Dr: +1, Im: -2 },
 }
+
+// ── CT Book 7 — Passengers/Cargo Available at Source World ─────────────────────
+// Source: Classic Traveller Book 7, Merchant Prince — "Passengers"/"Cargo"
+// tables. Dice expressions use two notations: flat "XD+N"/"XD-N" (roll X
+// dice, add/subtract a flat number) and "XD-YD" (roll X dice, roll a
+// SEPARATE Y dice, subtract the second sum from the first, floor at 0) —
+// see rollCT7Availability() in trade-engine-ct7.js. '-' means unavailable
+// at that population regardless of DMs. Indexed by the source world's
+// Population UWP digit (0-9, A — population codes above A clamp to A's row,
+// same convention as the rest of this table).
+export const CT7_PASSENGER_AVAILABILITY = {
+  0: { high: '-',     middle: '-',     low: '-' },
+  1: { high: '-',     middle: '1D-2',  low: '2D-6' },
+  2: { high: '1D-1D', middle: '1D',    low: '2D' },
+  3: { high: '2D-2D', middle: '2D-1D', low: '2D' },
+  4: { high: '2D-1D', middle: '2D-1D', low: '3D-1D' },
+  5: { high: '2D-1D', middle: '3D-2D', low: '3D-1D' },
+  6: { high: '3D-2D', middle: '3D-2D', low: '3D' },
+  7: { high: '3D-2D', middle: '3D-1D', low: '3D' },
+  8: { high: '3D-1D', middle: '3D-1D', low: '4D' },
+  9: { high: '3D-1D', middle: '3D',    low: '5D' },
+  A: { high: '3D',    middle: '4D',    low: '6D' },
+}
+
+export const CT7_CARGO_AVAILABILITY = {
+  0: { major: '-',    minor: '-',    incidental: '-' },
+  1: { major: '1D-4', minor: '1D-4', incidental: '-' },
+  2: { major: '1D-2', minor: '1D-1', incidental: '-' },
+  3: { major: '1D-1', minor: '1D',   incidental: '-' },
+  4: { major: '1D',   minor: '1D+1', incidental: '-' },
+  5: { major: '1D+1', minor: '1D+2', incidental: '-' },
+  6: { major: '1D+2', minor: '1D+3', incidental: '1D-3' },
+  7: { major: '1D+3', minor: '1D+4', incidental: '1D-3' },
+  8: { major: '1D+4', minor: '1D+5', incidental: '1D-2' },
+  9: { major: '1D+5', minor: '1D+6', incidental: '1D-2' },
+  A: { major: '1D+6', minor: '1D+7', incidental: '1D' },
+}

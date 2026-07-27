@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0
+**Version:** 0.12.0
 
 ---
 
@@ -530,7 +530,7 @@ D1 has no stored procedures — business logic that a Postgres-era design would 
 | `campaigns.js` | `/api/campaigns` | Campaign label edit |
 | `calendar.js` | `/api/campaigns/:id/calendar`, `/advance-tick`, `/rollup-repair` | Tick advancement (`requireReferee`), monthly/annual rollup, gap-backfill repair (`requireAuth`) |
 | `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*`, `/traffic`, `/find-supplier`, `/black-market` | Market snapshot lazy generation/backfill (snapshots routes accept `is_black_market`), price history, market events; MgT2022 Find-a-Supplier check (`GET`/`POST /find-supplier`) and Black Market check (`GET`/`POST /black-market`); traffic routes (`GET`/`POST /traffic`) keyed by ship + origin + destination |
-| `ships.js` | `/api/ships` | Player-facing ship view (returns `armed` plus six Traffic Availability crew-DM aggregates incl. `crew_streetwise_max`, HLD §7c/§7d), buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/freight/mail — all three validate cargo/stateroom/low-berth/traffic caps server-side and atomically decrement the matching `traffic_snapshots` row, keyed by destination as well as origin since Phase 6), pay-debt |
+| `ships.js` | `/api/ships` | Player-facing ship view (returns `armed` plus eight Traffic Availability crew-DM aggregates incl. `crew_streetwise_max`/`crew_admin_max`/`crew_liaison_max`, HLD §7c/§7d/§7e), buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_gain_total`, CT7's Broker self-service gain, added to the credited amount and recorded as its own `'broker_commission'` transaction), fuel, obligations (passengers/freight/mail — all three validate cargo/stateroom/low-berth/traffic caps server-side and atomically decrement the matching `traffic_snapshots` row, keyed by destination as well as origin since Phase 6; `book-freight`'s decrement amount is a `traffic_consumed` param, defaulting to 1 lot for MgT2022 or the actual tonnage for CT7's continuous pools, HLD §7e), pay-debt |
 | `referee.js` | `/api/referee` | Ships (incl. `armed`), crew, players (incl. MgT2022 characteristics/background/rank via `PATCH /players/:id`), skills, ship templates (incl. `armed`), ship debts, ship ownership (all `requireReferee`) |
 | `organizations.js` | `/api/organizations` | Organization CRUD, officers, members, equity, dues collection, disbursement, fleet report (all `requireAuth`; mutations additionally gated by `isOfficerOrReferee`) |
 | `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned); player self-service skills and MgT2022 characteristics (`GET`/`PATCH /characteristics`) |
@@ -644,7 +644,7 @@ Anchors reachable-worlds computation to the ship's actual `current_world`/`curre
 | `world` | Object | `null` | Current world (embark metadata) |
 | `sectorName` | String | `''` | |
 
-No emits. Booking form: passage type selector (High/Middle/Low, plus Basic for MgT2022), count stepper, parsecs input (shown for T5 and MgT2022), destination fields, real-time fare preview. Validates stateroom/berth/cargo-tonnage availability and (for MgT2022) the tick's rolled traffic-availability count before submitting; calls `ship.bookPassengers`. For MgT2022, the destination picker is the first field and everything else (passage type, count, traffic count, fare preview, submit) is gated behind having picked one — resolving the destination's full world object via `map.fetchWorldsForSector()` and rolling traffic via `tick.ensureTrafficSnapshot`, since RAW has no "how many passengers, independent of destination" number (HLD §7c). CT7/T5 keep the pre-Phase-6 field order unchanged.
+No emits. Booking form: passage type selector (High/Middle/Low, plus Basic for MgT2022), count stepper, parsecs input (shown for T5 and MgT2022 only — CT7's fare/traffic are both distance-independent), destination fields, real-time fare preview. Validates stateroom/berth/cargo-tonnage availability and (for MgT2022/CT7) the tick's rolled traffic-availability count before submitting; calls `ship.bookPassengers`. For MgT2022 and CT7, the destination picker is the first field and everything else (passage type, count, traffic count, fare preview, submit) is gated behind having picked one — resolving the destination's full world object via `map.fetchWorldsForSector()` and rolling traffic via `tick.ensureTrafficSnapshot`, which dispatches to `traffic-tick.js` (MgT2022) or `ct7-traffic-tick.js` (CT7, HLD §7e) depending on `trade_rules`. T5 keeps the pre-Phase-6 field order unchanged.
 
 ### `ShipServices`
 
@@ -664,14 +664,14 @@ No emits. Fuel purchase only (availability badges, tonnage stepper capped at tan
 
 No emits. Destination fields (already the form's first field, unchanged by Phase 6), T5 parsecs input, payment preview; MgT2022 instead shows the tick's rolled container count (and the cargo tonnage it needs) once the destination resolves and traffic is rolled via `tick.ensureTrafficSnapshot`, gating acceptance on the count being > 0 *and* `ship.cargoAvailable` covering that tonnage — mail containers reserve cargo space the same way Basic Passage does. Embeds `WorldPicker.vue` for destination selection; calls `ship.acceptMailContract` with `mailContainers` so the worker can persist `obligations.mail_containers`.
 
-### `FreightPanel` (MgT2022 only)
+### `FreightPanel` (MgT2022, CT7)
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `world` | Object | `null` | Origin world for the lot |
 | `sectorName` | String | `''` | |
 
-No emits. Destination picker is the first field, gating lot-size selector (Major/Minor/Incidental — tonnage is a seeded roll, `lotTons` computed, HLD §7c, not player-editable since a lot can't be split or resized), parsecs input, traffic-availability count, charge preview, and due-tick note behind having picked one, same reasoning as `PassengersPanel` (HLD §7c). Embeds `WorldPicker.vue`; calls `ship.bookFreight`.
+No emits. Destination picker is the first field, gating lot-size selector (Major/Minor/Incidental) and the rest of the form behind having picked one, same reasoning as `PassengersPanel`. Diverges internally by `trade_rules` past that point: **MgT2022** — tonnage is a seeded roll (`lotTons` computed, HLD §7c, not player-editable since a lot can't be split or resized), rate scales per-parsec, a due-tick note warns of the late-delivery penalty. **CT7** (HLD §7e) — Major/Minor/Incidental are continuous tonnage pools, not discrete lots, so a tonnage stepper (`ct7Tons`, capped at `ct7MaxTons` — whichever is smaller of the pool remaining or the ship's free cargo space) lets the player choose how much to book; rate is a flat `CT7_FREIGHT_RATE_PER_TON` (Cr1,000/ton) regardless of distance; no due-tick or late-penalty note, since Book 7 has no such mechanic (`dueTick`/`parsecs` sent as `null` to `ship.bookFreight`). Embeds `WorldPicker.vue`; calls `ship.bookFreight` with `trafficConsumed` set to the booked tonnage for CT7 (MgT2022 omits it, defaulting server-side to 1 lot).
 
 ### `AboardPanel`
 No props, no emits. Ship's "Aboard" sub-tab — composes `PassengerManifest` and `ContractsPanel` under one view (occupancy + in-transit passengers, and in-transit mail contracts).
@@ -816,7 +816,8 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `stateroomsTotal`, `crewStateroomsUsed`, `stateroomsUsed`, `stateroomsAvailable` | |
 | `lowBerthsTotal`, `lowBerthsUsed`, `lowBerthsAvailable` | |
 | `crewStewardMax`, `crewPassengerCheckMax`, `crewFreightCheckMax`, `crewNavalScoutRankMax`, `crewSocialStandingMax`, `shipArmed` | MgT2022 Traffic Availability crew DMs (HLD §7c) — thin passthroughs onto the ship-load route's own `MAX(...)` aggregate query results, mirroring `crewStateroomsUsed`'s existing pattern |
-| `crewStreetwiseMax` | MgT2022 Black Market check DM (HLD §7d) — highest Streetwise skill among current crew, kept separate from `crewPassengerCheckMax`'s Broker/Carouse/Streetwise pool since Black Market specifically wants Streetwise alone |
+| `crewStreetwiseMax` | MgT2022 Black Market check DM (HLD §7d) — highest Streetwise skill among current crew, kept separate from `crewPassengerCheckMax`'s Broker/Carouse/Streetwise pool since Black Market specifically wants Streetwise alone. Also reused as-is for CT7's Low-passenger DM (HLD §7e) |
+| `crewAdminMax`, `crewLiaisonMax` | CT7 Traffic Availability crew DMs (HLD §7e) — Admin for Middle passengers, Liaison for Minor cargo; same thin-passthrough pattern as the MgT2022 aggregates above |
 | `freightTonsUsed` | Booked-but-undelivered freight tonnage, folded into `cargoAvailable` alongside `basicPassageTonsUsed`/`mailContainerTonsUsed` |
 
 | Action | Description |
@@ -987,7 +988,7 @@ Keyboard shortcuts: `O` = Overview, `M` = Port/Market, `C` = Ship/Cargo, `E` = E
 | Passengers | PassengersPanel | Booking form, capacity check, fare preview |
 | Mail | MailPanel | Mail contract booking form, fare preview |
 | Services | ShipServices | Fuel purchase |
-| Freight (MgT2022 only) | FreightPanel | Bulk cargo lot booking form, fare preview |
+| Freight (MgT2022, CT7) | FreightPanel | Bulk cargo lot/tonnage booking form, fare preview |
 
 ### Ship sub-tabs
 

@@ -121,6 +121,7 @@ app.get('/current', requireAuth, async (c) => {
   const [
     { results: cargoRows }, { results: passengerRows }, { results: mailRows }, { results: freightRows },
     crewStateRow, stewardRow, passengerCheckRow, freightCheckRow, navalScoutRow, socRow, streetwiseRow,
+    adminRow, liaisonRow,
   ] = await Promise.all([
     db.prepare(`SELECT * FROM cargo WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
@@ -140,9 +141,16 @@ app.get('/current', requireAuth, async (c) => {
     db.prepare(`SELECT MAX(p.social_standing) as mx FROM crew c JOIN players p ON p.id = c.player_id
                 WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL`).bind(ship.id, campaign_id).first(),
     // Black Market's own check wants Streetwise alone, not pooled with
-    // Broker/Carouse the way the normal passenger check is.
+    // Broker/Carouse the way the normal passenger check is. Also CT7's own
+    // Low-passenger DM (Book 7's Passengers table), same skill.
     db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
                 WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Streetwise'`).bind(ship.id, campaign_id).first(),
+    // CT7 Passengers table: Admin for Middle passengers.
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Admin'`).bind(ship.id, campaign_id).first(),
+    // CT7 Cargo table: Liaison for Minor cargo.
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Liaison'`).bind(ship.id, campaign_id).first(),
   ])
 
   ship.crew_staterooms             = crewStateRow?.cnt ?? 0
@@ -152,6 +160,8 @@ app.get('/current', requireAuth, async (c) => {
   ship.crew_naval_scout_rank_max   = navalScoutRow?.mx ?? 0
   ship.crew_social_standing_max    = socRow?.mx ?? null
   ship.crew_streetwise_max         = streetwiseRow?.mx ?? 0
+  ship.crew_admin_max              = adminRow?.mx ?? 0
+  ship.crew_liaison_max            = liaisonRow?.mx ?? 0
 
   return c.json({ data: { ship, cargo: cargoRows ?? [], passengers: passengerRows ?? [], mailContracts: mailRows ?? [], freight: freightRows ?? [] } })
 })
@@ -551,14 +561,15 @@ app.post('/:id/deliver-mail', requireAuth, async (c) => {
 })
 
 // ── POST /api/ships/:id/book-freight — atomic: obligation + transaction + credits ──
-// MgT2022 only. Charged upfront, like passenger fares.
+// Charged upfront, like passenger fares.
 app.post('/:id/book-freight', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
   const body    = await c.req.json()
   const { campaign_id, player_id, origin_world_hex, origin_sector, origin_world_name,
           dest_world_hex, dest_sector, dest_world_name, parsecs,
-          freight_tons, freight_lot_size, rate_per_ton, charge, due_tick, tick } = body
+          freight_tons, freight_lot_size, rate_per_ton, charge, due_tick, tick,
+          traffic_consumed = 1 } = body
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
@@ -585,22 +596,27 @@ app.post('/:id/book-freight', requireAuth, async (c) => {
     return c.json({ error: `Insufficient cargo space (need ${freight_tons}t, have ${cargoAvailable}t)` }, 400)
   }
 
-  // Traffic-availability cap (MgT2022 only — no snapshot row exists for
-  // CT7/T5). Atomic guarded decrement, same pattern as buy-cargo's
+  // Traffic-availability cap (MgT2022/CT7 only — no snapshot row exists
+  // for T5). Atomic guarded decrement, same pattern as buy-cargo's
   // qty_available guard: the check and the decrement are one statement, so
-  // two concurrent bookings racing for the last lot can't both win.
+  // two concurrent bookings racing for the last lot/tonnage can't both win.
+  // `traffic_consumed` is the amount to subtract from the tier's column —
+  // MgT2022 always books exactly 1 whole (randomly-sized) lot at a time,
+  // so it defaults to 1; CT7 has no discrete "lot" concept (Book 7's
+  // Major/Minor/Incidental are continuous tonnage pools), so it sends the
+  // actual freight_tons being booked instead.
   const lotColumn = { major: 'major_freight_lots', minor: 'minor_freight_lots', incidental: 'incidental_freight_lots' }[freight_lot_size]
   if (lotColumn) {
     const decrement = await db.prepare(
-      `UPDATE traffic_snapshots SET ${lotColumn} = ${lotColumn} - 1
-       WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ? AND ${lotColumn} >= 1`
-    ).bind(campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick).run()
+      `UPDATE traffic_snapshots SET ${lotColumn} = ${lotColumn} - ?
+       WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ? AND ${lotColumn} >= ?`
+    ).bind(traffic_consumed, campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick, traffic_consumed).run()
 
     if (decrement.meta.changes === 0) {
       const fresh = await db.prepare(
         `SELECT ${lotColumn} FROM traffic_snapshots WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ?`
       ).bind(campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick).first()
-      // No snapshot row at all means CT7/T5 (or MgT2022 before any traffic
+      // No snapshot row at all means T5 (or MgT2022/CT7 before any traffic
       // roll has happened yet) — stay unlimited, matching prior behavior.
       if (fresh) {
         return c.json({ error: `Only ${fresh[lotColumn] ?? 0} ${freight_lot_size} freight lot(s) available this tick` }, 400)

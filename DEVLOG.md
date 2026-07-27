@@ -1323,6 +1323,118 @@ with `001`-`019` all present.)*
 
 ---
 
+## 2026-07-26 — CT7 Passenger/Freight Availability (Phase D)
+
+### Goal
+
+Close out the CT rules-accuracy pass's deferred "Phase D": build CT7's own
+Passenger/Freight Availability mechanic, confirming the user's original
+hypothesis that CT likely had the same kind of unmodeled destination-DM
+traffic gap MgT2022's Phase 5/6 found and fixed. It did — CT7 previously
+used flat, unlimited-subject-to-capacity passenger fares and had no
+Freight tab at all.
+
+### What Book 7 actually specifies (genuinely different shape from MgT2022)
+
+Book 7's own "Passengers"/"Cargo Available at Source World" tables index
+a dice EXPRESSION directly by the source world's Population digit — no
+intermediate 2D6+DM → dice-count lookup, unlike MgT2022's Traffic
+Availability. Two dice notations appear: flat `"XD+N"`/`"XD-N"` (sum X
+dice, add/subtract a flat modifier) and `"XD-YD"` (sum X dice, sum a
+SEPARATE Y dice, subtract the second from the first) — both floor at 0.
+Flat DMs from the destination (market) world apply on top: Population 4-
+is -3 for both Passengers and Freight; Population 8+ is +3 (Passengers)
+or +1 (Freight) — Book 7's own asymmetry; a Red Zone destination applies
+DM-12 and blocks Middle/Low passengers outright (High still rolls) and
+blocks all Freight tiers outright; an Amber Zone destination applies DM-6
+to Passengers (no block) and blocks Major Freight only. Tech Level DM
+(`sourceTL - marketTL`) reuses the one directional convention Book 7 does
+give a worked example for (`tlAdjustment`, from the earlier CT pricing
+pass) — the Passengers/Cargo text itself doesn't pin the sign down.
+
+Crew skill DMs: Steward for High, Admin for Middle, Streetwise for Low,
+Liaison for Minor cargo (Major/Incidental have none). Steward and
+Streetwise were already computed server-side (MgT2022's own traffic and
+Black Market mechanics); added two new aggregates, `crew_admin_max`/
+`crew_liaison_max`, at the same ship-load query site. No schema change
+needed — `player_skills.skill` has no `CHECK` constraint restricting
+values.
+
+CT7 has no Basic passage tier and no Mail availability roll in this text
+— Mail stays a flat Cr25,000 payment, unaffected.
+
+### A design choice the data forced: Freight tiers are pools, not lots
+
+MgT2022's Major/Minor/Incidental are discrete lots (a fixed random
+tonnage, booked whole, can't be split). Book 7's own dice values plus its
+flat Cr1,000/ton "Ship Revenues" rate (no lot-size-dependent rate) don't
+fit that model — they read as continuous tonnage *pools* ("how much cargo
+of this size class exists to be booked"), so CT7's `FreightPanel.vue`
+gained a tonnage stepper (bounded by whichever is smaller: the pool
+remaining this tick, or the ship's free cargo space) instead of a fixed
+rolled lot size. This meant `book-freight`'s traffic-availability
+decrement — previously hardcoded to `-1` (one whole lot) — needed to
+become a client-supplied `traffic_consumed` amount, defaulting to `1` so
+MgT2022's existing behavior is unchanged; CT7 sends the actual tonnage
+booked. Also no due-tick/late-delivery-penalty for CT7 (Book 7 has no such
+mechanic) — bookings simply pass `due_tick: null`, and `deliver-freight`'s
+existing `isLate` check already treats a null due_tick as never late, so
+no worker change was needed there beyond the decrement amount.
+
+### RNG-isolation, automatically this time
+
+MgT2022's Traffic Availability needed dedicated per-tier... no, per-
+*category* (Passenger/Freight/Mail) seeded streams because each tier's
+dice-*count* was itself variable (picked via a DM-dependent lookup),
+so a DM change could shift where a *different* tier's draws started —
+the exact bug a test caught during Phase 5. CT7's tables sidestep this
+by construction: each tier evaluation always draws a FIXED 8-dice batch
+from its stream (`rollDiceBatch`), regardless of which dice the
+expression actually consumes or what DM applies — so one tier's DM can
+never perturb another's draws even *within* the same stream. Passengers
+and Freight still get separate streams from each other (same reasoning
+as always), but no additional per-tier splitting was needed — confirmed
+by a test suite modeled directly on Phase 5's isolation tests, which
+passed on the first run.
+
+### New code
+
+`src/lib/ct7-traffic-tick.js` (new file, sibling to `traffic-tick.js`) —
+`generateCT7TrafficSnapshot()`. `trade-engine-ct7.js` gained
+`rollCT7Availability()` (the dice-expression evaluator) and DM/zone-block
+helpers (`ct7PassengerPopulationDM`, `ct7CargoPopulationDM`,
+`ct7PassengerZoneDM`, `ct7PassengerZoneBlocked`, `ct7CargoZoneBlocked`,
+`ct7TrafficTLDM`, `ct7FreightCharge`/`CT7_FREIGHT_RATE_PER_TON`).
+`traveller-data.js` gained the two Population-indexed tables,
+`CT7_PASSENGER_AVAILABILITY`/`CT7_CARGO_AVAILABILITY`. `tick.js`'s
+`ensureTrafficSnapshot` now dispatches on `trade_rules` between the
+MgT2022 and CT7 generators (both write to the same `traffic_snapshots`
+table — CT7's row shape is a strict subset, Basic/Mail columns always 0,
+so no schema change was needed there either). `PassengersPanel.vue`
+extended its MgT2022-only destination-first-gating branch to include CT7
+(hiding the Parsecs field for CT7, since neither its fare nor its traffic
+roll are distance-dependent). `FreightPanel.vue` and the Freight tab
+(`MapView.vue`) are no longer MgT2022-only.
+
+### Verified
+
+`npx vitest run` — 565/565 passing (up from 541; 75 in
+`trade-engine-ct7.test.js`, 11 new in `tests/ct7-traffic-tick.test.js`
+covering determinism, route-awareness, population scaling, Red/Amber Zone
+blocking, and all four crew-skill isolation cases). `npx vite build`
+compiles cleanly. `node --check` on the touched worker route. No live
+`wrangler dev` verification this session (established precedent).
+
+### Known gaps, not addressed this session
+
+`CT7_ALIEN_EFFECTS` remains unwired (no race/nationality data source
+exists in this app) — unrelated to this phase, logged during the earlier
+CT pricing pass. T5's own version of this traffic-availability question
+is explicitly deferred to a separate session ("we'll do T5 tomorrow"),
+per the user's own scheduling.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

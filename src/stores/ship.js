@@ -67,6 +67,11 @@ export const useShipStore = defineStore('ship', () => {
   // Black Market's own check wants Streetwise alone, not pooled with
   // Broker/Carouse the way crewPassengerCheckMax above is.
   const crewStreetwiseMax        = computed(() => ship.value?.crew_streetwise_max ?? 0)
+  // CT7 traffic-availability crew DMs (Book 7 "Passengers"/"Cargo" tables) —
+  // Admin for Middle passengers, Liaison for Minor cargo. Steward/Streetwise
+  // above are reused as-is (same skills, same "best of crew" semantics).
+  const crewAdminMax            = computed(() => ship.value?.crew_admin_max ?? 0)
+  const crewLiaisonMax          = computed(() => ship.value?.crew_liaison_max ?? 0)
 
   function clearError() { error.value = null }
 
@@ -496,6 +501,7 @@ export const useShipStore = defineStore('ship', () => {
     originWorldHex, originSector, originWorldName,
     destWorldHex, destSector, destWorldName,
     parsecs, freightTons, freightLotSize, ratePerTon, charge, dueTick, tick,
+    trafficConsumed,
   }) {
     if (!ship.value) return { ok: false, error: 'No active ship' }
 
@@ -518,6 +524,10 @@ export const useShipStore = defineStore('ship', () => {
         charge,
         due_tick:          dueTick,
         tick,
+        // CT7 has no discrete "lot" concept — pass the actual tonnage
+        // booked so the worker decrements the traffic pool by that amount
+        // instead of the MgT2022 default of 1 whole lot.
+        ...(trafficConsumed != null ? { traffic_consumed: trafficConsumed } : {}),
       })
       if (apiErr) throw new Error(apiErr)
 
@@ -575,6 +585,7 @@ export const useShipStore = defineStore('ship', () => {
     lowBerthsTotal, lowBerthsUsed, lowBerthsAvailable,
     crewStewardMax, crewPassengerCheckMax, crewFreightCheckMax,
     crewNavalScoutRankMax, crewSocialStandingMax, shipArmed, crewStreetwiseMax,
+    crewAdminMax, crewLiaisonMax,
     clearError, loadShip, createShip, updateLocation,
     buyCargo, sellCargo,
     bookPassengers, refundPassenger,

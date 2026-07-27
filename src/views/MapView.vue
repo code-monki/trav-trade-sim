@@ -412,7 +412,7 @@
           </div>
         </template>
 
-        <!-- ── Port: Freight tab (MgT2022 only) ──────────────────────────── -->
+        <!-- ── Port: Freight tab (MgT2022/CT7 only) ──────────────────────── -->
         <template v-if="topTab === 'port' && portTab === 'freight'">
           <div class="subtab-wrap">
             <FreightPanel
@@ -628,7 +628,7 @@ const PORT_TABS = computed(() => {
     { key: 'mail',       label: 'Mail'       },
     { key: 'services',   label: 'Services'   },
   ]
-  if (auth.campaign?.trade_rules === 'MgT2022') tabs.push({ key: 'freight', label: 'Freight' })
+  if (auth.campaign?.trade_rules === 'MgT2022' || auth.campaign?.trade_rules === 'CT7') tabs.push({ key: 'freight', label: 'Freight' })
   return tabs
 })
 

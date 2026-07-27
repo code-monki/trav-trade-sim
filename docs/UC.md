@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0  
+**Version:** 0.12.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -924,7 +924,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 5. A successful booking atomically decrements the matching count for the rest of this tick
 
 **Alternate / Exception Flows:**
-- **A1 — CT7/T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity, and the destination field keeps its pre-existing position in the form (not moved to the top)
+- **A1 — T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity, and the destination field keeps its pre-existing position in the form (not moved to the top). CT7 campaigns have their own, distinct version of this mechanic — see UC-42
 - **A2 — A different ship at the same route/tick:** Gets its own, potentially different, availability counts, reflecting its own crew
 - **A3 — The same ship considers a different destination, or the same destination at a different distance:** Gets an independent roll — the count is per-route, not per-origin-world alone
 - **A4 — Two bookings race for the last seat/lot/container:** The atomic guarded decrement lets only one succeed; the other is rejected cleanly
@@ -1011,3 +1011,32 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Postconditions:**
 - `black_market_search_attempts` reflects the new attempt count and, on success, `succeeded = 1` for (ship, world, sector, month)
 - `market_snapshots` has a row set with `is_black_market = 1` for this (world, tick) if one didn't already exist
+
+---
+
+### UC-42: View Passenger/Freight Availability (CT7)
+
+**Actor:** Player, Referee
+**Related Requirements:** FR-2201, FR-2202, FR-2203, FR-2204, FR-2205, FR-2206
+**Trigger:** Player opens the Passengers or Freight tab on a CT7 campaign and picks a destination world
+
+**Preconditions:**
+- Campaign's `trade_rules` is `CT7`
+- Player has an assigned ship (the roll depends on that ship's own crew)
+
+**Main Flow:**
+1. Passage type/count and lot-size selection stay hidden until the player picks a destination world, same gating as MgT2022 (UC-38) — CT7 has its own distinct dice-table shape, but the same "no ambient number independent of destination" reasoning applies
+2. Once a destination is picked, system deterministically rolls (or retrieves) the current tick's availability for the selected route: the origin world's Population digit picks a dice expression directly from Book 7's own "Passengers/Cargo Available at Source World" tables (not via an intermediate 2D6+DM lookup); flat DMs are then added from the destination world's Population/Zone/Tech-Level and the ship's current crew's highest Steward (High), Admin (Middle), Streetwise (Low), or Liaison (Minor cargo) skill
+3. A Red Zone destination blocks Middle/Low passengers and all Freight tiers outright, regardless of DM; an Amber Zone destination applies a DM to Passengers and blocks Major Freight only
+4. System displays the rolled count next to each passage tier and freight lot size
+5. For Passengers, the booking form caps the requested count at the displayed availability, same as MgT2022
+6. For Freight, since Major/Minor/Incidental are continuous tonnage pools rather than discrete lots, the player chooses any tonnage up to whichever is smaller of the displayed availability or the ship's free cargo space, charged at a flat Cr1,000/ton regardless of distance
+7. A successful booking atomically decrements the matching count (by the requested passenger count, or by the booked tonnage for freight) for the rest of this tick
+
+**Alternate / Exception Flows:**
+- **A1 — MgT2022/T5 campaign:** This use case does not apply — see UC-38 (MgT2022) or the T5 unlimited-subject-to-capacity default
+- **A2 — A different ship at the same route/tick:** Gets its own, potentially different, availability counts, reflecting its own crew
+- **A3 — Freight delivery:** No due-tick or late-delivery-penalty applies to CT7 freight — Book 7 has no such mechanic, unlike MgT2022's
+
+**Postconditions:**
+- `traffic_snapshots` has a row for this (campaign, **ship**, origin world, **destination world**, tick) if one didn't already exist — the same table MgT2022 uses, since CT7's row shape is a strict subset (Basic passages and Mail containers always 0)

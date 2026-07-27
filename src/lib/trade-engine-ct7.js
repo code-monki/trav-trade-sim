@@ -245,6 +245,110 @@ export function rollQty(expr, rolls, dm = 0) {
   return total * multiplier
 }
 
+// ── Passengers/Cargo Availability (Book 7) ────────────────────────────────────
+
+/**
+ * Resolve a Book 7 "Passengers/Cargo Available at Source World" dice
+ * expression against pre-rolled dice. Two notations: flat "XD+N"/"XD-N"
+ * (sum X dice, add/subtract a flat modifier) and "XD-YD" (sum X dice, sum
+ * a SEPARATE Y dice, subtract the second sum from the first) — both floor
+ * at 0. '-' means unavailable regardless of DMs, consuming no dice.
+ *
+ * @param {string}   expr   — e.g. '3D', '1D+4', '2D-1D', '-'
+ * @param {number[]} rolls  — pre-rolled d6 results, consumed left to right
+ * @param {number}   [dm]   — flat DM (market population/zone/TL/skill) applied on top
+ * @returns {number} availability count (never negative)
+ */
+export function rollCT7Availability(expr, rolls, dm = 0) {
+  if (expr === '-') return 0
+
+  const twoPool = expr.match(/^(\d+)D-(\d+)D$/i)
+  if (twoPool) {
+    const nA = parseInt(twoPool[1], 10)
+    const nB = parseInt(twoPool[2], 10)
+    let a = 0
+    for (let i = 0; i < nA; i++) a += rolls[i] ?? 1
+    let b = 0
+    for (let i = 0; i < nB; i++) b += rolls[nA + i] ?? 1
+    return Math.max(0, (a - b) + dm)
+  }
+
+  const flat = expr.match(/^(\d+)D([+-]\d+)?$/i)
+  if (flat) {
+    const numDice = parseInt(flat[1], 10)
+    const mod     = flat[2] ? parseInt(flat[2], 10) : 0
+    let total = 0
+    for (let i = 0; i < numDice; i++) total += rolls[i] ?? 1
+    return Math.max(0, total + mod + dm)
+  }
+
+  return 0
+}
+
+/**
+ * Population DM for Passenger availability, applied for the MARKET
+ * (destination) world: Population 4- is -3, Population 8+ is +3, else 0.
+ */
+export function ct7PassengerPopulationDM(popDigit) {
+  const n = parseInt(popDigit, 16)
+  if (Number.isNaN(n)) return 0
+  if (n <= 4) return -3
+  if (n >= 8) return 3
+  return 0
+}
+
+/**
+ * Population DM for Cargo availability, applied for the MARKET
+ * (destination) world: Population 4- is -3, Population 8+ is +1, else 0.
+ */
+export function ct7CargoPopulationDM(popDigit) {
+  const n = parseInt(popDigit, 16)
+  if (Number.isNaN(n)) return 0
+  if (n <= 4) return -3
+  if (n >= 8) return 1
+  return 0
+}
+
+/** Passenger Zone DM for the market world: Red -12, Amber -6, else 0. */
+export function ct7PassengerZoneDM(zone) {
+  if (zone === 'R') return -12
+  if (zone === 'A') return -6
+  return 0
+}
+
+/** Red Zone market blocks Middle/Low passengers entirely (High still rolls). */
+export function ct7PassengerZoneBlocked(zone, tier) {
+  return zone === 'R' && tier !== 'high'
+}
+
+/** Red Zone market blocks all Freight; Amber Zone blocks Major only. */
+export function ct7CargoZoneBlocked(zone, tier) {
+  if (zone === 'R') return true
+  if (zone === 'A' && tier === 'major') return true
+  return false
+}
+
+/**
+ * Tech Level DM for Passenger/Cargo availability: source TL minus market
+ * TL, same direction convention as `tlAdjustment` (a higher-tech source is
+ * advantageous). The rulebook text doesn't give a worked example to pin
+ * the sign down explicitly; this mirrors the one Book 7 mechanic that
+ * does.
+ */
+export function ct7TrafficTLDM(sourceTL, marketTL) {
+  return tlToInt(sourceTL) - tlToInt(marketTL)
+}
+
+// Book 7's "Ship Revenues" table: Cr1,000/ton flat, regardless of distance
+// or lot size (unlike MgT2022's per-parsec rate) — Major/Minor/Incidental
+// are availability bands (how much tonnage exists to book), not different
+// rate tiers.
+export const CT7_FREIGHT_RATE_PER_TON = 1000
+
+export function ct7FreightCharge(tons) {
+  return tons * CT7_FREIGHT_RATE_PER_TON
+}
+
 // ── Full purchase/sale calculation helpers ────────────────────────────────────
 
 /**

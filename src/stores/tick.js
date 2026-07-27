@@ -10,6 +10,7 @@ import {
 } from '../lib/market-tick.js'
 import { maybeGenerateEvent, activeEventsForWorld } from '../lib/market-events.js'
 import { generateTrafficSnapshot } from '../lib/traffic-tick.js'
+import { generateCT7TrafficSnapshot } from '../lib/ct7-traffic-tick.js'
 
 export const useTickStore = defineStore('tick', () => {
   const auth = useAuthStore()
@@ -393,21 +394,31 @@ export const useTickStore = defineStore('tick', () => {
   // booking form's destination is known, never on world visit alone.
   async function ensureTrafficSnapshot(world, sectorName, destWorld, destSectorName, parsecs) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022' || !ship.hasShip || !destWorld?.Hex) {
+    const rules       = auth.campaign?.trade_rules
+    if (!campaignId || (rules !== 'MgT2022' && rules !== 'CT7') || !ship.hasShip || !destWorld?.Hex) {
       trafficAvailability.value = null
       return null
     }
 
-    const row = generateTrafficSnapshot({
-      world, sectorName, destWorld, destSectorName, parsecs, campaignId, tick: currentTick.value,
-      shipId: ship.ship.id,
-      crewStewardMax:        ship.crewStewardMax,
-      crewPassengerCheckMax: ship.crewPassengerCheckMax,
-      crewFreightCheckMax:   ship.crewFreightCheckMax,
-      crewNavalScoutRankMax: ship.crewNavalScoutRankMax,
-      crewSocialStandingMax: ship.crewSocialStandingMax,
-      shipArmed:             ship.shipArmed,
-    })
+    const row = rules === 'MgT2022'
+      ? generateTrafficSnapshot({
+          world, sectorName, destWorld, destSectorName, parsecs, campaignId, tick: currentTick.value,
+          shipId: ship.ship.id,
+          crewStewardMax:        ship.crewStewardMax,
+          crewPassengerCheckMax: ship.crewPassengerCheckMax,
+          crewFreightCheckMax:   ship.crewFreightCheckMax,
+          crewNavalScoutRankMax: ship.crewNavalScoutRankMax,
+          crewSocialStandingMax: ship.crewSocialStandingMax,
+          shipArmed:             ship.shipArmed,
+        })
+      : generateCT7TrafficSnapshot({
+          world, sectorName, destWorld, destSectorName, campaignId, tick: currentTick.value,
+          shipId: ship.ship.id,
+          crewStewardMax:    ship.crewStewardMax,
+          crewAdminMax:      ship.crewAdminMax,
+          crewStreetwiseMax: ship.crewStreetwiseMax,
+          crewLiaisonMax:    ship.crewLiaisonMax,
+        })
     await api.post(`/api/campaigns/${campaignId}/traffic`, row)
     trafficAvailability.value = row
     return row

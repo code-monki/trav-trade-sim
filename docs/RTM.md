@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.11.0
+**Version:** 0.12.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -244,7 +244,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-2001 | Port > Freight tab (MgT2022 only); lot tonnage rolled not chosen | HLD §7c | `FreightPanel.vue` (`lotTons` computed), `MapView.vue` (`PORT_TABS` computed), `traveller-data-mgt2022.js:MGT2022_FREIGHT_LOT_SIZE_DICE` | UT-604 | — | — | MTS-14 |
+| FR-2001 | Port > Freight tab (MgT2022); lot tonnage rolled not chosen | HLD §7c | `FreightPanel.vue` (`lotTons` computed), `MapView.vue` (`PORT_TABS` computed, now also shown for CT7 — see §2.22), `traveller-data-mgt2022.js:MGT2022_FREIGHT_LOT_SIZE_DICE` | UT-604 | — | — | MTS-14 |
 | FR-2002 | Freight obligation + upfront charge | DD §1.1 `obligations` (kind='freight') | `worker/src/routes/ships.js:book-freight`, `ship.js:bookFreight` | — | — | — | MTS-14 |
 | FR-2003 | Auto-deliver on arrival | HLD §5.1 | `ship.js:autoDeliver` (freight branch), `worker/src/routes/ships.js:deliver-freight` | — | — | — | MTS-14 |
 | FR-2004 | Late-delivery penalty | DD §1.1 `obligations.due_tick` | `trade-engine-mgt2022.js:freightLatePenaltyPct`/`freightNetAfterPenalty`, `worker/src/routes/ships.js:deliver-freight` | UT-605 | — | — | MTS-14 |
@@ -263,6 +263,17 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-2101 | Ship-wide one-click Black Market check (Streetwise, best of crew, server-looked-up) | HLD §7d, DD §1.1 `black_market_search_attempts` | `worker/src/routes/market.js` (`GET`/`POST /black-market`), `tick.js:loadBlackMarketStatus`/`attemptBlackMarket`, `MarketTable.vue` (Seek Black Market button) | — | — | — | MTS-18 |
 | FR-2102 | Black-market composition forces extra rolls into the illegal die range (61-66, excluding Exotics); toggle between normal/black-market listings | HLD §7d | `market-tick.js:mgt2022Composition`/`rollBlackMarketDie`, `generateWorldSnapshot` (`seekingBlackMarket`), `MarketTable.vue` (toggle) | UT-629–632 | — | — | MTS-18 |
 | FR-2103 | Black-market pricing uses the same per-player Broker overlay as the normal listing | HLD §7d, §7b | `tick.js:displayBlackMarketSnapshots` | — | — | — | MTS-18 |
+
+## 2.22 CT7 Passenger/Freight Availability
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-2201 | Destination-first gating, same shape as MgT2022 | HLD §7e | `PassengersPanel.vue`/`FreightPanel.vue` (`tradeRules === 'CT7'` branch) | — | — | — | MTS-20 |
+| FR-2202 | Deterministic per-(ship, origin, destination, tick) roll via Book 7's own Population-indexed dice-expression tables | HLD §7e | `ct7-traffic-tick.js:generateCT7TrafficSnapshot`, `trade-engine-ct7.js:rollCT7Availability`, `traveller-data.js:CT7_PASSENGER_AVAILABILITY`/`CT7_CARGO_AVAILABILITY` | UT-633–637, UT-642–643 | — | — | MTS-20 |
+| FR-2203 | Destination-world population/zone/TL DMs, incl. Red/Amber Zone hard blocks | HLD §7e | `trade-engine-ct7.js:ct7PassengerPopulationDM`/`ct7CargoPopulationDM`/`ct7PassengerZoneDM`/`ct7PassengerZoneBlocked`/`ct7CargoZoneBlocked`/`ct7TrafficTLDM` | UT-638–641 | — | — | MTS-20 |
+| FR-2204 | Crew skill DMs: Steward/Admin/Streetwise/Liaison | HLD §7e | `ct7-traffic-tick.js:generateCT7TrafficSnapshot`, `worker/src/routes/ships.js` crew aggregates (`crew_admin_max`/`crew_liaison_max`), `ship.js:crewAdminMax`/`crewLiaisonMax` | UT-644 | — | — | MTS-20 |
+| FR-2205 | Freight tiers are continuous tonnage pools, player chooses tonnage; flat Cr1,000/ton; no due-tick/late-penalty | HLD §7e | `trade-engine-ct7.js:ct7FreightCharge`/`CT7_FREIGHT_RATE_PER_TON`, `FreightPanel.vue` (tonnage stepper), `worker/src/routes/ships.js:book-freight` (`traffic_consumed`) | — | — | — | MTS-20 |
+| FR-2206 | No Mail availability roll or Basic passage tier for CT7 | HLD §7e | `ct7-traffic-tick.js:generateCT7TrafficSnapshot` (`basic_passages`/`mail_containers` always 0) | UT-642 | — | — | MTS-20 |
 
 ---
 
