@@ -155,7 +155,6 @@ import { useShipStore } from '../stores/ship.js'
 import { useTickStore } from '../stores/tick.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useMapStore  } from '../stores/map.js'
-import { ct7CargoLotSalePrice } from '../lib/market-tick.js'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -204,51 +203,12 @@ async function loadSnapshots() {
 onMounted(loadSnapshots)
 watch(() => [props.world?.Hex, props.sectorName, tick.currentTick], loadSnapshots)
 
-// ── CT7 only: resolve each cargo lot's actual purchase-world data ──────────
-// Book 7's sale-price mechanic depends on BOTH the source (purchase) world
-// and the market (current) world's trade codes/TL — not the market world
-// self-referenced as both, which is only a reasonable stand-in for the
-// ambient MarketTable listing (no specific lot in play there). Resolved
-// lazily per distinct (hex, sector) pair present in the hold, cached here
-// since the lookup is async but sellPriceFor needs to read synchronously.
-const sourceWorldCache = ref({}) // hex -> world object
-
-async function loadSourceWorlds() {
-  if (auth.campaign?.trade_rules !== 'CT7') return
-  const pairs = new Map()
-  for (const item of ship.cargo) {
-    if (item.purchase_world && item.purchase_sector) pairs.set(item.purchase_world, item.purchase_sector)
-  }
-  for (const [hex, sector] of pairs) {
-    if (sourceWorldCache.value[hex]) continue
-    const worlds = await map.fetchWorldsForSector(sector)
-    const world  = worlds.find(w => w.Hex === hex)
-    if (world) sourceWorldCache.value = { ...sourceWorldCache.value, [hex]: world }
-  }
-}
-
-onMounted(loadSourceWorlds)
-watch(() => ship.cargo.map(c => c.id), loadSourceWorlds)
-
-// ── Sell price lookup ────────────────────────────────────────────────────
-// CT7 uses the real per-lot source-vs-market mechanic once that lot's
-// purchase world has resolved (null/"—" until then, same as any other
-// not-yet-appraised good). Other rulesets keep reading the shared
-// per-world/tick baseline, unaffected by this change.
+// ── Sell price lookup from current world's snapshot cache ─────────────────
+// CT7's resale price (Book 2's own mechanic) depends only on the world
+// you're currently at, same as every other ruleset here — no per-lot
+// source-world lookup needed.
 
 function sellPriceFor(item) {
-  if (auth.campaign?.trade_rules === 'CT7') {
-    const sourceWorld = sourceWorldCache.value[item.purchase_world] ?? null
-    return ct7CargoLotSalePrice({
-      campaignId:   auth.campaign.id,
-      marketWorld:  props.world,
-      sourceWorld,
-      tick:         tick.currentTick,
-      goodDie:      item.trade_good_die,
-      activeEvents: tick.eventsForWorld(props.world?.Hex ?? '', props.sectorName ?? ''),
-      brokerSkill:  tick.brokerSkill,
-    })
-  }
   const snap = tick.displaySnapshots[item.trade_good_die]
   return snap ? snap.sale_price : null
 }

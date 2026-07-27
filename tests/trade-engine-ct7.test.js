@@ -20,6 +20,8 @@ import {
   ct7PassengerZoneBlocked,
   ct7CargoZoneBlocked,
   ct7TrafficTLDM,
+  ct2PopulationSearchDM,
+  ct2SearchGoodDie,
 } from '../src/lib/trade-engine-ct7.js'
 import { CT7_ALIEN_EFFECTS } from '../src/lib/traveller-data.js'
 
@@ -362,6 +364,49 @@ describe('rollQty', () => {
   it('returns 0 for unrecognised expression', () => {
     expect(rollQty('', [])).toBe(0)
     expect(rollQty('bad', [])).toBe(0)
+  })
+})
+
+// ── Trade & Speculation search (Book 2) ─────────────────────────────────────
+
+describe('ct2PopulationSearchDM', () => {
+  it('is +1 at population 9+', () => {
+    expect(ct2PopulationSearchDM('9')).toBe(1)
+    expect(ct2PopulationSearchDM('A')).toBe(1)
+  })
+
+  it('is -1 at population 5-', () => {
+    expect(ct2PopulationSearchDM('5')).toBe(-1)
+    expect(ct2PopulationSearchDM('0')).toBe(-1)
+  })
+
+  it('is 0 for populations 6-8', () => {
+    expect(ct2PopulationSearchDM('6')).toBe(0)
+    expect(ct2PopulationSearchDM('7')).toBe(0)
+    expect(ct2PopulationSearchDM('8')).toBe(0)
+  })
+})
+
+describe('ct2SearchGoodDie', () => {
+  it('combines two dice into a D66 die with no population DM', () => {
+    expect(ct2SearchGoodDie(3, 5, '7')).toBe('35')
+  })
+
+  it('applies the population DM to the first digit only', () => {
+    expect(ct2SearchGoodDie(3, 5, '9')).toBe('45') // +1
+    expect(ct2SearchGoodDie(3, 5, '2')).toBe('25') // -1
+  })
+
+  it('clamps a modified first digit below 1 up to 1', () => {
+    expect(ct2SearchGoodDie(1, 4, '2')).toBe('14') // 1-1=0 -> 1
+  })
+
+  it('clamps a modified first digit above 6 down to 6', () => {
+    expect(ct2SearchGoodDie(6, 4, '9')).toBe('64') // 6+1=7 -> 6
+  })
+
+  it('never modifies the second digit', () => {
+    expect(ct2SearchGoodDie(6, 2, '9')).toBe('62')
   })
 })
 

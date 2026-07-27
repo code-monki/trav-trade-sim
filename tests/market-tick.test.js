@@ -11,8 +11,8 @@ import {
   generateWorldSnapshot,
   mgt2022PlayerGoodPrice,
   ct7PlayerSalePrice,
-  ct7CargoLotSalePrice,
 } from '../src/lib/market-tick.js'
+import { CT2_TRADE_GOODS } from '../src/lib/traveller-data.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -187,8 +187,12 @@ const testWorld = { Hex: '0101', UWP: 'A788899-C', Remarks: 'Ag Ri' }
 describe('generateWorldSnapshot dispatch', () => {
   it('defaults to CT7 when tradeRules is omitted', () => {
     const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1 })
-    expect(rows).toHaveLength(36)
-    expect(rows[0].trade_good_name).toBe('Textiles') // CT2_TRADE_GOODS[0]
+    // Book 2's search procedure (1D6 independent throws/week) means the
+    // exact count varies by seed — never 0 (at least one throw always
+    // happens) and never more than 6 distinct goods.
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.length).toBeLessThanOrEqual(6)
+    expect(rows.every(r => CT2_TRADE_GOODS.some(g => g.name === r.trade_good_name))).toBe(true)
   })
 
   it('MgT2022 uses its own goods table, not CT2', () => {
@@ -236,10 +240,11 @@ describe('generateWorldSnapshot dispatch', () => {
   it('fixes the pre-existing bug where T5 silently used CT7 pricing — T5 and CT7 now diverge', () => {
     const ct7Rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 7, tradeRules: 'CT7' })
     const t5Rows  = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 7, tradeRules: 'T5' })
-    // Both use the same 36-entry CT2 goods table (T5 has no goods table of its
-    // own in this codebase), but the pricing formulas differ, so at least
-    // some purchase prices must differ given the same seed.
-    const anyDifferent = ct7Rows.some((r, i) => r.purchase_price !== t5Rows[i].purchase_price)
+    // T5 still lists all 36 goods (T5 has no composition-narrowing
+    // mechanic in this codebase); CT7 now lists only this week's 1D6
+    // search results, so match by die rather than by array position.
+    const t5ByDie = Object.fromEntries(t5Rows.map(r => [r.trade_good_die, r]))
+    const anyDifferent = ct7Rows.some(r => r.purchase_price !== t5ByDie[r.trade_good_die]?.purchase_price)
     expect(anyDifferent).toBe(true)
   })
 
@@ -301,6 +306,48 @@ describe('generateWorldSnapshot dispatch — black market (seekingBlackMarket)',
   })
 })
 
+describe('generateWorldSnapshot dispatch — CT7 Trade & Speculation search (Book 2)', () => {
+  it('never lists more than 6 distinct goods, and never lists a die twice', () => {
+    for (let t = 0; t < 40; t++) {
+      const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: t, tradeRules: 'CT7' })
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.length).toBeLessThanOrEqual(6)
+      const dies = rows.map(r => r.trade_good_die)
+      expect(new Set(dies).size).toBe(dies.length) // a repeat hit stacks quantity, not a duplicate row
+    }
+  })
+
+  it('prices scale with each good\'s own basePriceCr, not a generic per-world cost', () => {
+    // Radioactives (die '16', basePriceCr 1,000,000) vs Textiles (die '11',
+    // basePriceCr 3,000) — if both are ever rolled, Radioactives must price
+    // in the hundreds-of-thousands/millions, not the same few-thousand
+    // range a shared generic base would produce for every good alike.
+    let sawRadioactives = false
+    for (let t = 0; t < 60; t++) {
+      const rows = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: t, tradeRules: 'CT7' })
+      const radioactives = rows.find(r => r.trade_good_die === '16')
+      if (radioactives) {
+        sawRadioactives = true
+        // basePriceCr 1,000,000 × ActualValue range 40%-400% = 400,000-4,000,000
+        expect(radioactives.purchase_price).toBeGreaterThan(100000)
+      }
+    }
+    expect(sawRadioactives).toBe(true)
+  })
+
+  it('is deterministic — same inputs produce identical rows across calls', () => {
+    const a = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 12, tradeRules: 'CT7' })
+    const b = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 12, tradeRules: 'CT7' })
+    expect(a).toEqual(b)
+  })
+
+  it('different ticks produce different search results', () => {
+    const a = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'CT7' })
+    const b = generateWorldSnapshot({ world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 2, tradeRules: 'CT7' })
+    expect(a).not.toEqual(b)
+  })
+})
+
 // ── Per-player live pricing (Phase 4) ───────────────────────────────────────────
 
 describe('mgt2022PlayerGoodPrice', () => {
@@ -345,19 +392,25 @@ describe('ct7PlayerSalePrice', () => {
   const goodDie = '11'
 
   it('with brokerSkill 0 reproduces the shared baseline snapshot exactly', () => {
+    // Book 2's search composition is sparse (1D6 lots/week) — pick
+    // whichever die the baseline actually rolled this tick rather than
+    // assuming '11' is present.
     const rows = generateWorldSnapshot({
       world: testWorld, sectorName: 'Test', campaignId: 'c1', tick: 5, tradeRules: 'CT7',
     })
-    const baseline = rows.find(r => r.trade_good_die === goodDie)
+    expect(rows.length).toBeGreaterThan(0)
+    const baseline = rows[0]
 
     const salePrice = ct7PlayerSalePrice({
-      campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0,
+      campaignId: 'c1', world: testWorld, tick: 5, goodDie: baseline.trade_good_die, brokerSkill: 0,
     })
 
     expect(salePrice).toBe(baseline.sale_price)
   })
 
   it('a higher Broker skill raises the sale price', () => {
+    // ct7PlayerSalePrice recomputes directly from CT2_TRADE_GOODS and
+    // doesn't depend on this tick's search composition, so any known die works.
     const unskilled = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0 })
     const skilled   = ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 4 })
     expect(skilled).toBeGreaterThanOrEqual(unskilled)
@@ -371,54 +424,5 @@ describe('ct7PlayerSalePrice', () => {
 
   it('returns null for an unknown goodDie', () => {
     expect(ct7PlayerSalePrice({ campaignId: 'c1', world: testWorld, tick: 5, goodDie: 'ZZ' })).toBeNull()
-  })
-})
-
-// ── Per-lot sale pricing (real Book 7 source-vs-market mechanic) ────────────
-
-describe('ct7CargoLotSalePrice', () => {
-  const goodDie = '11'
-
-  it('when the lot was bought at the same world it is sold at, matches ct7PlayerSalePrice exactly', () => {
-    const selfReferenced = ct7PlayerSalePrice({
-      campaignId: 'c1', world: testWorld, tick: 5, goodDie, brokerSkill: 0,
-    })
-    const perLot = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie, brokerSkill: 0,
-    })
-    expect(perLot).toBe(selfReferenced)
-  })
-
-  it('a lot bought at a different world sells for a different price than one bought locally', () => {
-    const otherSource = { Hex: '0202', UWP: 'B000000-2', Remarks: '' } // no matching codes, low TL
-    const local = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie, brokerSkill: 0,
-    })
-    const imported = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: testWorld, sourceWorld: otherSource, tick: 5, goodDie, brokerSkill: 0,
-    })
-    expect(imported).not.toBe(local)
-  })
-
-  it('a high-TL source selling into a low-TL market prices higher than a low-TL source selling into the same market', () => {
-    const highTLSource = { Hex: '0303', UWP: 'B000000-F', Remarks: '' } // TL 15
-    const lowTLSource  = { Hex: '0404', UWP: 'B000000-1', Remarks: '' } // TL 1
-    const lowTLMarket  = { Hex: '0505', UWP: 'B000000-1', Remarks: '' }
-
-    const fromHighTL = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: lowTLMarket, sourceWorld: highTLSource, tick: 5, goodDie, brokerSkill: 0,
-    })
-    const fromLowTL = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: lowTLMarket, sourceWorld: lowTLSource, tick: 5, goodDie, brokerSkill: 0,
-    })
-    expect(fromHighTL).toBeGreaterThan(fromLowTL)
-  })
-
-  it('returns null when sourceWorld is not provided (lot not yet resolved)', () => {
-    expect(ct7CargoLotSalePrice({ campaignId: 'c1', marketWorld: testWorld, sourceWorld: null, tick: 5, goodDie })).toBeNull()
-  })
-
-  it('returns null for an unknown goodDie', () => {
-    expect(ct7CargoLotSalePrice({ campaignId: 'c1', marketWorld: testWorld, sourceWorld: testWorld, tick: 5, goodDie: 'ZZ' })).toBeNull()
   })
 })

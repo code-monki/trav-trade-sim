@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0  
+**Version:** 0.14.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -194,7 +194,7 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-8: View Market Prices for a World
 
 **Actor:** Referee, Player
-**Related Requirements:** FR-401, FR-401a, FR-401b, FR-402, FR-403, FR-404, FR-405, FR-406, FR-407, FR-408, FR-409, FR-410, FR-411, FR-412
+**Related Requirements:** FR-401, FR-402, FR-403, FR-404, FR-405, FR-406, FR-407, FR-408, FR-409, FR-410, FR-411, FR-411a, FR-412
 **Trigger:** User opens the Port > Market tab for a selected world
 
 **Preconditions:**
@@ -203,8 +203,8 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Main Flow:**
 1. System checks whether a market snapshot exists for this world at the current tick
-2. If none exists, system generates prices deterministically and, on a world's first-ever visit, backfills price history for the current year. For MgT2022, the goods composing this snapshot are a randomized-per-world/tick subset (all Common Goods, Trade Goods matching the world's trade codes, plus population-code-count random extras) rather than the full goods table
-3. System displays buy price and quantity for the goods on offer (all 36 `CT2_TRADE_GOODS` for CT7/T5; the MgT2022 composition above for MgT2022), colour-coded against the campaign ruleset's base price. For MgT2022 only, sell price and spread are also shown, reflecting this player's own Broker skill (another player viewing the same world/tick with a different skill level would see a different number). For CT7, no sell price or spread is shown on this tab at all — a real CT7 sell price depends on both the purchase world and an eventual market world, neither of which is known here; real per-lot sell prices appear once a good is actually held, on the Cargo and Jump tabs (UC-10, UC-11)
+2. If none exists, system generates prices deterministically and, on a world's first-ever visit, backfills price history for the current year. For MgT2022, the goods composing this snapshot are a randomized-per-world/tick subset (all Common Goods, Trade Goods matching the world's trade codes, plus population-code-count random extras) rather than the full goods table. For CT7, the goods on offer are Book 2's own Trade and Speculation search results — at most 6 distinct goods, from 1D6 independent search throws this tick — rather than the full goods table
+3. System displays buy price, sell price, spread, and quantity for the goods on offer (all 36 `CT2_TRADE_GOODS` for T5; the CT7/MgT2022 compositions above for those rulesets), colour-coded against the campaign ruleset's base price. Both CT7 and MgT2022 sell prices reflect this player's own Broker skill (another player viewing the same world/tick with a different skill level would see a different number). Neither CT7 (Book 2) nor MgT2022 has a source-vs-market pricing duality, so sell price is always a genuine single-world number, computable ambiently the same as buy price
 4. Active market events are shown in a banner; affected goods are visually distinguished
 5. User selects one or more goods to chart; system renders weekly/monthly/annual/realized price history
 
@@ -296,13 +296,10 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 **Main Flow:**
 1. System lists all worlds within the ship's jump range from its current world
 2. Each row shows destination, UWP, projected profit on currently-held cargo, and hex distance
-3. If the player holds cargo, system projects profit using the campaign's actual pricing engine: for MgT2022/T5, the shared per-world/tick snapshot; for CT7, each lot's real per-lot sell price against the candidate destination (`ct7CargoLotSalePrice`, threading the lot's actual purchase-world data — the same real mechanic as the Cargo tab, not a same-world hypothetical)
+3. If the player holds cargo, system projects profit using the campaign's actual pricing engine (the shared per-world/tick snapshot for the candidate destination) — for every ruleset including CT7, since none of them has a source-vs-market pricing duality; a cargo lot's projected sale price depends only on the candidate destination world, never on where it was bought
 4. Player clicks Select on a destination row
 5. System commits the ship's location to the destination and switches to the Market tab
 6. System automatically delivers any in-transit passengers or mail contracts whose destination matches
-
-**Alternate / Exception Flows:**
-- **A1 — CT7, a held lot's purchase world hasn't resolved yet:** That lot contributes Cr0 to the projection until its source world resolves (typically immediate); never falls back to a self-referenced guess
 
 **Postconditions:**
 - `ships.current_world`/`current_sector` updated

@@ -84,13 +84,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useShipStore } from '../stores/ship.js'
 import { useMapStore  } from '../stores/map.js'
 import { useTickStore } from '../stores/tick.js'
 import { useAuthStore } from '../stores/auth.js'
 import { hexDistance  } from '../utils/hexDistance.js'
-import { generateWorldSnapshot, ct7CargoLotSalePrice } from '../lib/market-tick.js'
+import { generateWorldSnapshot } from '../lib/market-tick.js'
 
 const props = defineProps({
   world:      { type: Object, default: null },
@@ -119,56 +119,17 @@ const originHex  = computed(() => ship.ship?.current_world)
 const originName = computed(() =>
   map.worlds.find(w => w.Hex === originHex.value)?.Name || originHex.value)
 
-// CT7 only: resolve each held cargo lot's actual purchase-world data.
-// Book 7's sell price depends on BOTH the lot's real source world and the
-// candidate destination (Cost of Goods/Market Price mechanic) — self-
-// referencing the candidate destination as both (what generateWorldSnapshot's
-// shared baseline does, fine for MgT2022 since that ruleset has no such
-// duality) would silently misprice every projection. Cached the same way
-// CargoHold.vue resolves it, since the lookup is async but `projections`
-// needs to read synchronously.
-const sourceWorldCache = ref({}) // hex -> world object
-
-async function loadSourceWorlds() {
-  if (auth.campaign?.trade_rules !== 'CT7') return
-  const pairs = new Map()
-  for (const item of ship.cargo) {
-    if (item.purchase_world && item.purchase_sector) pairs.set(item.purchase_world, item.purchase_sector)
-  }
-  for (const [hex, sector] of pairs) {
-    if (sourceWorldCache.value[hex]) continue
-    const worlds = await map.fetchWorldsForSector(sector)
-    const world  = worlds.find(w => w.Hex === hex)
-    if (world) sourceWorldCache.value = { ...sourceWorldCache.value, [hex]: world }
-  }
-}
-
-onMounted(loadSourceWorlds)
-watch(() => ship.cargo.map(c => c.id), loadSourceWorlds)
-
-function ct7ProjectedProfit(destWorld) {
-  return ship.cargo.reduce((sum, item) => {
-    const sourceWorld = sourceWorldCache.value[item.purchase_world] ?? null
-    const salePrice = ct7CargoLotSalePrice({
-      campaignId:   auth.campaign?.id,
-      marketWorld:  destWorld,
-      sourceWorld,
-      tick:         tick.currentTick,
-      goodDie:      item.trade_good_die,
-      activeEvents: [],
-      brokerSkill:  tick.brokerSkill,
-    })
-    return salePrice != null ? sum + (salePrice - item.purchase_price) * item.tons : sum
-  }, 0)
-}
-
-function sharedBaselineProjectedProfit(destWorld) {
+function projectedProfit(destWorld) {
   const snapshots = generateWorldSnapshot({
     world:        destWorld,
     sectorName:   props.sectorName,
     campaignId:   auth.campaign?.id ?? 'route-analysis',
     tick:         tick.currentTick,
     activeEvents: [],
+    // Previously omitted, which silently defaulted to CT7's own goods
+    // table/pricing engine for every campaign — a real bug, not just an
+    // estimate-precision gap, since it matched cargo dies against a
+    // different, unrelated goods table for non-CT7 rulesets.
     tradeRules:   auth.campaign?.trade_rules,
   })
   const snapByDie = {}
@@ -183,16 +144,13 @@ const projections = computed(() => {
   if (!originHex.value || !localJump.value || !map.worlds.length) return []
 
   const hasCargo = ship.cargo.length > 0
-  const isCT7    = auth.campaign?.trade_rules === 'CT7'
   const results  = []
 
   for (const w of map.worlds) {
     const dist = hexDistance(originHex.value, w.Hex)
     if (dist === 0 || dist > localJump.value) continue
 
-    const totalProfit = hasCargo
-      ? (isCT7 ? ct7ProjectedProfit(w) : sharedBaselineProjectedProfit(w))
-      : 0
+    const totalProfit = hasCargo ? projectedProfit(w) : 0
 
     results.push({
       name:        w.Name || w.Hex,

@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 ---
 
@@ -384,64 +384,65 @@ PIN hashing: PBKDF2-SHA256, 10,000 iterations, 16-byte random salt, via the Web 
 
 ## 7. Deterministic Price Engine
 
-The market price engine is a pure function chain:
+The market price engine is a pure function chain. CT7's underlying
+ruleset is Classic Traveller **Book 2** ("Starships"), not Book 7 Merchant
+Prince — each of the 36 named goods in `CT2_TRADE_GOODS` has its own
+`basePriceCr`, and both purchase and resale price are that base price ×
+the Actual Value table (2D6 + purchase/resaleDMs from the world you're
+at). Book 2 has **no source-vs-market pricing duality** — unlike Book 7,
+resale price never depends on where a lot was originally bought, only on
+the world you're at when you sell it, exactly like every other ruleset
+here. (An earlier pass mistakenly applied Book 7 Merchant Prince's
+abstract, two-world `costOfGoods`/`marketBasePrice`/`tlAdjustment`
+formulas to this named-goods table instead of reading each good's own
+base price; those Book 7 functions remain in `trade-engine-ct7.js` as
+unit-tested but unwired dead code, kept for `tradeResult()`'s own tests
+and in case a future hire-an-NPC-broker feature wants them, but are no
+longer part of the live CT7 pricing path.)
+
+Which goods are even on offer is itself a search procedure, not a fixed
+list: Book 2's own text has the referee throw two dice once per week,
+combining them into a D66 result (population DM of +1 at Population 9+ or
+-1 at Population 5- applied to the first digit only, clamped to 1-6) to
+find one good. This app extends that to **1D6 independent throws per
+tick**, reusing the identical single-throw procedure each time, so the
+market isn't reduced to exactly one good; a good rolled more than once in
+the same tick's searches stacks quantity rather than duplicating the row.
 
 ```
-makeRng(seed = `${campaignId}:${worldHex}:${goodDie}:${tick}`)
+makeRng(seed = `${campaignId}:${worldHex}:${goodDie}:${tick}:v1`)
   └─► FNV-1a hash → mulberry32 PRNG
 
-generateWorldSnapshot(world, sectorName, campaignId, tick, activeEvents)
-  For each of 36 CT2_TRADE_GOODS:
-    1. rng = makeRng(campaignId:worldHex:die:tick)
-    2. purchaseDM = Σ CT2 DMs matching world trade codes
-    3. saleDM     = Σ CT2 DMs matching world trade codes
+generateCT7Snapshot(world, sectorName, campaignId, tick, activeEvents)
+  popDigit = UWP population digit
+
+  # Composition uses its OWN seeded RNG streams, separate from any good's
+  # own price/qty rolls — changing the lot count or which goods hit never
+  # shifts where a good's own draws start from.
+  lotCountRng   = makeRng(`${campaignId}:${worldHex}:lotcount:${tick}:v1`)
+  lotCount      = 1d6(lotCountRng)
+  compositionRng = makeRng(`${campaignId}:${worldHex}:composition:${tick}:v1`)
+  hits = ct2Composition(compositionRng, popDigit, lotCount)
+    # lotCount independent throws of ct2SearchGoodDie(d6, d6, popDigit);
+    # a repeat hit on the same die stacks quantity rather than a new row.
+
+  For each good in CT2_TRADE_GOODS where hits.has(good.die):
+    1. rng = makeRng(`${campaignId}:${worldHex}:${good.die}:${tick}:v1`)
+    2. purchaseDM = Σ CT2 purchaseDMs matching world trade codes
+    3. saleDM     = Σ CT2 resaleDMs matching world trade codes
     4. purchaseRoll = 2d6(rng) + purchaseDM
-    5. saleRoll     = 2d6(rng) + saleDM
-    6. costPerTon   = costOfGoods(tradeCodes, starport, tl)
-    7. purchasePrice = costPerTon × actualValueMultiplier(purchaseRoll)
-    8. marketBase    = marketBasePrice(tradeCodes, tradeCodes)   # self-referenced — see note below
-    9. salePrice     = marketBase × actualValueMultiplier(saleRoll)   # no TL adjustment here — see note below
-   10. eventMod     = Σ effect_pct for active events matching die or '__all__'
-   11. salePrice   *= (1 + eventMod/100)
-   12. qty = rollQty(good.qty, [d6(rng), d6(rng), ...])
+    5. purchasePrice = good.basePriceCr × actualValueMultiplier(purchaseRoll)
+    6. saleRoll     = 2d6(rng) + saleDM
+    7. salePrice     = good.basePriceCr × actualValueMultiplier(saleRoll)
+    8. eventMod     = Σ effect_pct for active events matching die or '__all__'
+    9. purchasePrice/salePrice *= (1 + eventMod/100)
+   10. qty = Σ over each "hit" on this good: rollQty(good.qty, [d6(rng), ...])
 ```
 
-All inputs are deterministic; same seed = same price on every client. (This pipeline is CT7's; T5 shares the same 36 `CT2_TRADE_GOODS` table but its own pricing formulas — see `trade-engine-t5.js` — and MgT2022 uses an entirely different table/pipeline, §7a below.)
-
-**Deliberate self-reference, and why it's a baseline only.** `marketBasePrice(tradeCodes, tradeCodes)` treats this world as both source and market — a reasonable stand-in for the *ambient* MarketTable listing, where no specific owned cargo lot is in play, so there's no real "source world" to ask about. Because source==market here, `tlAdjustment`'s delta is always 0 and applying it would be a no-op, so this baseline never calls it at all. This is **not** what a real owned cargo lot sells for, though: `marketBasePrice` and `tlAdjustment` are both genuinely two-world Book 7 functions (source codes/TL vs. market codes/TL), and a real lot has a real, known purchase world (`cargo.purchase_world`/`purchase_sector`). `ct7CargoLotSalePrice()` in `market-tick.js` is the function that does this correctly — it reuses this same seed's sale-roll dice (so "market luck" is shared across every lot of the same good sold at the same market/tick) but threads the *lot's actual* source codes/TL through `marketBasePrice`/`tlAdjustment` instead of self-referencing. `CargoHold.vue` calls it once each cargo lot's purchase world resolves (via `map.fetchWorldsForSector`, cached locally); until then `sellPriceFor` returns `null`, same as any other not-yet-appraised good. `ct7PlayerSalePrice()` (§7b) keeps the self-referenced baseline behavior — it's for the ambient listing, not a specific lot.
-
-**The ambient self-reference turned out to be misleading enough to remove
-from the Market tab entirely, for CT7.** A user reviewing a live CT7
-campaign correctly pointed out that a real CT7 sell price can't exist
-before a market world is known — so showing *any* number in a "Sell"
-column pre-purchase implies an achievable price that (outside the
-coincidence of buying and selling at the identical world) isn't real.
-`MarketTable.vue`'s `showSellColumns` computed (`auth.campaign?.trade_rules
-!== 'CT7'`) hides the Sell and Spread columns entirely for CT7 — Buy price
-and Qty remain (both are genuinely source-only). MgT2022 keeps both
-columns: its sell price has no source/market duality at all, so the
-ambient number there is already the real one. Real CT7 sell prices still
-appear on `CargoHold.vue` (once a lot is held) and `RouteAnalysis.vue`
-(projected against reachable worlds, next).
-
-**`RouteAnalysis.vue`'s profit projection had two bugs, one of them
-severe, found while fixing this.** It called `generateWorldSnapshot()`
-without a `tradeRules` argument at all — since that function defaults to
-`'CT7'`, every campaign's Jump-tab profit projection was silently using
-CT7's own `CT2_TRADE_GOODS` table and pricing formulas, regardless of the
-campaign's actual ruleset. For MgT2022 campaigns this meant cargo dies
-were matched against a *different, unrelated* goods table that happens to
-share the same 11-66 numeric range (e.g. die `'11'` is "Textiles" in CT7
-but "Common Electronics" in MgT2022) — a wrong-goods-table match, not just
-an imprecise number. Separately, for CT7 specifically, the projection used
-the same self-referenced baseline described above — a candidate
-destination's own codes used as both source and market — rather than each
-held cargo lot's real purchase world. Fixed both: `tradeRules:
-auth.campaign?.trade_rules` is now passed through for the shared-baseline
-path (MgT2022/T5), and a separate `ct7ProjectedProfit()` resolves each
-lot's real source world the same way `CargoHold.vue` does (a
-`sourceWorldCache` populated via `map.fetchWorldsForSector()`) and calls
-`ct7CargoLotSalePrice()` per lot for CT7.
+All inputs are deterministic; same seed = same result on every client.
+(T5 shares the same 36 `CT2_TRADE_GOODS` table but its own pricing
+formulas and no composition-narrowing mechanic — see `trade-engine-t5.js`
+— and MgT2022 uses an entirely different table/pipeline, §7a below.)
 
 ## 7a. MgT2022 Price/Composition Engine
 
@@ -504,7 +505,7 @@ ct7PlayerSalePrice(campaignId, world, tick, goodDie, activeEvents, brokerSkill)
   rng = makeRng(same seed §7 used for this good)
   discard the purchase roll's 2 dice (order must match §7 — CT7 has no purchase-side Broker term)
   saleRoll = 2d6(rng) + saleDM + brokerDM(brokerSkill)    # brokerDM caps at skill 4
-  → salePrice via actualPrice(marketBasePrice(codes, codes), saleRoll) + event mod
+  → salePrice via actualPrice(good.basePriceCr, saleRoll) + event mod
 ```
 
 Because `makeRng(seed)` is a pure function of its seed string, drawing the same dice in the same order from a fresh call reproduces the exact roll §7/§7a's shared baseline drew — no raw dice are persisted anywhere, and `brokerSkill: 0` reproduces the baseline exactly (this is exactly what locks the two independent implementations together in `tests/market-tick.test.js`).

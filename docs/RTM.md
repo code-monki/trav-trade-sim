@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -66,9 +66,9 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-401 | Show goods on offer with buy price/qty (36 fixed for CT7/T5; narrower randomized composition for MgT2022, FR-411) | DD §7 | `MarketTable.vue`, `tick.js:displaySnapshots` (per-player overlay, FR-412) | — | CT-103 | E2E-201 | MTS-1 |
-| FR-401a | MgT2022: Sell/Spread columns shown (single-world property) | HLD §7 | `MarketTable.vue:showSellColumns` | — | CT-128–129 | — | MTS-21 |
-| FR-401b | CT7: Sell/Spread columns hidden (no meaningful pre-purchase number) | HLD §7 | `MarketTable.vue:showSellColumns` | — | CT-130–132 | — | MTS-21 |
+| FR-401 | Show goods on offer with buy/sell/spread/qty (36 fixed for T5; sparse randomized composition for CT7, FR-411a; narrower randomized composition for MgT2022, FR-411) | DD §7 | `MarketTable.vue`, `tick.js:displaySnapshots` (per-player overlay, FR-412) | — | CT-103 | E2E-201 | MTS-1 |
+| FR-401a | *(retired)* | — | — | — | — | — | — |
+| FR-401b | *(retired — CT7's Sell/Spread columns are no longer hidden; Book 2 has no source-vs-market duality, see FR-401)* | — | — | — | — | — | — |
 | FR-402 | Deterministic price generation | HLD §7 (CT7/T5), HLD §7a (MgT2022), DD §5 | `market-tick.js:generateWorldSnapshot`, `makeRng` | UT-108–111 | — | — | — |
 | FR-403 | Lazy snapshot generation | HLD §4.3 | `tick.js:ensureWorldSnapshot` | — | — | ST-102–103 | — |
 | FR-404 | Backfill gaps since last visit | HLD §4.3 | `tick.js:ensureWorldSnapshot` (gap-fill loop, not just first-ever visit) | — | — | — | MTS-3 |
@@ -80,6 +80,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-409 | Per-row Buy button | DD §2, DD §7 | `MarketTable.vue` `showBuyButton` prop, `.buy-row-btn` | — | CT-109–111 | E2E-301 | MTS-1 |
 | FR-410 | Find-a-Supplier gate (MgT2022 only) | HLD §7a, DD §1.1 `supplier_search_attempts` | `FindSupplierPanel.vue`, `worker/src/routes/market.js` (`/find-supplier`), `tick.js:loadSupplierStatus`/`attemptFindSupplier`, `trade-engine-mgt2022.js:findSupplierRoll` | UT-612 | — | — | MTS-14 |
 | FR-411 | MgT2022 goods composition (Common + trade-code matches + population D66 extras) | HLD §7a | `market-tick.js:mgt2022Composition`, `trade-engine-mgt2022.js:isRerollRequired`/`resolveGood`/`goodsAvailableDM` | UT-613–614 | — | — | MTS-14 |
+| FR-411a | CT7 goods composition (Book 2 Trade & Speculation search, 1D6 throws/tick) | HLD §7 | `market-tick.js:ct2Composition`, `trade-engine-ct7.js:ct2SearchGoodDie`/`ct2PopulationSearchDM` | UT-226–230, UT-609a–d | — | — | MTS-21 |
 | FR-412 | Per-player pricing (CT7 sale-only, MgT2022 both) reflects the acting player's own Broker skill | HLD §7a | `market-tick.js:mgt2022PlayerGoodPrice`/`ct7PlayerSalePrice`, `tick.js:brokerSkill`/`loadBrokerSkill`/`displaySnapshots` | UT-616–619 | — | — | MTS-14 |
 
 ## 2.5 Trading — Buy
@@ -102,7 +103,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-603 | Sell removes cargo, logs transaction + trade_record | HLD §4.5 | `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` | — | — | E2E-303 | MTS-1 |
 | FR-604 | Profit flash notification | DD §2 | `CargoHold.vue` flash animation | — | — | E2E-303 | MTS-1 |
 | FR-605 | CT7 Broker self-service gain added at sale, recorded as a distinct income transaction | HLD §7b, DD §1.1 `transactions` | `trade-engine-ct7.js:brokerSelfServiceGain`, `ship.js:sellCargo`, `worker/src/routes/ships.js:sell-cargo` (`broker_gain_total` handling) | UT-219 | — | — | MTS-19 |
-| FR-606 | CT7 per-lot sale price uses the lot's real purchase-world codes/TL vs. the current market's, incl. bidirectional TL adjustment | HLD §7 | `trade-engine-ct7.js:tlAdjustment`, `market-tick.js:ct7CargoLotSalePrice`, `CargoHold.vue` (`sourceWorldCache`) | UT-209–210b, UT-224–225 | — | — | MTS-19 |
+| FR-606 | CT7 purchase/sale price is each good's own Book 2 `basePriceCr` × Actual Value% (2D6 + world DMs); no source-vs-market duality | HLD §7 | `market-tick.js:generateCT7Snapshot`/`ct7PlayerSalePrice`, `trade-engine-ct7.js:actualPrice` | UT-609b, UT-618 | — | — | MTS-19 |
 
 ## 2.7 Route Analysis
 
@@ -110,7 +111,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-701 | Show worlds within jump range | HLD §5.1 | `RouteAnalysis.vue`, `hexDistance.js` | UT-401–404 | — | — | MTS-4 |
 | FR-702 | Route row with profit projection | HLD §5.1 | `RouteAnalysis.vue` profit calculation | — | — | — | MTS-4 |
-| FR-702a | Profit projection uses the campaign's real `trade_rules`; CT7 uses real per-lot source-vs-market pricing | HLD §7, §7e | `RouteAnalysis.vue:sharedBaselineProjectedProfit`/`ct7ProjectedProfit`, `market-tick.js:ct7CargoLotSalePrice` | — | CT-1001–1004 | — | MTS-21 |
+| FR-702a | Profit projection uses the campaign's real `trade_rules` (previously defaulted silently to CT7) | HLD §7 | `RouteAnalysis.vue:projectedProfit` | — | CT-1001–1002 | — | MTS-21 |
 | FR-703 | Select commits location + navigates | HLD §4.5 | `RouteAnalysis.vue:selectWorld`, `ship.js:updateLocation` | — | — | — | MTS-4 |
 
 ## 2.8 Market Events

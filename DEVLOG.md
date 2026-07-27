@@ -1507,6 +1507,131 @@ the way CT7's was).
 
 ---
 
+## 2026-07-27 — Correction: CT7's real ruleset is Book 2, not Book 7 — pricing formula + goods search rewrite
+
+### Goal
+
+The user pasted the actual Classic Traveller **Book 2** ("Starships")
+"Trade and Commerce" rules verbatim — the real source for this app's
+36-good named `CT2_TRADE_GOODS` table — after flagging distrust of the
+PDF this table was originally transcribed from. Cross-checking that text
+against the live code surfaced that the entire CT7 pricing pass from the
+last two days (2026-07-26/27 entries above) had been built on a false
+premise: it treated CT7 as Book 7 **Merchant Prince**, an entirely
+different, incompatible Classic Traveller trade system that abandons
+named goods for an abstract TL/trade-class commodity. Applying Book 7's
+formulas to Book 2's named-goods table meant every good priced almost
+identically regardless of its own listed value — e.g. the user's pasted
+text's own worked example ("a ton of firearms as trade goods has a base
+price of Cr30,000") matches `CT2_TRADE_GOODS`'s existing `basePriceCr:
+30000` for Firearms, a field `generateCT7Snapshot` had `costOfGoods()`/
+`marketBasePrice()` completely ignoring.
+
+### The reversal
+
+Book 2's own procedure is self-contained and, critically, has **no
+source-vs-market pricing duality at all**: both purchase and resale price
+are a good's own `basePriceCr` × the Actual Value table (2D6 + that
+world's purchase/resaleDMs) — resale price depends only on the world
+you're AT when selling, never on where the lot was originally bought.
+That meant the entire previous day's per-lot pricing work was built on
+Book 7's premise and needed reverting, not extending:
+- `ct7CargoLotSalePrice()` (`market-tick.js`) — deleted. Its whole reason
+  to exist (a lot's real purchase-world codes/TL genuinely changing its
+  sale price at a different market) is a Book 7 mechanic; Book 2 has
+  nothing for it to compute.
+- `MarketTable.vue`'s `showSellColumns` (hiding Sell/Spread for CT7,
+  premised on "CT7's real sell price can't be known before a market
+  world is known") — reverted. Book 2's sell price is an ordinary
+  single-world number, computable ambiently just like every other
+  ruleset.
+- `RouteAnalysis.vue`'s `ct7ProjectedProfit`/`sourceWorldCache` branch —
+  reverted to the single shared `generateWorldSnapshot`-based path,
+  keeping only the still-valid, unrelated `tradeRules`-passing bug fix
+  from that same pass.
+- `CargoHold.vue`'s `sourceWorldCache`/`loadSourceWorlds` plumbing —
+  reverted to the simple shared `tick.displaySnapshots` lookup.
+
+Book 7's `costOfGoods`/`marketBasePrice`/`tlAdjustment` (and their earlier
+table-accuracy fixes) remain in `trade-engine-ct7.js`, unit-tested but
+with zero callers outside `tradeResult()` (itself already dead code) —
+kept rather than deleted, since they're correct implementations of a real
+rule, just not one this app's CT7 campaigns actually use. CT7's Broker
+commission (`brokerFee`/`brokerSelfServiceGain`, wired via `ship.js`) is
+untouched by this correction — it's a genuine Book 7 mechanic for the
+sale-commission side, orthogonal to the goods-pricing question, and this
+app has no NPC-hiring flow either way.
+
+### New: Book 2's goods search, extended to 1D6 lots/week
+
+Book 2's own procedure for which goods are even on offer: "the referee
+throws two dice, noting their results consecutively, to create a number
+between 11 and 66; apply a DM of +1 on the first digit if the current
+world's population is 9+, and a DM of -1 if the world's population is
+5-... This throw may be made once per week." Implemented as two new pure
+functions in `trade-engine-ct7.js` — `ct2PopulationSearchDM(popDigit)` and
+`ct2SearchGoodDie(d1, d2, popDigit)` (DM and 1-6 clamp apply to the first
+digit only, matching the text exactly) — and a new `ct2Composition()`
+helper in `market-tick.js`.
+
+The user's own proposal, after I pushed back on three homebrew "Methods"
+they'd gathered from another source (one of which claimed Book 7 has a
+D66 goods table — it doesn't; that's specifically what Book 7 abandons):
+extend the RAW "once per week" throw to **1D6 independent throws per
+tick**, reusing the identical single-throw procedure each time rather
+than inventing a new sub-system. A good hit more than once in the same
+tick's searches stacks quantity rather than duplicating the row (mirrors
+MgT2022's existing composition convention). Lot count and composition
+draw from their own seeded RNG streams (`...lotcount:${tick}:v1`,
+`...composition:${tick}:v1`), separate from any individual good's own
+price/qty draw stream — the same discipline established for MgT2022's
+composition-vs-pricing separation.
+
+`generateCT7Snapshot` now only emits rows for goods the search actually
+hit (at most 6, previously always the full 36), each priced via its own
+`basePriceCr`. `ct7PlayerSalePrice()` similarly switched from
+`marketBasePrice(codes, codes)` to `good.basePriceCr`.
+
+**Deferred, per the user's own call**: extending this same "keep
+searching" mechanic to a GM-insert-a-found-lot referee tool — "I'll
+consult with other GMs to get a feel on the second feature." Not started.
+
+### Verified
+
+`npx vitest run` — 574/574 passing (`trade-engine-ct7.test.js` 83/83 new
+`ct2PopulationSearchDM`/`ct2SearchGoodDie` cases; `market-tick.test.js`
+51/51 rewritten for sparse composition — no test may assume a fixed die
+like `'11'` is present in a given tick's CT7 snapshot anymore, matching by
+whichever die the baseline actually rolled instead; `MarketTable.test.js`
+and `RouteAnalysis.test.js` component suites rewritten to drop the
+now-nonexistent Sell/Spread-hiding and per-lot-source-world coverage).
+`npx vite build` compiles cleanly.
+
+### Documentation correction
+
+The 2026-07-26/27 DEVLOG entries above describe the now-reversed Book 7
+premise as if permanent — left as-is (DEVLOG is a historical log, not a
+living doc) but flagged here for anyone reading forward. The **living**
+docs were corrected to match current reality: `SRS.md` (FR-401/401a/401b
+collapsed into one Sell/Spread-always-shown requirement, new FR-411a for
+the CT7 search composition, FR-606 rewritten for Book 2's actual formula,
+FR-702a trimmed), `RTM.md` (matching FR-ID rows), `HLD.md` §7 (full
+rewrite of the pricing pipeline description and pseudocode, the
+self-reference/Sell-hiding/RouteAnalysis-bug paragraphs replaced), `DD.md`
+(`MarketTable`/`CargoHold`/`RouteAnalysis` component descriptions),
+`UC.md` (UC-8, UC-11), and `TEST_PLAN.md` (UT-110, UT-224/225 retired
+with new UT-226–230/UT-609a–d in their place, CT-128–132 collapsed to one
+retired row, CT-1001–1004 trimmed to one parity row, MTS-19/MTS-21 manual
+scripts rewritten for the real mechanic). All six docs bumped 0.13.0 →
+0.14.0 together, per this project's existing convention.
+
+### Known gaps, not addressed this session
+
+T5's Market/Route-Analysis behavior remains unreviewed, per the user's
+own scheduling ("we'll do T5 tomorrow").
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

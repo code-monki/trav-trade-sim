@@ -1,21 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
-import { useMapStore } from '../../src/stores/map.js'
 import RouteAnalysis from '../../src/components/RouteAnalysis.vue'
-import { generateWorldSnapshot, ct7CargoLotSalePrice } from '../../src/lib/market-tick.js'
+import { generateWorldSnapshot } from '../../src/lib/market-tick.js'
 
 const ORIGIN = { Hex: '0101', UWP: 'A788899-9', Name: 'Origin', Remarks: 'Ag' }
 const DEST_A = { Hex: '0102', UWP: 'A788899-9', Name: 'Near World', Remarks: 'Ri' }
-// A source world with genuinely different codes/TL from DEST_A, so CT7's
-// real per-lot mechanic (which depends on both) diverges from a
-// self-referenced baseline (which would use DEST_A's own codes twice).
-const SOURCE = { Hex: '0201', UWP: 'B300000-2', Name: 'Source World', Remarks: '' }
 
 const CARGO_ITEM = {
   id: 'c1', trade_good_die: '11', trade_good_name: 'Textiles',
   purchase_price: 1000, purchased_tick: 1,
-  purchase_world: SOURCE.Hex, purchase_sector: 'Test', tons: 5,
+  purchase_world: ORIGIN.Hex, purchase_sector: 'Test', tons: 5,
 }
 
 function mountPanel({ tradeRules = 'MgT2022', cargo = [CARGO_ITEM], jumpRating = 2 } = {}) {
@@ -32,14 +27,12 @@ function mountPanel({ tradeRules = 'MgT2022', cargo = [CARGO_ITEM], jumpRating =
     stubActions: true,
     createSpy: vi.fn,
   })
-  const mapStore = useMapStore(pinia)
-  mapStore.fetchWorldsForSector.mockResolvedValue([SOURCE])
 
   const wrapper = mount(RouteAnalysis, {
     props: { world: ORIGIN, sectorName: 'Test' },
     global: { plugins: [pinia] },
   })
-  return { wrapper, mapStore }
+  return { wrapper }
 }
 
 function profitForHex(wrapper, hex) {
@@ -62,47 +55,27 @@ describe('RouteAnalysis — profit projection uses the campaign\'s real trade_ru
   })
 })
 
-describe('RouteAnalysis — CT7 uses the real per-lot source-vs-market mechanic', () => {
-  it('shows Cr0 profit before the cargo lot\'s source world has resolved', () => {
-    const { wrapper } = mountPanel({ tradeRules: 'CT7' })
-    // Synchronous first render — sourceWorldCache is still empty, so
-    // ct7CargoLotSalePrice returns null for this lot (no fallback to a
-    // wrong self-referenced number).
-    expect(profitForHex(wrapper, DEST_A.Hex)).toContain('0')
-  })
-
-  it('matches ct7CargoLotSalePrice using the lot\'s real purchase world once resolved', async () => {
-    const { wrapper, mapStore } = mountPanel({ tradeRules: 'CT7' })
-    await flushPromises()
-
-    expect(mapStore.fetchWorldsForSector).toHaveBeenCalledWith('Test')
-
-    const salePrice = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: DEST_A, sourceWorld: SOURCE,
-      tick: 5, goodDie: '11', activeEvents: [], brokerSkill: 0,
+describe('RouteAnalysis — CT7 shares the same tradeRules-aware projection path', () => {
+  it('matches generateWorldSnapshot with tradeRules explicitly set to CT7', () => {
+    // Book 2's search composition is sparse (1D6 lots/week) — pick
+    // whichever die this tick's baseline actually rolled rather than
+    // assuming a fixed one is present, then cargo a lot of that good.
+    const baseline = generateWorldSnapshot({
+      world: DEST_A, sectorName: 'Test', campaignId: 'c1', tick: 5, activeEvents: [], tradeRules: 'CT7',
     })
-    const expectedProfit = (salePrice - CARGO_ITEM.purchase_price) * CARGO_ITEM.tons
+    expect(baseline.length).toBeGreaterThan(0)
+    const good = baseline[0]
+
+    const cargoItem = {
+      id: 'c1', trade_good_die: good.trade_good_die, trade_good_name: good.trade_good_name,
+      purchase_price: 1000, purchased_tick: 1,
+      purchase_world: ORIGIN.Hex, purchase_sector: 'Test', tons: 5,
+    }
+    const { wrapper } = mountPanel({ tradeRules: 'CT7', cargo: [cargoItem] })
+
+    const expectedProfit = (good.sale_price - cargoItem.purchase_price) * cargoItem.tons
 
     const cellText = profitForHex(wrapper, DEST_A.Hex)
     expect(cellText).toContain(Math.abs(expectedProfit).toLocaleString())
-  })
-
-  it('differs from a self-referenced baseline (proving the fix isn\'t a no-op)', async () => {
-    const { wrapper } = mountPanel({ tradeRules: 'CT7' })
-    await flushPromises()
-
-    const realSalePrice = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: DEST_A, sourceWorld: SOURCE,
-      tick: 5, goodDie: '11', activeEvents: [], brokerSkill: 0,
-    })
-    const selfReferencedSalePrice = ct7CargoLotSalePrice({
-      campaignId: 'c1', marketWorld: DEST_A, sourceWorld: DEST_A,
-      tick: 5, goodDie: '11', activeEvents: [], brokerSkill: 0,
-    })
-    expect(realSalePrice).not.toBe(selfReferencedSalePrice)
-
-    const cellText = profitForHex(wrapper, DEST_A.Hex)
-    const wrongProfit = (selfReferencedSalePrice - CARGO_ITEM.purchase_price) * CARGO_ITEM.tons
-    expect(cellText).not.toContain(Math.abs(wrongProfit).toLocaleString())
   })
 })

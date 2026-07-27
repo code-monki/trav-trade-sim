@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 ---
 
@@ -573,14 +573,10 @@ the table's row source between `tick.displaySnapshots` and
 `tick.displayBlackMarketSnapshots` (HLD §7d). No new props/emits; this is
 internal state (`viewingBlackMarket`), not caller-configurable.
 
-The Sell (Cr/t) and Spread columns are hidden entirely for CT7 campaigns
-(`showSellColumns` computed, `auth.campaign?.trade_rules !== 'CT7'`, HLD
-§7) — CT7's real sell price depends on both the purchase world and the
-market world, so no meaningful number exists for a good not yet bought;
-showing the old self-referenced baseline implied an achievable price that
-mostly wasn't real. MgT2022 keeps both columns (its sell price has no
-such duality). Real CT7 sell prices appear only once a good is held, on
-`CargoHold`/`RouteAnalysis`.
+Sell (Cr/t) and Spread columns are shown for every ruleset, including
+CT7 — CT7's underlying ruleset is Book 2 (HLD §7), which has no
+source-vs-market pricing duality, so the ambient sell price shown here is
+already the real, single-world number, same as MgT2022 and T5.
 
 ### `PriceChart`
 
@@ -616,7 +612,7 @@ Drag release snaps to the nearest detent, with velocity awareness: a fling skips
 | `world` | Object | `null` | Current world (sell price lookup) |
 | `sectorName` | String | `''` | |
 
-No emits. For CT7, uses `ct7CargoLotSalePrice()` (`market-tick.js`, HLD §7) per lot — Book 7's real source-vs-market mechanic, since each lot's actual purchase world (`cargo.purchase_world`/`purchase_sector`) genuinely affects its sale price at a different market, unlike the ambient MarketTable listing. Resolves each distinct purchase world lazily via `map.fetchWorldsForSector()`, cached in a local `sourceWorldCache` (hex → world object) keyed on the hold's current lots; `sellPriceFor(item)` returns `null` (shown as "—", sell disabled) until that lot's source world resolves. Other rulesets keep reading `useTickStore().displaySnapshots` (the player's own Broker-adjusted number) unchanged. Calls `ship.sellCargo` with `brokerSkill: tick.brokerSkill` so the CT7 commission is applied consistently. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
+No emits. `sellPriceFor(item)` reads `useTickStore().displaySnapshots` (the player's own Broker-adjusted number) for every ruleset, including CT7 — Book 2 has no source-vs-market duality (HLD §7), so a cargo lot's sell price depends only on the world you're currently at, never on where it was bought. Calls `ship.sellCargo` with `brokerSkill: tick.brokerSkill` so the CT7 commission is applied consistently. Footer row sums cargo value at the currently-viewed world's live sell price, falling back to purchase price for goods not yet appraised there.
 
 ### `BuyDialog`
 
@@ -644,7 +640,7 @@ No emits. For CT7, uses `ct7CargoLotSalePrice()` (`market-tick.js`, HLD §7) per
 |------|---------|
 | `select-world` | (none) — fires after ship location committed |
 
-Anchors reachable-worlds computation to the ship's actual `current_world`/`current_sector` (not whichever world happens to be browsed in the sidebar). For MgT2022/T5, uses `src/lib/market-tick.js`'s `generateWorldSnapshot` client-side for projected-profit estimates, now explicitly passing `tradeRules: auth.campaign?.trade_rules` (previously omitted, which silently defaulted to CT7's pricing engine for every campaign — a real bug, not just an estimate-precision gap, since it matched cargo dies against the wrong ruleset's goods table entirely). For CT7, uses `ct7CargoLotSalePrice()` per held lot instead — resolves each lot's real purchase world the same way `CargoHold.vue` does (a local `sourceWorldCache`, `map.fetchWorldsForSector()`) rather than self-referencing the candidate destination as both source and market.
+Anchors reachable-worlds computation to the ship's actual `current_world`/`current_sector` (not whichever world happens to be browsed in the sidebar). Uses `src/lib/market-tick.js`'s `generateWorldSnapshot` client-side for projected-profit estimates, for every ruleset including CT7, now explicitly passing `tradeRules: auth.campaign?.trade_rules` (previously omitted, which silently defaulted to CT7's pricing engine for every campaign — a real bug, not just an estimate-precision gap, since it matched cargo dies against the wrong ruleset's goods table entirely). CT7 needs no per-lot source-world resolution — Book 2 has no source-vs-market duality (HLD §7).
 
 ### `PassengersPanel`
 

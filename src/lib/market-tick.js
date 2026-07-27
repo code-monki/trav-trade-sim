@@ -21,12 +21,7 @@ import { CT2_TRADE_GOODS, CT2_CODE_MAP } from './traveller-data.js'
 import { MGT2022_TRADE_GOODS } from './traveller-data-mgt2022.js'
 import {
   parseTradeCodes as ct7ParseTradeCodes,
-  starportFromUWP as ct7StarportFromUWP,
-  techFromUWP as ct7TechFromUWP,
-  costOfGoods,
-  marketBasePrice,
-  tlAdjustment,
-  actualValueMultiplier,
+  ct2SearchGoodDie,
   actualPrice,
   rollQty,
   brokerDM,
@@ -135,35 +130,77 @@ function buildEventMods(activeEvents) {
   return { buyMods, sellMods }
 }
 
-// ── CT7 snapshot ───────────────────────────────────────────────────────────────
+// ── CT7 snapshot (Book 2 Trade & Speculation) ───────────────────────────────────
+//
+// Book 2's own procedure is self-contained: each named good has its own
+// `basePriceCr`, and both purchase and resale price are that base price ×
+// the Actual Value table (2D6 + purchase/resaleDMs from whichever world
+// you're at). There is no separate "Cost of Goods"/"Market Price Table"
+// formula and no source-vs-market duality — those are Book 7 Merchant
+// Prince's own, incompatible abstract-commodity mechanics (kept in
+// trade-engine-ct7.js as unused pure functions; see DEVLOG), previously
+// applied here by mistake in place of each good's own base price.
+//
+// Which goods are even on offer is itself a search procedure, not a fixed
+// list: "the referee throws two dice... to create a number between 11 and
+// 66 [with a population DM on the first digit]... This throw may be made
+// once per week." Only one throw per week is RAW; this app extends that
+// to 1D6 independent throws per tick so the market isn't reduced to
+// exactly one good, reusing the identical single-throw procedure each time.
+
+// A good found more than once in the same week's searches stacks quantity
+// rather than duplicating the row — same convention as MgT2022's
+// composition. Own RNG stream, separate from any good's own price/qty
+// rolls below, so the lot count or a repeat hit never shifts where a
+// good's own draws start from.
+function ct2Composition(rng, popDigit, lotCount) {
+  const hits = new Map()
+  for (let i = 0; i < lotCount; i++) {
+    const die = ct2SearchGoodDie(d6(rng), d6(rng), popDigit)
+    if (!CT2_TRADE_GOODS.some(g => g.die === die)) continue // table covers the full 11-66 range; defensive only
+    hits.set(die, (hits.get(die) ?? 0) + 1)
+  }
+  return hits
+}
 
 function generateCT7Snapshot({ world, sectorName, campaignId, tick, activeEvents = [] }) {
   const codes    = ct7ParseTradeCodes(world.Remarks || '')
-  const starport = ct7StarportFromUWP(world.UWP || '')
-  const tl       = ct7TechFromUWP(world.UWP || '')
+  const popDigit = (world.UWP || '')[4]
   const { buyMods, sellMods } = buildEventMods(activeEvents)
+
+  const lotCountRng = makeRng(`${campaignId}:${world.Hex}:lotcount:${tick}:v1`)
+  const lotCount     = d6(lotCountRng)
+
+  const compositionRng = makeRng(`${campaignId}:${world.Hex}:composition:${tick}:v1`)
+  const hits = ct2Composition(compositionRng, popDigit, lotCount)
 
   const rows = []
   for (const good of CT2_TRADE_GOODS) {
+    const hitCount = hits.get(good.die)
+    if (!hitCount) continue
+
     const rng = makeRng(`${campaignId}:${world.Hex}:${good.die}:${tick}:v1`)
 
     const purchaseDM = sumCT2DMs(good.purchaseDMs, codes)
     const saleDM     = sumCT2DMs(good.resaleDMs,   codes)
 
-    const purchaseRoll = d6(rng) + d6(rng) + purchaseDM
-    let purchasePriceVal = Math.round(
-      costOfGoods(codes, starport, tl) * actualValueMultiplier(purchaseRoll)
-    )
+    const purchaseRoll   = d6(rng) + d6(rng) + purchaseDM
+    let purchasePriceVal = actualPrice(good.basePriceCr, purchaseRoll)
 
-    const saleRoll = d6(rng) + d6(rng) + saleDM
-    let salePriceVal = actualPrice(marketBasePrice(codes, codes), saleRoll)
+    const saleRoll   = d6(rng) + d6(rng) + saleDM
+    let salePriceVal = actualPrice(good.basePriceCr, saleRoll)
 
     const adjusted = applyEventMods(purchasePriceVal, salePriceVal, good.die, buyMods, sellMods)
     purchasePriceVal = adjusted.purchasePrice
     salePriceVal     = adjusted.salePrice
 
-    const qtyRolls = Array.from({ length: 8 }, () => d6(rng))
-    const qty      = rollQty(good.qty, qtyRolls)
+    // One quantity roll per hit — a good found more than once this week
+    // stacks quantity rather than duplicating the row.
+    let qty = 0
+    for (let i = 0; i < hitCount; i++) {
+      const qtyRolls = Array.from({ length: 8 }, () => d6(rng))
+      qty += rollQty(good.qty, qtyRolls)
+    }
 
     rows.push({
       campaign_id:     campaignId,
@@ -420,9 +457,14 @@ export function mgt2022PlayerGoodPrice({ campaignId, world, tick, goodDie, activ
 /**
  * Recompute one CT7 good's sale price for a specific acting player's Broker
  * skill, reusing the exact same seeded dice the shared snapshot baseline
- * drew. CT7's Broker DM only ever applies to the sale roll (per
- * `tradeResult()`'s own design) — there is no purchase-side equivalent, so
- * this returns just the adjusted sale price per ton.
+ * drew. Per Book 2's own mechanic, resale price depends only on the world
+ * you're AT when you sell (base price × Actual Value%, using that world's
+ * own resaleDMs) — there is no separate per-lot/source-world variant,
+ * unlike MgT2022's per-player pricing, since Book 2 has no source-vs-
+ * market duality at all (that's Book 7 Merchant Prince's own, unrelated
+ * mechanic — see DEVLOG). CT7's Broker DM only ever applies to the sale
+ * roll (per `tradeResult()`'s own design) — there is no purchase-side
+ * equivalent, so this returns just the adjusted sale price per ton.
  *
  * @returns {number | null} null if goodDie is unknown
  */
@@ -438,59 +480,8 @@ export function ct7PlayerSalePrice({ campaignId, world, tick, goodDie, activeEve
   d6(rng); d6(rng) // discard the purchase roll's 2 dice — must match generateCT7Snapshot's draw order
 
   const saleRoll       = d6(rng) + d6(rng) + saleDM + brokerDM(brokerSkill)
-  const salePriceVal   = actualPrice(marketBasePrice(codes, codes), saleRoll)
+  const salePriceVal   = actualPrice(good.basePriceCr, saleRoll)
   const { salePrice }  = applyEventMods(0, salePriceVal, goodDie, {}, sellMods)
-
-  return Math.max(1, salePrice)
-}
-
-/**
- * Compute the real sale price for a SPECIFIC owned CT7 cargo lot, at a
- * specific market world/tick. Unlike `ct7PlayerSalePrice` above (which
- * self-references the same world as both source and market — a reasonable
- * stand-in for "what would this good generically be worth here," used by
- * the ambient MarketTable listing where no particular lot is in play),
- * this is Book 7's actual two-world mechanic: `marketBasePrice` and
- * `tlAdjustment` both take the LOT's real purchase-world codes/TL as the
- * source side, not the market world's own codes/TL. A lot bought at a
- * Rich Agricultural world and one bought at a Poor Industrial world sell
- * for genuinely different prices at the same market, same tick.
- *
- * The "market luck" dice (the 2D6 sale roll) are drawn from the same seed
- * as the shared baseline (`${campaignId}:${marketWorld.Hex}:${goodDie}:${tick}:v1`)
- * — that roll represents conditions at THIS market, independent of any
- * specific lot's origin, so every lot of the same good sold at the same
- * market/tick shares the same underlying roll, just a different base price
- * feeding into it.
- *
- * @param {object} opts.marketWorld  — world object {Hex, UWP, Remarks, ...} where the sale happens
- * @param {object} opts.sourceWorld  — world object {UWP, Remarks, ...} where the lot was purchased
- * @param {number} opts.tick
- * @param {string} opts.goodDie
- * @param {object[]} [opts.activeEvents]
- * @param {number} [opts.brokerSkill]
- * @returns {number | null} null if goodDie or sourceWorld is unknown
- */
-export function ct7CargoLotSalePrice({ campaignId, marketWorld, sourceWorld, tick, goodDie, activeEvents = [], brokerSkill = 0 }) {
-  const good = CT2_TRADE_GOODS.find(g => g.die === goodDie)
-  if (!good || !sourceWorld) return null
-
-  const marketCodes = ct7ParseTradeCodes(marketWorld.Remarks || '')
-  const sourceCodes  = ct7ParseTradeCodes(sourceWorld.Remarks || '')
-  const marketTL     = ct7TechFromUWP(marketWorld.UWP || '')
-  const sourceTL     = ct7TechFromUWP(sourceWorld.UWP || '')
-
-  const saleDM = sumCT2DMs(good.resaleDMs, marketCodes)
-  const { sellMods } = buildEventMods(activeEvents)
-
-  const rng = makeRng(`${campaignId}:${marketWorld.Hex}:${goodDie}:${tick}:v1`)
-  d6(rng); d6(rng) // discard the purchase roll's 2 dice — must match generateCT7Snapshot's draw order
-
-  const saleRoll     = d6(rng) + d6(rng) + saleDM + brokerDM(brokerSkill)
-  const marketBase   = marketBasePrice(sourceCodes, marketCodes)
-  const tlAdjusted   = tlAdjustment(sourceTL, marketTL, marketBase)
-  const salePriceVal = actualPrice(tlAdjusted, saleRoll)
-  const { salePrice } = applyEventMods(0, salePriceVal, goodDie, {}, sellMods)
 
   return Math.max(1, salePrice)
 }

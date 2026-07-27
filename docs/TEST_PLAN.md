@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 ---
 
@@ -52,7 +52,7 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 | UT-107 | `formatImperialDate` | tick=50 | `"015-1106"` |
 | UT-108 | `makeRng` | same seed twice | Both sequences produce identical values |
 | UT-109 | `makeRng` | different seeds | First values differ |
-| UT-110 | `generateWorldSnapshot` | standard Ag world, tick=0 | Returns 36 rows, all prices > 0 |
+| UT-110 | `generateWorldSnapshot` | standard Ag world, tick=0, `tradeRules` omitted (defaults to CT7) | Returns 1-6 rows (Book 2's 1D6-lot search composition), all prices > 0, every row's die found in `CT2_TRADE_GOODS` |
 | UT-111 | `generateWorldSnapshot` | same inputs twice | Identical output (determinism) |
 | UT-112 | `generateWorldSnapshot` | with active +30% event | `sale_price` ≈ 130% of no-event price |
 | UT-113 | `shouldRollupMonth` | tick=0 | false |
@@ -87,8 +87,13 @@ Requires `PLAYWRIGHT_BASE_URL` (defaults to `http://localhost:5173`) with both t
 | UT-221 | `costOfGoods` | `{'Va'}` | base + 1000 (corrected: code previously had no Va entry at all, defaulting to 0) |
 | UT-222 | `marketBasePrice` | source `{'Ic'}`, market `{'In'}` vs `{'Ic'}` | +1000 vs +0 — Book 7's Ic row modifies the In market column, not Ic (corrected: code previously had it self-referencing Ic) |
 | UT-223 | `CT7_ALIEN_EFFECTS` | table contents | Matches Book 7's Alien Market Effects Table exactly (corrected: `As`, `Hv`, `So`, `Va`, `Zh` rows previously pointed at wrong race columns). Still dead data — no caller wires race/nationality into a live price |
-| UT-224 | `ct7CargoLotSalePrice` | `sourceWorld === marketWorld` | Matches `ct7PlayerSalePrice`'s self-referenced result exactly (parity check) |
-| UT-225 | `ct7CargoLotSalePrice` | lot bought at a genuinely different world than the market | Differs from a lot bought locally — this is Book 7's real per-lot source-vs-market mechanic, previously self-referenced (a real bug, not just a data-accuracy gap: every lot of a good sold for the same price regardless of where it was bought) |
+| UT-224 | *(retired)* | — | `ct7CargoLotSalePrice` was deleted — Book 2 has no source-vs-market pricing duality at all, so per-lot source-world pricing was never a real mechanic (see UT-226–230, DEVLOG 2026-07-27 correction) |
+| UT-225 | *(retired)* | — | see UT-224 |
+| UT-226 | `ct2PopulationSearchDM` | popDigit `'9'`, `'A'` | +1 |
+| UT-227 | `ct2PopulationSearchDM` | popDigit `'5'`, `'0'` | -1 |
+| UT-228 | `ct2PopulationSearchDM` | popDigit `'6'`-`'8'` | 0 |
+| UT-229 | `ct2SearchGoodDie` | d1=3, d2=5, popDigit `'9'` | `'45'` — population DM applies to the first digit only |
+| UT-230 | `ct2SearchGoodDie` | d1=1, d2=4, popDigit `'2'` (1-1=0) / d1=6, d2=4, popDigit `'9'` (6+1=7) | clamps to `'1'`/`'6'` respectively — a modified first digit never leaves 1-6 |
 
 ### 3.3 `src/lib/market-events.js`
 
@@ -135,7 +140,11 @@ Covers the MgT2022 pricing/freight/mail/traffic/composition pipeline (`tests/tra
 | UT-606 | `mailAvailable` | 2D=11 vs 12 | `false` vs `true` (needs 12+) |
 | UT-607 | `smugglingRiskDM` | `bannedLawLevel=3, worldLawLevel=9` (book's worked example: military weapons banned at LL3, smuggled onto an LL9 world) | `6` — `max(0, worldLawLevel - bannedLawLevel)` |
 | UT-608 | `generateWorldSnapshot` | `tradeRules: 'MgT2022'` | Rows drawn from the 35-entry `MGT2022_TRADE_GOODS` (not `CT2_TRADE_GOODS`), never including Exotics (D66=66); row count is now variable per world/tick (composition-dependent, see UT-613), not a fixed 36 |
-| UT-609 | `generateWorldSnapshot` | `tradeRules: 'CT7'` vs `'T5'`, same seed | Purchase prices diverge — confirms the pre-existing T5-uses-CT7-pricing bug is fixed |
+| UT-609 | `generateWorldSnapshot` | `tradeRules: 'CT7'` vs `'T5'`, same tick, matched by die (not array position, since CT7 rows are now a sparse composition-dependent subset) | Purchase prices diverge — confirms the pre-existing T5-uses-CT7-pricing bug is fixed |
+| UT-609a | `generateWorldSnapshot` | `tradeRules: 'CT7'`, 40 ticks | Never more than 6 distinct goods per tick, and never the same die twice in one tick (a repeat search hit stacks quantity rather than duplicating the row) |
+| UT-609b | `generateWorldSnapshot` | `tradeRules: 'CT7'`, 60 ticks, watching for die `'16'` (Radioactives) | When present, purchase price is always well above a generic per-world cost — confirms each good's own Book 2 `basePriceCr` drives the price, not a shared abstract formula |
+| UT-609c | `generateWorldSnapshot` | `tradeRules: 'CT7'`, same tick called twice | Identical rows (deterministic) |
+| UT-609d | `generateWorldSnapshot` | `tradeRules: 'CT7'`, tick 1 vs tick 2 | Different search results |
 | UT-610 | `generateTrafficSnapshot` | same inputs twice, including `shipId` | Identical row (deterministic) |
 | UT-611 | `generateTrafficSnapshot` | high-population vs low-population world, 30 ticks | High-population world's summed traffic ≥ low-population world's |
 | UT-620 | `passengerTrafficDiceCount` vs `freightTrafficDiceCount` | 2D+DM = 6, 9, 10, 12, 13, 15 | Diverge at each (confirmed against the book's own two distinct tables); agree elsewhere |
@@ -235,11 +244,7 @@ Every subsection below fully catalogues its component's actual test file (`tests
 | CT-125 | Click the Buy column header | Rows reorder by purchase price ascending (lowest first) |
 | CT-126 | Click the Buy column header twice | Reorders descending (highest first) |
 | CT-127 | Click a different sortable header after sorting by another | Resets to ascending on the new column |
-| CT-128 | Default render (no `trade_rules` configured) | Sell (Cr/t) and Spread columns shown |
-| CT-129 | `trade_rules: 'MgT2022'` | Sell (Cr/t) and Spread columns shown (single-world sell price, no source/market duality) |
-| CT-130 | `trade_rules: 'CT7'` | Sell (Cr/t) and Spread columns hidden entirely — no meaningful pre-purchase sell number exists for CT7 (FR-401b) |
-| CT-131 | `trade_rules: 'CT7'` | Buy (Cr/t) and Qty (t) columns still shown |
-| CT-132 | `trade_rules: 'CT7'` | Row cell count matches the reduced column set (no orphaned `<td>`s left over from the hidden columns) |
+| CT-128 | *(retired)* | Sell/Spread columns are shown for every ruleset, including CT7 — Book 2 has no source-vs-market duality, so there's nothing to hide (see FR-401, DEVLOG 2026-07-27 correction) |
 
 **Known gap:** the `showBuyButton` prop and `buy-good` emit still exist in `MarketTable.vue` (used by `MapView.vue`'s Market sub-tab), but have no dedicated test coverage in the current suite — the CT-1xx block above is a complete catalogue of what's actually tested, and neither is in it.
 
@@ -375,13 +380,18 @@ about the Market tab: the profit projection never passed `tradeRules` to
 `generateWorldSnapshot`, so it silently defaulted to CT7's pricing engine
 for every campaign — MgT2022 cargo dies were being matched against CT7's
 own (numerically overlapping but semantically unrelated) goods table.
+CT7 uses the exact same shared-baseline `generateWorldSnapshot(...,
+tradeRules: 'CT7')` path as every other ruleset — Book 2 has no
+source-vs-market pricing duality, so there is no separate per-lot branch
+to test (a per-lot mechanic was implemented and then reverted; see the
+DEVLOG 2026-07-27 correction entry).
 
 | TC-ID | Scenario | Expected |
 |-------|----------|----------|
 | CT-1001 | MgT2022 campaign, cargo held | Projected profit for a candidate world matches `generateWorldSnapshot(..., tradeRules: 'MgT2022')` exactly — confirms `trade_rules` is now passed through rather than defaulting to CT7 |
-| CT-1002 | CT7 campaign, cargo held, before the lot's purchase world has resolved | Projected profit shows Cr0 (no fallback to a wrong self-referenced number) |
-| CT-1003 | CT7 campaign, cargo held, after the lot's purchase world resolves | Projected profit matches `ct7CargoLotSalePrice()` using the lot's real purchase world against the candidate destination |
-| CT-1004 | CT7 campaign | Projected profit differs from what a self-referenced baseline (candidate destination used as both source and market) would have produced — proves the fix isn't a no-op |
+| CT-1002 | CT7 campaign, cargo held | Projected profit matches `generateWorldSnapshot(..., tradeRules: 'CT7')` exactly — CT7 shares the same shared-baseline projection path as every other ruleset (Book 2 has no source-vs-market duality, so there is no per-lot source-world variant to resolve) |
+| CT-1003 | *(retired)* | Was testing `ct7CargoLotSalePrice()`'s async source-world resolution, which no longer exists — see CT-1002, DEVLOG 2026-07-27 correction |
+| CT-1004 | *(retired)* | See CT-1003 |
 
 ---
 
@@ -608,13 +618,23 @@ own (numerically overlapping but semantically unrelated) goods table.
 8. As a second player on the same ship, open the Market tab at the same world; verify the Black Market toggle is already available to them too (ship-wide, not per-player) without needing to repeat the check
 9. Advance to a new game-month; verify the Black Market toggle disappears again until re-attempted
 
-### MTS-19: CT7 Rules-Accuracy Fixes (Cost/Price Tables, TL Adjustment, Broker Commission)
-1. Create a CT7 campaign; buy a lot of the same good at two different worlds with different trade codes/TL (e.g. one Poor, one Vacuum, or worlds at different Tech Levels)
-2. Travel to a third world and open Cargo; verify the two lots of the same good now show **different** sell prices (previously every lot of a good sold identically at a given market regardless of where it was bought — confirms the per-lot source-vs-market fix)
-3. Verify a lot bought at a higher-TL world than the current market sells for *more* than an otherwise-identical lot bought at a lower-TL world (Tech Level adjustment now applies in both directions, not just as a one-sided penalty)
-4. As a player with Broker skill, sell a lot; verify a separate "Broker Commission" line appears in the Reports > Ledger as **income**, not a deduction (previously modeled as a fee subtracted from proceeds) — check the amount is roughly half of `5% × skill × sale value`
+### MTS-19: CT7 Rules-Accuracy Fixes (Book 2 Pricing, Broker Commission)
+
+**Note (2026-07-27 correction):** steps 1-3 below originally verified a
+per-lot Cost-of-Goods/Market-Price mechanic borrowed from Book 7 Merchant
+Prince. Book 2's own procedure — the ruleset this app's named 36-good
+"CT7" table actually implements — has no source-vs-market duality at all:
+a good's sell price depends only on the world you're at when you sell,
+same as every other ruleset here. That per-lot mechanic was reverted;
+steps 1-3 now verify the corrected Book 2 formula instead. Book 7's
+`costOfGoods`/`marketBasePrice`/`tlAdjustment` functions remain in
+`trade-engine-ct7.js` as unit-tested but unwired dead code (see UT-206–210b).
+
+1. Create a CT7 campaign; open the Market tab and note a good's Buy price
+2. Travel to a different world and check the same good's price there; verify it changed (each good's own `basePriceCr` × the Actual Value roll for 2D6 + that world's purchase/resale DMs, not a shared generic per-world formula)
+3. Buy a lot, travel to a third world, and open Cargo; verify the shown sell price matches that good's ordinary Market-tab sell price at the *current* world — not something that depends on where the lot was originally bought
+4. As a player with Broker skill, sell a lot; verify a separate "Broker Commission" line appears in the Reports > Ledger as **income**, not a deduction — check the amount is roughly half of `5% × skill × sale value`
 5. As a player with 0 Broker skill, sell a lot; verify no Broker Commission line appears and net profit matches the sale price exactly
-6. Spot-check a Poor-world cargo lot's purchase cost against the Cost of Goods table (Po is a *discount*, not a premium) and a Vacuum-world lot (Va is a premium) — verify against `docs/DD.md`'s Cost of Goods table if uncertain
 
 ### MTS-20: CT7 Passenger/Freight Availability
 1. Create a CT7 campaign; open Port → Passengers with no destination picked; verify no availability count is shown and the rest of the form is hidden (same destination-first gating as MgT2022)
@@ -626,13 +646,21 @@ own (numerically overlapping but semantically unrelated) goods table.
 7. Book the last available ton of a tier; verify a second booking attempt for more of that same tier/route/tick is rejected with the remaining tonnage reflected accurately (not off-by-lot the way a discrete-lot model would be)
 8. With a crew member holding Admin, Steward, Streetwise, or Liaison skill, verify their respective passenger tier (Middle/High/Low) or Minor cargo tends to show higher availability than an unskilled crew, across a few tick advances
 
-### MTS-21: CT7 Market Tab Sell/Spread Removal + Real Route Profit Projection
-1. Create a CT7 campaign; open the Market/Port tab at any world; verify there is no "Sell (Cr/t)" or "Spread" column — only Good, Die, Buy (Cr/t), and Qty (t)
-2. Create an MgT2022 campaign; open the Market tab; verify Sell (Cr/t) and Spread are still shown as before
-3. Back in the CT7 campaign: buy a cargo lot, then open the Jump tab; verify a "Projected Profit" column appears once cargo is held
-4. Travel somewhere, buy a second lot of the *same* good at a world with different trade codes/Tech Level than the first purchase; return to Jump tab and verify the *combined* projected profit reflects both lots' own purchase worlds correctly (not the same number doubled, and not the destination's own codes self-referenced for both)
-5. Compare the Jump tab's projected profit for a candidate world against that same good's real per-lot sell price shown on the Cargo tab once you actually arrive there — they should match (both now use `ct7CargoLotSalePrice`)
-6. Create a fresh MgT2022 or T5 campaign with cargo held; verify the Jump tab's projected profit still shows sensible, ruleset-correct numbers (regression check: this projection previously defaulted silently to CT7's own goods table/pricing engine for every ruleset)
+### MTS-21: CT7 Market Tab Composition + Route Profit Projection
+
+**Note (2026-07-27 correction):** this script originally verified a Sell/
+Spread-column-hiding UI change and a per-lot source-vs-market route
+projection, both premised on Book 7 Merchant Prince's pricing mechanic.
+Book 2 (the ruleset this app's CT7 actually implements) has no source-vs-
+market duality, so that hiding and per-lot logic were reverted. This
+script now covers CT7's real, distinct mechanic instead: a sparse,
+searched goods composition (1D6 lots/week, Book 2's own procedure) rather
+than a fixed 36-good listing.
+
+1. Create a CT7 campaign; open the Market/Port tab at any world; verify at most 6 distinct goods are listed (not the full 36), with Good, Die, Buy (Cr/t), Sell (Cr/t), Spread, and Qty (t) columns all shown — CT7 has no source/market duality, so Sell/Spread are ordinary, always-computable numbers here
+2. Advance a tick; verify the listed goods can change (a new 1D6-throw search happens each tick) and prices for a good that persists across ticks also change (new dice roll)
+3. Buy a cargo lot, then open the Jump tab; verify a "Projected Profit" column appears once cargo is held, and its number matches that good's ordinary Market-tab sell price at each candidate destination
+4. Create a fresh MgT2022 or T5 campaign with cargo held; verify the Jump tab's projected profit still shows sensible, ruleset-correct numbers (regression check: this projection previously defaulted silently to CT7's own goods table/pricing engine for every ruleset)
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

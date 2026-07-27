@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.13.0  
+**Version:** 0.14.0  
 **Status:** Active development
 
 ---
@@ -65,19 +65,20 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-401 | The market shall show current buy price and available quantity for the goods on offer at the selected world. For CT7/T5 this is all 36 `CT2_TRADE_GOODS`; for MgT2022 it is a narrower, per-world/tick-randomized composition (FR-411). Sell price and spread are also shown for MgT2022 (FR-401a), but not for CT7 (FR-401b) |
-| FR-401a | For MgT2022, sell price is a genuine single-world property (no source/market duality — FR-606 is CT7-specific), so the Market tab shall show it and the buy/sell spread alongside every good, the same as buy price |
-| FR-401b | For CT7, the Market tab shall NOT show a Sell or Spread column: per FR-606, a real CT7 sell price depends on both the world a cargo lot was bought at and the world it's sold at, so no meaningful number exists for a good not yet purchased. Real per-lot sell prices are shown only once a good is actually held, on the Cargo tab (`CargoHold.vue`) and the Jump tab's profit projection (`RouteAnalysis.vue`, FR-702a) |
+| FR-401 | The market shall show current buy price, sell price, spread, and available quantity for the goods on offer at the selected world. For T5 this is all 36 `CT2_TRADE_GOODS`; for CT7 it is a per-world/tick-randomized composition of at most 6 goods (FR-411a); for MgT2022 it is a narrower, per-world/tick-randomized composition (FR-411). Neither CT7 nor MgT2022 has a source-vs-market pricing duality (FR-606), so sell price is always a genuine single-world property and can be shown for every ruleset alongside buy price |
+| FR-401a | *(retired — CT7's Sell/Spread columns are no longer hidden; see FR-401)* |
+| FR-401b | *(retired — see FR-401)* |
 | FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG, dispatched per-campaign to the CT7, T5, or MgT2022 pricing engine matching the campaign's `trade_rules` |
 | FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Cloudflare D1 |
 | FR-404 | On the first-ever visit to a world, the system shall backfill price history for all prior ticks in the current year |
-| FR-405 | Price colours shall indicate deviation from the campaign's ruleset base price (CT7's Cost of Goods table, T5's Trade Chart-2, or MgT2022's per-good Base Price) — green = below base, red = above |
+| FR-405 | Price colours shall indicate deviation from the campaign's ruleset base price (CT7's and T5's per-good Base Price from the Trade and Speculation / Trade Chart-2 tables, or MgT2022's per-good Base Price) — green = below base, red = above |
 | FR-406 | Active market events shall be displayed in a banner above the market table; affected rows shall be visually distinguished |
 | FR-407 | The user shall be able to select multiple goods for simultaneous price charting via checkboxes |
 | FR-408 | Price charts shall support weekly (line), monthly (candlestick), annual (candlestick), and realized (candlestick/line from trade records) time frames |
 | FR-409 | A Buy button shall appear on each market row when the player has a ship and trading authorisation |
 | FR-410 | For MgT2022 campaigns, a player who has not yet succeeded a "Find a Supplier" check at the selected world this game-month shall see a Find-a-Supplier prompt instead of the market table; the check is a one-click character-based action (Broker/Streetwise/Admin skill + starport DM, target Average 8+, DM-1 per prior attempt this world/month), not an ambient world property |
 | FR-411 | For MgT2022 campaigns, the goods shown at a world shall be composed per the rulebook's "Determine Goods Available" procedure: all Common Goods, all Trade Goods whose availability matches one of the world's trade codes, plus one random D66 roll per digit of the world's Population code (rerolled on 61-65 unless seeking black market); a good rolled more than once stacks quantity rather than appearing twice. Composition is randomized independently per world/tick using a seed distinct from any good's own price-roll seed |
+| FR-411a | For CT7 campaigns, the goods shown at a world shall be composed per Book 2's Trade and Speculation search procedure: each throw combines two dice into a D66 result (population DM of +1 at Population 9+ or -1 at Population 5- applied to the first digit only, clamped to 1-6), extended from the rulebook's "once per week" to 1D6 independent throws per tick so the market isn't reduced to exactly one good; a good rolled more than once stacks quantity rather than appearing twice. Composition is randomized independently per world/tick using a seed distinct from any good's own price-roll seed |
 | FR-412 | For CT7 and MgT2022 campaigns, the purchase and/or sale prices a player sees and pays shall reflect that player's own Broker skill: MgT2022 applies it to both the purchase and sale roll; CT7 applies it to the sale roll only (no RAW purchase-side term). Two players with different Broker skill levels viewing the same world/tick therefore see different prices. Price/OHLC history charts continue to show the shared, skill-independent baseline (a market index), not any individual player's negotiated price |
 
 ### 2.5 Trading — Buy
@@ -100,7 +101,7 @@
 | FR-603 | A successful sale shall delete the cargo row, credit the ship's account, insert a transaction record, and insert a trade record |
 | FR-604 | Profit shall be displayed as a flash notification after a successful sale |
 | FR-605 | For CT7 campaigns, a player-character selling cargo using their own Broker skill shall receive half of the standard brokerage fee (5% × skill × total sale value, skill capped at 4) as a net gain, added to sale proceeds at the moment of sale, and recorded as its own income transaction, distinct from the per-ton sale price (which already carries the Broker DM bonus) — this app has no NPC-hiring flow, under which the full fee would instead be paid out; only the self-service case applies. MgT2022 has no equivalent separate commission; its Broker benefit is entirely inside the roll/price itself |
-| FR-606 | For CT7 campaigns, the sale price of a specific owned cargo lot shall depend on the trade codes and Tech Level of BOTH the world the lot was purchased at and the world it is being sold at (Book 7's Cost of Goods/Market Price mechanic), including a Tech-Level-delta price adjustment that applies in both directions (advantageous when the source is higher-tech than the market, disadvantageous otherwise, floored at zero when the disadvantage reaches 100%) — two lots of the same good bought at different worlds shall generally sell for different prices at the same market/tick |
+| FR-606 | For CT7 campaigns, both the purchase and sale price of a good shall be that good's own listed Book 2 base price (`basePriceCr`, one value per named good in the 36-entry Trade and Speculation table) multiplied by the Actual Value percentage for a 2D6 roll plus the relevant world's purchase/resale DMs (Book 2's own procedure). Book 2 has no source-vs-market pricing duality — resale price depends only on the world the lot is sold at, exactly like every other ruleset here, never on where it was originally bought |
 
 ### 2.7 Route Analysis
 
@@ -108,7 +109,7 @@
 |----|------------|
 | FR-701 | From the Jump tab, the system shall show all worlds within the ship's jump range from the current world |
 | FR-702 | Each route row shall show the destination world, UWP, projected profit on currently-held cargo, and hex distance |
-| FR-702a | The projected profit calculation shall use the campaign's actual `trade_rules` pricing engine (previously always defaulted to CT7's regardless of the campaign's real ruleset — a real bug, not just a data-accuracy gap, since it silently matched cargo against the wrong goods table for MgT2022 campaigns). For CT7 specifically, profit shall be computed per cargo lot using that lot's real purchase-world data against the candidate destination (FR-606's mechanic), not a self-referenced baseline |
+| FR-702a | The projected profit calculation shall use the campaign's actual `trade_rules` pricing engine (previously always defaulted to CT7's regardless of the campaign's real ruleset — a real bug, not just a data-accuracy gap, since it silently matched cargo against the wrong goods table for MgT2022 campaigns) |
 | FR-703 | Clicking Select on a route row shall commit the ship's location to the destination and switch to the Market tab |
 
 ### 2.8 Market Events

@@ -245,6 +245,42 @@ export function rollQty(expr, rolls, dm = 0) {
   return total * multiplier
 }
 
+// ── Trade & Speculation search (Book 2) ─────────────────────────────────────
+
+/**
+ * Population DM applied to the FIRST digit of a Trade & Speculation
+ * search throw: +1 if the current world's population is 9+, -1 if 5-,
+ * else 0.
+ */
+export function ct2PopulationSearchDM(popDigit) {
+  const n = parseInt(popDigit, 16)
+  if (Number.isNaN(n)) return 0
+  if (n >= 9) return 1
+  if (n <= 5) return -1
+  return 0
+}
+
+/**
+ * Resolve one Book 2 Trade & Speculation search throw into a D66 good
+ * die. "The referee throws two dice, noting their results consecutively,
+ * to create a number between 11 and 66; apply a DM of +1 on the first
+ * digit if the current world's population is 9+, and a DM of -1 if the
+ * world's population is 5-. A modified throw of less than 1 is 1, and a
+ * modified throw of greater than 6 is 6." The DM and clamp apply to the
+ * first digit only — the second digit is never modified.
+ *
+ * @param {number} d1 — first die (pre-roll, 1-6)
+ * @param {number} d2 — second die (pre-roll, 1-6), unmodified
+ * @param {string} popDigit — world's UWP population digit
+ * @returns {string} a die in the CT2_TRADE_GOODS range, e.g. '11'-'66'
+ */
+export function ct2SearchGoodDie(d1, d2, popDigit) {
+  let first = d1 + ct2PopulationSearchDM(popDigit)
+  if (first < 1) first = 1
+  if (first > 6) first = 6
+  return `${first}${d2}`
+}
+
 // ── Passengers/Cargo Availability (Book 7) ────────────────────────────────────
 
 /**
