@@ -1177,12 +1177,16 @@ behavior needs live D1, not covered by this repo's Vitest suite).
 
 ### Known gaps, not addressed this session
 
-Migrations `017`/`018` are committed but not yet applied to remote D1 as
-of this entry. The user's own flagged hypothesis — that CT7/T5 likely have
-similar unmodeled destination-dependent traffic/availability mechanics —
-has not been researched or scoped; next up once this phase is deployed.
-The richer legal/licensed-medical/military/black-market-channel drug
-economy model remains deferred, per the user's explicit choice.
+The user's own flagged hypothesis — that CT7/T5 likely have similar
+unmodeled destination-dependent traffic/availability mechanics — has not
+been researched or scoped; next up now that this phase is deployed. The
+richer legal/licensed-medical/military/black-market-channel drug economy
+model remains deferred, per the user's explicit choice.
+
+*(Update, same day: committed, pushed, and deployed via `make deploy`.
+Migrations `017`/`018` applied cleanly to remote D1 on the first attempt —
+no repeat of the earlier transient `jq`-parsing hiccup. `/api/health`
+confirms `schema_ok: true` with `001`-`018` all present.)*
 
 ---
 
