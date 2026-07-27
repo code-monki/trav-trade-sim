@@ -1315,6 +1315,12 @@ cleanly reconcile against the cost formula — given the user's own warning
 about possible PDF page-mangling, these were treated as suspect rather
 than acted on.
 
+*(Update, same day: committed, pushed, and deployed via `make deploy`.
+Migration `019` (rebuilds `transactions` to allow the new
+`'broker_commission'` type — 977 rows copied over, no data loss) applied
+cleanly on the first attempt. `/api/health` confirms `schema_ok: true`
+with `001`-`019` all present.)*
+
 ---
 
 ## Documentation TODO
