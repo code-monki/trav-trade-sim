@@ -1,28 +1,32 @@
 /**
- * MgT2022 traffic-availability tick engine — deterministic per-(ship, world,
- * tick) scarcity rolls for passengers/freight/mail, generated automatically
- * alongside (but separately from) the goods-price market snapshot.
+ * MgT2022 traffic-availability tick engine — deterministic per-(ship,
+ * origin world, destination world, tick) scarcity rolls for passengers/
+ * freight/mail, generated on demand once a booking form's destination is
+ * known (not ambiently on world visit — RAW itself has no "how many
+ * passengers, independent of where they're going" concept).
  *
  * Sibling to market-tick.js rather than folded into it: this is a wholly
- * separate concern (per-world scarcity, not per-good pricing), and only
+ * separate concern (per-route scarcity, not per-good pricing), and only
  * ever invoked for MgT2022 campaigns — CT7/T5 campaigns never call this.
  *
- * Per the book's "SEEKING PASSENGERS"/"FREIGHT"/"MAIL" sections, Steward,
+ * Per the book's "SEEKING PASSENGERS"/"FREIGHT"/"MAIL" sections: Steward,
  * Broker, Carouse, and Streetwise skills among a ship's own crew feed DMs
- * into these rolls — so, unlike goods pricing, traffic availability is a
- * function of (ship, world, tick), not just (world, tick): two different
- * ships docked at the same world can find different amounts of business.
- * The Broker/Carouse/Streetwise check's Effect (2D+skill-8) is computed
- * automatically using whichever crew member has the single highest relevant
- * skill — not a per-player live overlay (Phase 4's pricing) and not a
- * manual one-click action (Find a Supplier) — no qualifying crew just means
- * that DM term is 0, not a penalty.
+ * into these rolls (so, unlike goods pricing, traffic availability depends
+ * on which ship is asking, not just the world/tick); population/starport
+ * DMs apply from *both* the origin and destination world; and each parsec
+ * of distance past the first is a further DM-1. The Broker/Carouse/
+ * Streetwise check's Effect (2D+skill-8) is computed automatically using
+ * whichever crew member has the single highest relevant skill — not a
+ * per-player live overlay (Phase 4's pricing) and not a manual one-click
+ * action (Find a Supplier) — no qualifying crew just means that DM term is
+ * 0, not a penalty.
  *
  * Same deterministic-seeding discipline as market-tick.js: seed key is
- * `${campaignId}:${worldHex}:${shipId}:traffic:${tick}:v1` so every client
- * produces identical availability counts for the same inputs. The trailing
- * version segment lets a future algorithm change bump to :v2 without
- * colliding with not-yet-generated ticks under the old seed space.
+ * `${campaignId}:${originHex}:${destHex}:${shipId}:traffic:${tick}:v1` so
+ * every client produces identical availability counts for the same
+ * inputs. The trailing version segment lets a future algorithm change
+ * bump to :v2 without colliding with not-yet-generated ticks under the
+ * old seed space.
  */
 
 import { makeRng } from './market-tick.js'
@@ -65,12 +69,19 @@ function mailFreightDMBand(dm) {
 
 /**
  * Generate one tick's passenger/freight/mail availability counts for a
- * ship at a world. Population digit is read from the world's UWP (5th
- * character, per the standard SABCDEF-T layout); missing/blank data
- * defaults to DM 0.
+ * ship, for a specific origin→destination route. Population digits are
+ * read from each world's UWP (5th character, per the standard SABCDEF-T
+ * layout); missing/blank data defaults to DM 0. Per RAW, both Passenger
+ * and Freight Traffic apply population/starport DMs from *both* worlds
+ * plus a distance penalty — the true count is inherently per-route, not
+ * per-origin-world alone (Mail has no such destination term of its own;
+ * it inherits one anyway by reusing Freight's baseDM).
  *
- * @param {object} opts.world       — {Hex, UWP, Remarks, Zone, ...}
- * @param {string} opts.sectorName
+ * @param {object} opts.world       — origin world {Hex, UWP, Remarks, Zone, ...}
+ * @param {string} opts.sectorName  — origin sector
+ * @param {object} opts.destWorld   — destination world {Hex, UWP, Zone, ...}
+ * @param {string} opts.destSectorName
+ * @param {number} opts.parsecs     — origin→destination jump distance
  * @param {string} opts.campaignId
  * @param {number} opts.tick
  * @param {string} opts.shipId
@@ -83,7 +94,7 @@ function mailFreightDMBand(dm) {
  * @returns {object} row shape for traffic_snapshots
  */
 export function generateTrafficSnapshot({
-  world, sectorName, campaignId, tick, shipId,
+  world, sectorName, destWorld, destSectorName, parsecs, campaignId, tick, shipId,
   crewStewardMax = 0, crewPassengerCheckMax = 0, crewFreightCheckMax = 0,
   crewNavalScoutRankMax = 0, crewSocialStandingMax = null, shipArmed = false,
 }) {
@@ -93,6 +104,15 @@ export function generateTrafficSnapshot({
   const tl       = techFromUWP(uwp)
   const zone     = world.Zone
 
+  const destUwp      = destWorld?.UWP || ''
+  const destPopDigit = destUwp[4]
+  const destStarport = starportFromUWP(destUwp)
+  const destZone     = destWorld?.Zone
+
+  // "Each parsec of destination past the first: DM-1" — 1 parsec is the
+  // baseline (no penalty), so the term is -(parsecs - 1), never positive.
+  const distanceDM = -Math.max(0, (parsecs ?? 1) - 1)
+
   // Passengers, Freight, and Mail each draw from their OWN seeded RNG
   // stream. Tier dice counts are data-dependent (a roll of, say, +2 DM
   // might sum 3 dice while +4 DM sums 5), so sharing one stream across
@@ -100,13 +120,18 @@ export function generateTrafficSnapshot({
   // Passengers) shift where the *next* category's draws start from,
   // contaminating results that should be independent — the same reasoning
   // already applied to goods composition vs. price rolls in market-tick.js.
-  const passengerRng = makeRng(`${campaignId}:${world.Hex}:${shipId}:traffic:passenger:${tick}:v1`)
-  const freightRng   = makeRng(`${campaignId}:${world.Hex}:${shipId}:traffic:freight:${tick}:v1`)
-  const mailRng       = makeRng(`${campaignId}:${world.Hex}:${shipId}:traffic:mail:${tick}:v1`)
+  // The seed now includes the destination, since the roll is per-route.
+  const routeKey      = `${world.Hex}:${destWorld?.Hex ?? ''}`
+  const passengerRng = makeRng(`${campaignId}:${routeKey}:${shipId}:traffic:passenger:${tick}:v1`)
+  const freightRng   = makeRng(`${campaignId}:${routeKey}:${shipId}:traffic:freight:${tick}:v1`)
+  const mailRng       = makeRng(`${campaignId}:${routeKey}:${shipId}:traffic:mail:${tick}:v1`)
 
   // ── Passengers ────────────────────────────────────────────────────────────
   const passengerBaseDM = (MGT2022_PASSENGER_POPULATION_TRAFFIC_DM[String(popDigit ?? '').toUpperCase()] ?? 0)
-    + starportDM(starport) + passengerZoneTrafficDM(zone)
+    + (MGT2022_PASSENGER_POPULATION_TRAFFIC_DM[String(destPopDigit ?? '').toUpperCase()] ?? 0)
+    + starportDM(starport) + starportDM(destStarport)
+    + passengerZoneTrafficDM(zone)
+    + distanceDM
   const passengerCheckEffect = (twoD6(passengerRng) + crewPassengerCheckMax) - 8
 
   const passengerTiers = {}
@@ -116,8 +141,13 @@ export function generateTrafficSnapshot({
   }
 
   // ── Freight ───────────────────────────────────────────────────────────────
+  // TL/Zone stay origin-only — the book lists them outside the "both
+  // source and destination" bullet, unlike population/starport.
   const freightBaseDM = (MGT2022_FREIGHT_POPULATION_TRAFFIC_DM[String(popDigit ?? '').toUpperCase()] ?? 0)
-    + starportDM(starport) + techLevelTrafficDM(tl) + freightZoneTrafficDM(zone)
+    + (MGT2022_FREIGHT_POPULATION_TRAFFIC_DM[String(destPopDigit ?? '').toUpperCase()] ?? 0)
+    + starportDM(starport) + starportDM(destStarport)
+    + techLevelTrafficDM(tl) + freightZoneTrafficDM(zone)
+    + distanceDM
   const freightCheckEffect = (twoD6(freightRng) + crewFreightCheckMax) - 8
 
   const freightTiers = {}
@@ -128,8 +158,9 @@ export function generateTrafficSnapshot({
 
   // ── Mail ──────────────────────────────────────────────────────────────────
   // "Freight Traffic DM" in the Mail rule means the un-tiered freight DM
-  // *value* computed above — reuses that outcome, but draws its own dice
-  // from its own stream rather than continuing freightRng.
+  // *value* computed above (now itself route-aware) — reuses that
+  // outcome, but draws its own dice from its own stream rather than
+  // continuing freightRng.
   const mailDM = mailFreightDMBand(freightBaseDM + freightCheckEffect)
     + (shipArmed ? +2 : 0)
     + mailTechLevelDM(tl)
@@ -143,6 +174,8 @@ export function generateTrafficSnapshot({
     ship_id:                 shipId,
     world_hex:               world.Hex,
     sector:                  sectorName,
+    dest_world_hex:          destWorld?.Hex ?? '',
+    dest_sector:             destSectorName ?? '',
     tick,
     high_passages:           passengerTiers.high,
     middle_passages:         passengerTiers.middle,

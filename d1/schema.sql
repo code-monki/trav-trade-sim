@@ -352,12 +352,37 @@ CREATE TABLE IF NOT EXISTS market_snapshots (
   sale_price      INTEGER NOT NULL,
   qty_available   INTEGER NOT NULL,
   source_codes    TEXT    NOT NULL DEFAULT '',
+  -- is_black_market added by migration 018 — a second, parallel
+  -- composition per (world, tick) for ships that found black-market
+  -- access, distinguished here rather than via a separate table so
+  -- pricing/history logic doesn't need to be duplicated.
+  is_black_market INTEGER NOT NULL DEFAULT 0 CHECK (is_black_market IN (0, 1)),
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (campaign_id, world_hex, sector, trade_good_die, tick)
+  UNIQUE (campaign_id, world_hex, sector, trade_good_die, tick, is_black_market)
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_world
   ON market_snapshots (campaign_id, world_hex, sector, tick DESC);
+
+-- ── Black Market search attempts (migration 018) ──────────────────────────────
+-- Ship-wide (not per-player, unlike supplier_search_attempts) — see
+-- d1/018_black_market.sql for the full rationale.
+
+CREATE TABLE IF NOT EXISTS black_market_search_attempts (
+  id          TEXT    PRIMARY KEY,
+  campaign_id TEXT    NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  ship_id     TEXT    NOT NULL REFERENCES ships(id)     ON DELETE CASCADE,
+  world_hex   TEXT    NOT NULL,
+  sector      TEXT    NOT NULL,
+  month_key   INTEGER NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  succeeded   INTEGER NOT NULL DEFAULT 0 CHECK (succeeded IN (0, 1)),
+  updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (ship_id, world_hex, sector, month_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_black_market_ship
+  ON black_market_search_attempts (campaign_id, ship_id, world_hex, sector, month_key);
 
 -- ── Monthly OHLC Rollup ───────────────────────────────────────────────────────
 
@@ -591,6 +616,8 @@ CREATE TABLE IF NOT EXISTS traffic_snapshots (
   ship_id                 TEXT    NOT NULL REFERENCES ships(id)     ON DELETE CASCADE,
   world_hex               TEXT    NOT NULL,
   sector                  TEXT    NOT NULL,
+  dest_world_hex          TEXT    NOT NULL,
+  dest_sector             TEXT    NOT NULL,
   tick                    INTEGER NOT NULL,
   high_passages           INTEGER NOT NULL DEFAULT 0,
   middle_passages         INTEGER NOT NULL DEFAULT 0,
@@ -601,15 +628,18 @@ CREATE TABLE IF NOT EXISTS traffic_snapshots (
   incidental_freight_lots INTEGER NOT NULL DEFAULT 0,
   mail_containers         INTEGER NOT NULL DEFAULT 0,
   created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
-  -- ship_id added by migration 016 (traffic availability now depends on the
-  -- ship's own crew skills, not just world/tick) — the UNIQUE constraint
-  -- below reflects that end state directly since a fresh install starts
-  -- there; see 016_traffic_snapshots_per_ship.sql for the migration path.
-  UNIQUE (campaign_id, ship_id, world_hex, sector, tick)
+  -- ship_id added by migration 016; dest_world_hex/dest_sector added by
+  -- migration 017 (traffic availability depends on both the ship's crew
+  -- AND the specific route — origin+destination population/starport DMs
+  -- and a distance penalty, per RAW). The UNIQUE constraint below reflects
+  -- that end state directly since a fresh install starts there; see
+  -- 016_traffic_snapshots_per_ship.sql / 017_traffic_snapshots_per_route.sql
+  -- for the migration path.
+  UNIQUE (campaign_id, ship_id, world_hex, sector, dest_world_hex, dest_sector, tick)
 );
 
 CREATE INDEX IF NOT EXISTS idx_traffic_snapshots_lookup
-  ON traffic_snapshots (campaign_id, ship_id, world_hex, sector, tick);
+  ON traffic_snapshots (campaign_id, ship_id, world_hex, sector, dest_world_hex, dest_sector, tick);
 
 -- ── Realized OHLCV View ───────────────────────────────────────────────────────
 -- Inline equivalents of the Postgres helper functions:
@@ -678,4 +708,4 @@ INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES
   ('004', unixepoch()), ('005', unixepoch()), ('006', unixepoch()),
   ('007', unixepoch()), ('008', unixepoch()), ('009', unixepoch()),
   ('010', unixepoch()), ('011', unixepoch()), ('012', unixepoch()), ('013', unixepoch()), ('014', unixepoch()),
-  ('015', unixepoch()), ('016', unixepoch());
+  ('015', unixepoch()), ('016', unixepoch()), ('017', unixepoch()), ('018', unixepoch());

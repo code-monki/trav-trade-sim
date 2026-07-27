@@ -19,40 +19,67 @@
       <section class="booking-section">
         <h3>Mail Contract</h3>
 
-        <div v-if="tradeRules === 'MgT2022' && mailContainersAvailable <= 0" class="no-service">
-          No mail offered at this starport this tick — check back next tick.
-        </div>
-
-        <form v-else class="mail-form" @submit.prevent="submitMail">
+        <form class="mail-form" @submit.prevent="submitMail">
           <div class="form-row">
             <label>Destination World</label>
             <WorldPicker
               v-model="mailDest"
               :sector-name="props.sectorName" />
           </div>
-          <div class="form-row" v-if="tradeRules === 'T5'">
-            <label for="mail-parsecs-input">Parsecs</label>
-            <input id="mail-parsecs-input" v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
-          </div>
-          <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
-            {{ mailContainersAvailable }} container(s) offered this tick ({{ mailTonsNeeded }}t of cargo space) — take all or none, per MgT2022 rules
-          </p>
 
-          <div class="fare-preview">
-            <span class="fare-label">Payment on delivery</span>
-            <span class="fare-amount">
-              <strong>Cr{{ mailPay.toLocaleString() }}</strong>
-            </span>
-          </div>
+          <template v-if="tradeRules === 'MgT2022'">
+            <p v-if="!destinationChosen" class="placeholder-note">
+              Pick a destination to see mail offered for this route.
+            </p>
+            <p v-else-if="trafficLoading" class="placeholder-note">
+              Rolling mail availability for this route…
+            </p>
+            <div v-else-if="mailContainersAvailable <= 0" class="no-service">
+              No mail offered at this starport this tick — check back next tick.
+            </div>
+            <template v-else>
+              <p class="traffic-note">
+                {{ mailContainersAvailable }} container(s) offered this tick ({{ mailTonsNeeded }}t of cargo space) — take all or none, per MgT2022 rules
+              </p>
+              <div class="fare-preview">
+                <span class="fare-label">Payment on delivery</span>
+                <span class="fare-amount">
+                  <strong>Cr{{ mailPay.toLocaleString() }}</strong>
+                </span>
+              </div>
+              <p v-if="mailError" class="form-error">{{ mailError }}</p>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary"
+                        :disabled="!canAcceptMail || ship.loading">
+                  {{ ship.loading ? 'Accepting…' : 'Accept Mail Contract' }}
+                </button>
+              </div>
+            </template>
+          </template>
 
-          <p v-if="mailError" class="form-error">{{ mailError }}</p>
+          <!-- CT7/T5: today's order/behavior, unchanged — no traffic-availability concept to gate on. -->
+          <template v-else>
+            <div class="form-row" v-if="tradeRules === 'T5'">
+              <label for="mail-parsecs-input">Parsecs</label>
+              <input id="mail-parsecs-input" v-model.number="mailParsecs" type="number" min="1" max="6" class="parsec-input" />
+            </div>
 
-          <div class="form-actions">
-            <button type="submit" class="btn-primary"
-                    :disabled="!canAcceptMail || ship.loading">
-              {{ ship.loading ? 'Accepting…' : 'Accept Mail Contract' }}
-            </button>
-          </div>
+            <div class="fare-preview">
+              <span class="fare-label">Payment on delivery</span>
+              <span class="fare-amount">
+                <strong>Cr{{ mailPay.toLocaleString() }}</strong>
+              </span>
+            </div>
+
+            <p v-if="mailError" class="form-error">{{ mailError }}</p>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"
+                      :disabled="!canAcceptMail || ship.loading">
+                {{ ship.loading ? 'Accepting…' : 'Accept Mail Contract' }}
+              </button>
+            </div>
+          </template>
         </form>
       </section>
 
@@ -66,6 +93,7 @@ import { ref, computed, watch } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
+import { useMapStore }   from '../stores/map.js'
 import { mailPayment }   from '../lib/passengers.js'
 import { MGT2022_MAIL_CONTAINER_TONS } from '../lib/traveller-data-mgt2022.js'
 import { hexDistance }   from '../utils/hexDistance.js'
@@ -79,6 +107,7 @@ const props = defineProps({
 const ship = useShipStore()
 const auth = useAuthStore()
 const tick = useTickStore()
+const map  = useMapStore()
 
 const tradeRules = computed(() => auth.campaign?.trade_rules ?? 'CT7')
 
@@ -86,14 +115,37 @@ const mailDest    = ref({ hex: '', name: '', sector: '' })
 const mailParsecs = ref(1)
 const mailError   = ref('')
 const mailSuccess = ref('')
+const destinationChosen = computed(() => mailDest.value.hex.trim().length > 0)
+const trafficLoading     = ref(false)
 
-// Auto-compute parsecs when a world is picked (T5 fares are per-parsec)
+// Auto-compute parsecs when a world is picked (T5 fares are per-parsec;
+// MgT2022's distance DM also needs this, even though the field is hidden)
 watch(() => mailDest.value.hex, (hex) => {
   if (hex && props.world?.Hex) {
     const d = hexDistance(props.world.Hex, hex)
     if (d > 0) mailParsecs.value = d
   }
 })
+
+// MgT2022 only — Mail reuses Freight's route-aware traffic DM (population/
+// starport from *both* worlds, plus distance), so it's rolled fresh
+// whenever the destination or distance changes, same as Passengers/Freight.
+watch(
+  () => [tradeRules.value, mailDest.value.hex, mailDest.value.sector, mailParsecs.value],
+  async ([rules, hex, sector, parsecs]) => {
+    if (rules !== 'MgT2022' || !hex || !sector) { tick.trafficAvailability = null; return }
+    trafficLoading.value = true
+    try {
+      const worlds  = await map.fetchWorldsForSector(sector)
+      const destObj = worlds.find(w => w.Hex === hex) ?? null
+      if (!destObj) { tick.trafficAvailability = null; return }
+      await tick.ensureTrafficSnapshot(props.world, props.sectorName, destObj, sector, parsecs)
+    } finally {
+      trafficLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 // MgT2022 only — this tick's rolled mail container count (see traffic-tick.js).
 // Always null (unlimited) for CT7/T5.
@@ -215,6 +267,7 @@ async function submitMail() {
 .fare-amount strong { color: var(--accent); }
 
 .traffic-note { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
+.placeholder-note { font-size: 0.82rem; color: var(--text-dim); font-style: italic; margin: 0; }
 
 .form-actions { display: flex; justify-content: flex-end; }
 

@@ -803,6 +803,10 @@ watch(() => map.selectedWorld, (world) => {
       tick.supplierFound    = false
       tick.supplierAttempts = 0
       tick.loadSupplierStatus(world.Hex, map.selectedSectorName)
+
+      tick.blackMarketFound    = false
+      tick.blackMarketAttempts = 0
+      tick.loadBlackMarketStatus(world.Hex, map.selectedSectorName)
     }
     // Per-player pricing (Phase 4): CT7's sale-price Broker DM and
     // MgT2022's purchase/sale Broker DM both need the current player's own

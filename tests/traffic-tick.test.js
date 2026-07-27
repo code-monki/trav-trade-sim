@@ -181,6 +181,90 @@ describe('generateTrafficSnapshot', () => {
     expect(armedHits).toBeGreaterThanOrEqual(unarmedHits)
   })
 
+  it('is route-aware — same origin/tick, two different destinations, produce independent results', () => {
+    const destA = { Hex: '0202', UWP: 'A788899-C', Zone: null }
+    const destB = { Hex: '0303', UWP: 'A788899-C', Zone: null }
+    const a = generateTrafficSnapshot({
+      world: testWorld, sectorName: 'Test', destWorld: destA, destSectorName: 'Test', parsecs: 1,
+      campaignId: 'c1', tick: 4, shipId: 'ship-a',
+    })
+    const b = generateTrafficSnapshot({
+      world: testWorld, sectorName: 'Test', destWorld: destB, destSectorName: 'Test', parsecs: 1,
+      campaignId: 'c1', tick: 4, shipId: 'ship-a',
+    })
+    expect(a.dest_world_hex).toBe('0202')
+    expect(b.dest_world_hex).toBe('0303')
+    expect(a).not.toEqual({ ...b, dest_world_hex: a.dest_world_hex })
+  })
+
+  it('a higher-population destination increases passenger/freight traffic on average, same as origin population does', () => {
+    const highPopDest = { Hex: '0202', UWP: 'A788C99-C', Zone: null } // pop digit 'C'
+    const lowPopDest  = { Hex: '0303', UWP: 'A788099-C', Zone: null } // pop digit '0'
+
+    let highTotal = 0
+    let lowTotal  = 0
+    for (let t = 0; t < 30; t++) {
+      const h = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: highPopDest, destSectorName: 'Test', parsecs: 1,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      const l = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: lowPopDest, destSectorName: 'Test', parsecs: 1,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      highTotal += h.high_passages + h.middle_passages + h.basic_passages + h.low_passages
+                 + h.major_freight_lots + h.minor_freight_lots + h.incidental_freight_lots
+      lowTotal  += l.high_passages + l.middle_passages + l.basic_passages + l.low_passages
+                 + l.major_freight_lots + l.minor_freight_lots + l.incidental_freight_lots
+    }
+    expect(highTotal).toBeGreaterThan(lowTotal)
+  })
+
+  it('a higher-starport destination increases traffic on average', () => {
+    const goodStarportDest = { Hex: '0202', UWP: 'A788899-C', Zone: null } // A
+    const poorStarportDest = { Hex: '0303', UWP: 'X788899-C', Zone: null } // X
+
+    let goodTotal = 0
+    let poorTotal = 0
+    for (let t = 0; t < 30; t++) {
+      const g = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: goodStarportDest, destSectorName: 'Test', parsecs: 1,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      const p = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: poorStarportDest, destSectorName: 'Test', parsecs: 1,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      goodTotal += g.high_passages + g.middle_passages + g.basic_passages + g.low_passages
+                 + g.major_freight_lots + g.minor_freight_lots + g.incidental_freight_lots
+      poorTotal += p.high_passages + p.middle_passages + p.basic_passages + p.low_passages
+                 + p.major_freight_lots + p.minor_freight_lots + p.incidental_freight_lots
+    }
+    expect(goodTotal).toBeGreaterThan(poorTotal)
+  })
+
+  it('each parsec of destination past the first reduces traffic on average (DM-1/parsec)', () => {
+    const dest = { Hex: '0202', UWP: 'A788899-C', Zone: null }
+
+    let nearTotal = 0
+    let farTotal  = 0
+    for (let t = 0; t < 30; t++) {
+      const near = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: dest, destSectorName: 'Test', parsecs: 1,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      const far = generateTrafficSnapshot({
+        world: testWorld, sectorName: 'Test', destWorld: dest, destSectorName: 'Test', parsecs: 6,
+        campaignId: 'c1', tick: t, shipId: 'ship-a',
+      })
+      nearTotal += near.high_passages + near.middle_passages + near.basic_passages + near.low_passages
+                 + near.major_freight_lots + near.minor_freight_lots + near.incidental_freight_lots
+      farTotal  += far.high_passages + far.middle_passages + far.basic_passages + far.low_passages
+                 + far.major_freight_lots + far.minor_freight_lots + far.incidental_freight_lots
+    }
+    expect(nearTotal).toBeGreaterThan(farTotal)
+  })
+
   it('a higher crew SOC and Naval/Scout rank increase mail availability on average', () => {
     let boostedHits = 0, plainHits = 0
     for (let t = 0; t < 60; t++) {

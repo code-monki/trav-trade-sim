@@ -25,6 +25,17 @@
         <input v-model="filter" type="search" placeholder="Filter goods…" class="market-search"
                aria-label="Filter trade goods" />
         <span class="row-count">{{ filteredRows.length }} / {{ rows.length }} goods</span>
+        <template v-if="auth.campaign?.trade_rules === 'MgT2022'">
+          <button v-if="tick.blackMarketFound" class="compare-btn"
+                  :class="{ active: viewingBlackMarket }"
+                  :aria-pressed="viewingBlackMarket"
+                  @click="toggleBlackMarketView">
+            Black Market
+          </button>
+          <button v-else class="compare-btn" :disabled="blackMarketLoading" @click="onSeekBlackMarket">
+            {{ blackMarketLoading ? 'Seeking…' : 'Seek Black Market' }}
+          </button>
+        </template>
         <button v-if="mobile" class="compare-btn"
                 :class="{ active: compareMode }"
                 :aria-pressed="compareMode"
@@ -32,6 +43,13 @@
           Compare
         </button>
       </div>
+      <p v-if="auth.campaign?.trade_rules === 'MgT2022' && !tick.blackMarketFound && tick.blackMarketAttempts > 0"
+         class="hint">
+        Previous attempts this month: {{ tick.blackMarketAttempts }} (DM&minus;{{ tick.blackMarketAttempts }} on the next roll)
+      </p>
+      <p v-if="blackMarketResult === 'fail'" class="form-error">
+        No contact this time — try again, or wait for a new month.
+      </p>
 
       <div class="table-scroll">
         <table class="market-table">
@@ -154,6 +172,8 @@ import { useTickStore } from '../stores/tick.js'
 import { useAuthStore } from '../stores/auth.js'
 import { CT2_TRADE_GOODS } from '../lib/traveller-data.js'
 import { MGT2022_TRADE_GOODS } from '../lib/traveller-data-mgt2022.js'
+import { starportFromUWP } from '../lib/trade-engine-ct7.js'
+import { starportBrokerDM } from '../lib/trade-engine-mgt2022.js'
 
 const props = defineProps({
   world:         { type: Object,  required: true },
@@ -198,13 +218,41 @@ const mgt2022BaseByDie = Object.fromEntries(MGT2022_TRADE_GOODS.map(g => [g.die,
 async function loadSnapshots() {
   if (!props.world?.Hex) return
   await tick.ensureWorldSnapshot(props.world, props.sectorName)
+  if (viewingBlackMarket.value) await tick.ensureBlackMarketSnapshot(props.world, props.sectorName)
 }
 
 onMounted(loadSnapshots)
 watch(() => [props.world?.Hex, props.sectorName, tick.currentTick], loadSnapshots)
 
-// Clear row selection when world changes
-watch(() => props.world?.Hex, () => { selectedDie.value = null })
+// Clear row selection and the black-market view when world changes — a new
+// world's black-market status hasn't been checked yet (MapView resets
+// tick.blackMarketFound on its own world-change watcher).
+watch(() => props.world?.Hex, () => { selectedDie.value = null; viewingBlackMarket.value = false })
+
+// ── Black Market (MgT2022) ──────────────────────────────────────────────────
+// Ship-wide one-click check (see tick.js) — success unlocks a toggle here to
+// switch the table between the normal and black-market row sets.
+const viewingBlackMarket  = ref(false)
+const blackMarketLoading  = ref(false)
+const blackMarketResult   = ref(null) // null | 'fail'
+
+const starportDM = computed(() => starportBrokerDM(starportFromUWP(props.world?.UWP ?? '')))
+
+async function onSeekBlackMarket() {
+  blackMarketLoading.value = true
+  blackMarketResult.value  = null
+  const result = await tick.attemptBlackMarket(props.world.Hex, props.sectorName, {
+    starportDM: starportDM.value,
+  })
+  blackMarketLoading.value = false
+  if (!result.success) { blackMarketResult.value = 'fail'; return }
+  await toggleBlackMarketView()
+}
+
+async function toggleBlackMarketView() {
+  viewingBlackMarket.value = !viewingBlackMarket.value
+  if (viewingBlackMarket.value) await tick.ensureBlackMarketSnapshot(props.world, props.sectorName)
+}
 
 // ── Active events for this world ─────────────────────────────────────────────
 const worldEvents = computed(() =>
@@ -224,7 +272,8 @@ const eventIndex = computed(() => {
 
 // ── Table rows ────────────────────────────────────────────────────────────────
 const rows = computed(() => {
-  const snaps = Object.values(tick.displaySnapshots)
+  const source = viewingBlackMarket.value ? tick.displayBlackMarketSnapshots : tick.displaySnapshots
+  const snaps  = Object.values(source)
   if (!snaps.length) return []
 
   return snaps.map(s => {
@@ -398,6 +447,9 @@ function priceInfo(price, base) {
 .market-search:focus { border-color: var(--accent-dim); }
 
 .row-count { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+
+.hint { font-size: 0.72rem; color: var(--text-dim); font-style: italic; margin: 0; }
+.form-error { font-size: 0.78rem; color: var(--red, #e05); margin: 0; }
 
 /* Table */
 .table-scroll {

@@ -1,7 +1,7 @@
 # Use Cases
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.9.0  
+**Version:** 0.10.0  
 **Status:** Active development
 
 This document enumerates the system's use cases, grouped under the same functional categories as `SRS.md` (§2.x) so each use case's "Related Requirements" can be cross-checked against a concrete FR-ID list. IDs are sequential (`UC-1`, `UC-2`, ...) rather than mirrored to FR numbering, since a single use case commonly satisfies several FR-IDs together.
@@ -907,24 +907,28 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 ### UC-38: View Traffic Availability (MgT2022)
 
 **Actor:** Player, Referee
-**Related Requirements:** FR-2006, FR-2007, FR-2008, FR-2009, FR-2010
-**Trigger:** Player opens the Passengers, Mail, or Freight tab on an MgT2022 campaign
+**Related Requirements:** FR-2006, FR-2007, FR-2008, FR-2009, FR-2010, FR-2011
+**Trigger:** Player opens the Passengers, Mail, or Freight tab on an MgT2022 campaign and picks a destination world
 
 **Preconditions:**
 - Campaign's `trade_rules` is `MgT2022`
 - Player has an assigned ship (the roll depends on that ship's own crew)
 
 **Main Flow:**
-1. System deterministically rolls (or retrieves, if already rolled this tick) the current tick's passenger/freight/mail traffic-availability counts for the selected world **and the player's own ship** — not the world alone, since the roll incorporates that ship's current crew's highest Steward skill (Passengers, ambient) and an automatic Broker/Carouse/Streetwise or Broker/Streetwise check (best of crew, Effect can be negative), plus, for Mail, whether the ship is armed, the world's Tech Level, and the highest Naval/Scout rank and SOC among crew
-2. System displays the rolled count next to each passage tier, freight lot size, and the mail contract form
-3. Booking forms cap their inputs at the displayed availability
+1. Passage type/count, lot size, and mail's container count all stay hidden until the player picks a destination world — there is no ambient "how many passengers are waiting" number independent of where they're going
+2. Once a destination is picked (and its full world data resolved), system deterministically rolls (or retrieves, if already rolled this tick) the current tick's passenger/freight/mail traffic-availability counts for the selected **route** (origin world → destination world) and the player's own ship — the roll incorporates population/starport DMs from *both* worlds, a distance penalty for each parsec past the first, that ship's current crew's highest Steward skill (Passengers, ambient) and an automatic Broker/Carouse/Streetwise or Broker/Streetwise check (best of crew, Effect can be negative), plus, for Mail, whether the ship is armed, the world's Tech Level, and the highest Naval/Scout rank and SOC among crew
+3. System displays the rolled count next to each passage tier, freight lot size, and the mail contract form
+4. Booking forms cap their inputs at the displayed availability
+5. A successful booking atomically decrements the matching count for the rest of this tick
 
 **Alternate / Exception Flows:**
-- **A1 — CT7/T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity
-- **A2 — A different ship at the same world/tick:** Gets its own, potentially different, availability counts, reflecting its own crew
+- **A1 — CT7/T5 campaign:** This use case does not apply; booking remains unlimited-subject-to-ship-capacity, and the destination field keeps its pre-existing position in the form (not moved to the top)
+- **A2 — A different ship at the same route/tick:** Gets its own, potentially different, availability counts, reflecting its own crew
+- **A3 — The same ship considers a different destination, or the same destination at a different distance:** Gets an independent roll — the count is per-route, not per-origin-world alone
+- **A4 — Two bookings race for the last seat/lot/container:** The atomic guarded decrement lets only one succeed; the other is rejected cleanly
 
 **Postconditions:**
-- `traffic_snapshots` has a row for this (campaign, **ship**, world, tick) if one didn't already exist
+- `traffic_snapshots` has a row for this (campaign, **ship**, origin world, **destination world**, tick) if one didn't already exist
 
 ---
 
@@ -975,3 +979,33 @@ System-triggered behavior (e.g. automatic passenger delivery on ship arrival) is
 
 **Postconditions:**
 - `supplier_search_attempts` reflects the new attempt count and, on success, `succeeded = 1` for (player, world, sector, month)
+
+---
+
+### UC-41: Seek and View the Black Market (MgT2022)
+
+**Actor:** Player
+**Related Requirements:** FR-2101, FR-2102, FR-2103
+**Trigger:** Player opens Port > Market at a world in an MgT2022 campaign, with their ship not yet having succeeded a Black Market check there this game-month
+
+**Preconditions:**
+- Campaign's `trade_rules` is `MgT2022`
+- Player has an assigned ship
+
+**Main Flow:**
+1. System shows a "Seek Black Market" button in the market table's controls, along with the count of any prior attempts by this ship at this world/month
+2. Player clicks "Seek Black Market"
+3. System looks up the highest Streetwise skill among the ship's current crew (server-side — no client-supplied skill level is trusted) and the world's starport DM
+4. System rolls 2D6 (plain, non-seeded), adds skill level + starport DM, subtracts 1 per prior attempt this world/month by this ship, and compares the total to the Average (8+) target
+5. System records the attempt in `black_market_search_attempts`, keyed by ship (not player)
+6. On success, a "Black Market" toggle appears in the market table's controls; the check succeeds for the rest of the game-month for **every player on that ship**, not just whoever clicked
+7. Player toggles to the Black Market view; system generates (or retrieves) a second, parallel composition for this world/tick whose random extra draws are forced into the illegal die range (61-66, excluding Exotics at 66), and displays those goods with the same per-player Broker-skill pricing overlay as the normal listing
+
+**Alternate / Exception Flows:**
+- **A1 — Check fails:** The "Seek Black Market" button remains; the player (or any other player on the same ship) may retry (each retry is DM-1 harder for that ship) or wait for the next game-month, which resets `attempts`/`succeeded` for a new `month_key`
+- **A2 — A different ship at the same world:** Unaffected by this ship's success — tracked per ship, not per world or per player
+- **A3 — Player toggles back to the normal listing:** No re-check needed; the normal listing was never gated by this check
+
+**Postconditions:**
+- `black_market_search_attempts` reflects the new attempt count and, on success, `succeeded = 1` for (ship, world, sector, month)
+- `market_snapshots` has a row set with `is_black_market = 1` for this (world, tick) if one didn't already exist

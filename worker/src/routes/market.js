@@ -188,31 +188,35 @@ app.delete('/event-definitions/:defId', requireReferee, async (c) => {
 app.get('/:id/snapshots', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
-  const { world_hex, sector, tick, count } = c.req.query()
+  const { world_hex, sector, tick, count, is_black_market = '0' } = c.req.query()
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const db = c.env.DB
+  const blackMarket = is_black_market === 'true' || is_black_market === '1' ? 1 : 0
 
   if (count === 'true') {
     const row = await db.prepare(
       `SELECT COUNT(*) as cnt FROM market_snapshots
-       WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ?`
-    ).bind(id, world_hex, sector, Number(tick)).first()
+       WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ? AND is_black_market = ?`
+    ).bind(id, world_hex, sector, Number(tick), blackMarket).first()
     return c.json({ data: { count: row?.cnt ?? 0 } })
   }
 
   const { results } = await db.prepare(
     `SELECT * FROM market_snapshots
-     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ?
+     WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND tick = ? AND is_black_market = ?
      ORDER BY trade_good_die`
-  ).bind(id, world_hex, sector, Number(tick)).all()
+  ).bind(id, world_hex, sector, Number(tick), blackMarket).all()
 
   return c.json({ data: results ?? [] })
 })
 
 // ── GET /api/campaigns/:id/snapshots/last-tick ────────────────────────────────
 // Last recorded snapshot tick for a world, or null if never visited — used to
-// determine how far back a gap-fill backfill needs to run.
+// determine how far back a gap-fill backfill needs to run. Black-market rows
+// are excluded — they're generated fresh from whenever access was found, no
+// backfill sophistication needed, and shouldn't affect the normal market's
+// own gap-fill window.
 app.get('/:id/snapshots/last-tick', requireAuth, async (c) => {
   const session             = c.var.session
   const { id }              = c.req.param()
@@ -220,7 +224,7 @@ app.get('/:id/snapshots/last-tick', requireAuth, async (c) => {
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const row = await c.env.DB.prepare(
-    `SELECT MAX(tick) as lastTick FROM market_snapshots WHERE campaign_id = ? AND world_hex = ? AND sector = ?`
+    `SELECT MAX(tick) as lastTick FROM market_snapshots WHERE campaign_id = ? AND world_hex = ? AND sector = ? AND is_black_market = 0`
   ).bind(id, world_hex, sector).first()
 
   return c.json({ data: { lastTick: row?.lastTick ?? null } })
@@ -239,12 +243,13 @@ app.post('/:id/snapshots', requireAuth, async (c) => {
   const stmts = rows.map(r => db.prepare(
     `INSERT OR IGNORE INTO market_snapshots
        (id, campaign_id, world_hex, sector, trade_good_die, trade_good_name,
-        tick, purchase_price, sale_price, qty_available, source_codes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        tick, purchase_price, sale_price, qty_available, source_codes, is_black_market)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     r.id ?? crypto.randomUUID(), r.campaign_id, r.world_hex, r.sector,
     r.trade_good_die, r.trade_good_name, r.tick,
-    r.purchase_price, r.sale_price, r.qty_available, r.source_codes ?? ''
+    r.purchase_price, r.sale_price, r.qty_available, r.source_codes ?? '',
+    r.is_black_market ? 1 : 0
   ))
 
   await db.batch(stmts)
@@ -326,13 +331,13 @@ app.get('/:id/market/annual', requireAuth, async (c) => {
 app.get('/:id/traffic', requireAuth, async (c) => {
   const session = c.var.session
   const { id }  = c.req.param()
-  const { world_hex, sector, tick, ship_id } = c.req.query()
+  const { world_hex, sector, dest_world_hex, dest_sector, tick, ship_id } = c.req.query()
   if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
 
   const row = await c.env.DB.prepare(
     `SELECT * FROM traffic_snapshots
-     WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND tick = ?`
-  ).bind(id, ship_id, world_hex, sector, Number(tick)).first()
+     WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ?`
+  ).bind(id, ship_id, world_hex, sector, dest_world_hex, dest_sector, Number(tick)).first()
 
   return c.json({
     data: row ?? {
@@ -353,12 +358,12 @@ app.post('/:id/traffic', requireAuth, async (c) => {
 
   await c.env.DB.prepare(
     `INSERT OR IGNORE INTO traffic_snapshots
-       (campaign_id, ship_id, world_hex, sector, tick, high_passages, middle_passages,
+       (campaign_id, ship_id, world_hex, sector, dest_world_hex, dest_sector, tick, high_passages, middle_passages,
         basic_passages, low_passages, major_freight_lots, minor_freight_lots,
         incidental_freight_lots, mail_containers)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    id, r.ship_id, r.world_hex, r.sector, r.tick,
+    id, r.ship_id, r.world_hex, r.sector, r.dest_world_hex, r.dest_sector, r.tick,
     r.high_passages, r.middle_passages, r.basic_passages, r.low_passages,
     r.major_freight_lots, r.minor_freight_lots, r.incidental_freight_lots,
     r.mail_containers
@@ -418,6 +423,66 @@ app.post('/:id/find-supplier', requireAuth, async (c) => {
      ON CONFLICT (player_id, world_hex, sector, month_key)
      DO UPDATE SET attempts = attempts + 1, succeeded = MAX(succeeded, excluded.succeeded), updated_at = datetime('now')`
   ).bind(crypto.randomUUID(), id, player_id, world_hex, sector, month_key, success ? 1 : 0).run()
+
+  return c.json({ data: { success, total, attempts: previousAttempts + 1 } })
+})
+
+// ── Black Market (MgT2022) ──────────────────────────────────────────────────
+// Ship-wide, not per-player, unlike Find a Supplier above — whichever crew
+// member has the highest Streetwise skill is used automatically (server-
+// side, from the same aggregate query the ship-load route already computes),
+// so success unlocks the black-market view for the whole ship's crew.
+
+// ── GET /:id/black-market — has this ship already found black-market
+// access at this world this month? ────────────────────────────────────────────
+app.get('/:id/black-market', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { ship_id, world_hex, sector, month_key } = c.req.query()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const row = await c.env.DB.prepare(
+    `SELECT attempts, succeeded FROM black_market_search_attempts
+     WHERE ship_id = ? AND world_hex = ? AND sector = ? AND month_key = ?`
+  ).bind(ship_id, world_hex, sector, Number(month_key)).first()
+
+  return c.json({ data: { attempts: row?.attempts ?? 0, succeeded: !!row?.succeeded } })
+})
+
+// ── POST /:id/black-market — attempt the check ────────────────────────────────
+app.post('/:id/black-market', requireAuth, async (c) => {
+  const session = c.var.session
+  const { id }  = c.req.param()
+  const { ship_id, world_hex, sector, month_key, starport_dm } = await c.req.json()
+  if (session.campaign_id !== id) return c.json({ error: 'Forbidden' }, 403)
+
+  const db = c.env.DB
+  const [existing, streetwiseRow] = await Promise.all([
+    db.prepare(
+      `SELECT attempts, succeeded FROM black_market_search_attempts
+       WHERE ship_id = ? AND world_hex = ? AND sector = ? AND month_key = ?`
+    ).bind(ship_id, world_hex, sector, month_key).first(),
+    db.prepare(
+      `SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+       WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Streetwise'`
+    ).bind(ship_id, id).first(),
+  ])
+
+  if (existing?.succeeded) {
+    return c.json({ data: { success: true, alreadySucceeded: true, attempts: existing.attempts } })
+  }
+
+  const skillLevel       = streetwiseRow?.mx ?? 0
+  const previousAttempts = existing?.attempts ?? 0
+  const total   = twoD6() + skillLevel + (starport_dm ?? 0) - previousAttempts
+  const success = total >= 8
+
+  await db.prepare(
+    `INSERT INTO black_market_search_attempts (id, campaign_id, ship_id, world_hex, sector, month_key, attempts, succeeded)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+     ON CONFLICT (ship_id, world_hex, sector, month_key)
+     DO UPDATE SET attempts = attempts + 1, succeeded = MAX(succeeded, excluded.succeeded), updated_at = datetime('now')`
+  ).bind(crypto.randomUUID(), id, ship_id, world_hex, sector, month_key, success ? 1 : 0).run()
 
   return c.json({ data: { success, total, attempts: previousAttempts + 1 } })
 })

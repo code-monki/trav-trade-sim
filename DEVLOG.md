@@ -997,6 +997,195 @@ by the user's own choice this pass, not overlooked.
 
 ---
 
+## 2026-07-26 — Phase 5 follow-ups completed: stateroom bug, book-freight/accept-mail validation, traffic depletion
+
+### Goal
+
+Close out the two follow-ups left open at the end of the previous "Mail
+cargo-space reservation" entry, plus a third gap noticed alongside them:
+Traffic Availability counts never actually went *down* as bookings were
+made, so the same rolled passengers/freight lots/mail containers could be
+booked repeatedly within one tick.
+
+### Fixes
+
+- **`ship.js`'s `stateroomsUsed`** filtered `p.passage_type !== 'low'`,
+  which wrongly counted Basic Passage against stateroom capacity (Basic
+  Passage occupies cargo tons, not a stateroom, per RAW). Now filters
+  `passage_type === 'high' || passage_type === 'middle'` — the only two
+  tiers that actually use one.
+- **`book-freight`/`accept-mail` gained the same server-side validation
+  `book-passengers` already had** (Phase 5): cargo-space checks against
+  `ship.js`'s `cargoAvailable`. Building this surfaced a real, previously
+  unknown bug — booked-but-undelivered freight tonnage and accepted mail
+  containers were never subtracted from `cargoAvailable` at all, so a ship
+  could over-commit its hold indefinitely. Fixed by adding a
+  `freightTonsUsed` computed (mirroring the existing `mailContainerTonsUsed`
+  pattern) and folding both into `cargoAvailable`.
+- **Traffic availability now depletes as bookings happen.** All three
+  booking routes (`book-passengers`, `book-freight`, `accept-mail`) run an
+  atomic guarded-decrement against `traffic_snapshots`
+  (`UPDATE ... SET x = x - ? WHERE ... AND x >= ?`, checked via
+  `meta.changes`) — the same pattern already established for `buy-cargo`'s
+  `qty_available` guard — so two concurrent bookings racing for the last
+  seat/lot/container can't both win, and the number shown to players
+  actually goes down tick over tick.
+
+### Verified
+
+`npx vitest run` — all passing. `npx vite build` compiles cleanly.
+
+### Known gaps, not addressed this session
+
+Destination-world traffic DMs and Black Market remained deferred — see the
+next entry, where both were taken up as "Phase 6."
+
+---
+
+## 2026-07-26 — Destination-aware Traffic + Black Market (Phase 6)
+
+### Goal
+
+Two items logged as "deferred" at the end of Phase 5 turned out, on
+discussion with the user, to warrant real implementation:
+
+- **Destination-world traffic DMs.** RAW applies population/starport DMs
+  from *both* the origin and destination world to the Passenger/Freight
+  Traffic rolls, plus a distance penalty ("each parsec of destination past
+  the first: DM−1"). Phase 5 rolled availability once per (ship, origin
+  world, tick), before any destination was known — a simplification, not
+  RAW. The user's explicit call: conform to the rules even though it means
+  a real UX change (destination must be picked before availability can be
+  shown, since the true count is inherently per-*route*, not per-origin-
+  world) — and flagged that CT7/T5 likely have the same kind of unmodeled
+  mechanic, to be checked in an upcoming CT7/T5 pass, not this one.
+- **Black Market.** `isRerollRequired()`/`resolveGood()` already supported
+  a `seekingBlackMarket` flag but nothing ever set it. Per the user's
+  choice, black-market access works like Find a Supplier's one-click
+  check, but **ship-wide** rather than per-player — whichever crew member
+  has the highest Streetwise skill is used automatically, and success
+  unlocks the black-market view for the whole ship's crew for the rest of
+  the game-month.
+
+### Part A — Destination-aware Traffic Availability
+
+`traffic_snapshots` became keyed by (ship, **origin**, **destination**,
+tick) instead of just (ship, origin, tick) — migration `017` drops and
+recreates the table (safe: pure deterministic cache data, never referenced
+by another table) with `dest_world_hex`/`dest_sector` added to the row and
+the `UNIQUE` constraint.
+
+`traffic-tick.js`'s `generateTrafficSnapshot` now takes `destWorld` and
+`parsecs`. New DM terms, additive to Phase 5's: Passenger and Freight both
+gain the destination's population/starport DM (mirroring the origin's) and
+a `distanceDM = -(parsecs - 1)` term. Freight's TL/Zone DMs stay
+origin-only, per the book's bullet structure. Mail needed no direct
+change — it already reuses Freight's un-tiered `baseDM + checkEffect`,
+which is now itself route-aware. The seed gained the destination hex
+(`${origin}:${dest}:${shipId}:traffic:...`) so two different destinations
+from the same origin/tick produce independent rolls.
+
+Since there's no meaningful "how many passengers are waiting, independent
+of where they're going" number under this model, `ensureTrafficSnapshot`
+is no longer called ambiently on world visit — `PassengersPanel.vue`,
+`FreightPanel.vue`, and `MailPanel.vue` (MgT2022 only; CT7/T5 keep today's
+order and behavior unchanged) now show the Destination World picker first,
+gate the rest of the form behind having picked one, resolve the
+destination's full world object via `map.fetchWorldsForSector()`, and roll
+traffic fresh whenever the destination or parsecs changes. Cross-sector
+manual-entry destinations inherit `hexDistance()`'s existing sector-relative
+limitation (T5 fares already have this same gap) — not introduced or fixed
+here.
+
+Worker: `market.js`'s traffic `GET`/`POST` routes and all three booking
+routes' guarded-decrement UPDATE + fallback re-query gained
+`dest_world_hex`/`dest_sector` in their `WHERE` clauses, alongside the
+existing `ship_id`.
+
+### Part B — Black Market
+
+Migration `018`: a new `black_market_search_attempts` table (mirrors
+`supplier_search_attempts` exactly, keyed by `ship_id` instead of
+`player_id` — a separate table rather than a `kind` column, since the two
+have genuinely different keys, not just a different value of the same
+shape) plus an `is_black_market` column on `market_snapshots` (added via
+the safer create-new-table/copy-rows/rename pattern, since — unlike
+`traffic_snapshots` — this table holds real price history read by charts,
+so a destructive drop was off the table).
+
+`worker/src/routes/ships.js`'s ship-load route gained a
+`crew_streetwise_max` aggregate (Streetwise alone, not pooled with
+Broker/Carouse — black market specifically wants it). The new
+`GET`/`POST /:id/black-market` routes mirror `find-supplier`'s
+Average(8+)-target check exactly, except the server looks up
+`crew_streetwise_max` itself rather than trusting a client-supplied skill
+level (find-supplier's original per-player design trusts the client
+because a specific player is making the attempt; black market is
+ship-wide, so there's no single player's skill to trust).
+
+**Composition mechanic.** Initially wired `seekingBlackMarket` to simply
+disable the existing 61-65 reroll-avoidance on an otherwise-normal D66
+roll — which would only let illegal goods survive by chance, not
+specifically deal in them. Corrected to a dedicated roll instead: each of
+a black-market world's population-code extra draws rolls 1D and prepends
+a forced `'6'` leading digit (`rollBlackMarketDie`), always landing in
+61-66 — landing on 66 (Exotics) is simply skipped, the same as the normal
+path's existing "die not in table" guard. `generateWorldSnapshot`'s
+dispatcher now forwards a `seekingBlackMarket` flag through to the
+MgT2022 generator, which gives black-market composition its own
+`:composition:blackmarket:` seed segment so it doesn't collide with the
+normal listing for the same world/tick.
+
+Goods pricing itself stays world/tick-scoped, not ship-scoped — a second,
+parallel row set per (world, tick) with `is_black_market = 1`, generated
+lazily via `tick.ensureBlackMarketSnapshot()` the same way normal
+snapshots are. `tick.js` gained a `displayBlackMarketSnapshots` computed,
+mirroring Phase 4's per-player `displaySnapshots` overlay but sourced from
+the black-market row set.
+
+**UI**: `MarketTable.vue` gained a "Seek Black Market"/"Black Market"
+toggle in its controls row (MgT2022 only) — before success, a one-click
+check button with an attempts-so-far hint (mirrors `FindSupplierPanel.vue`);
+after success, a toggle that switches the table between
+`displaySnapshots` and `displayBlackMarketSnapshots`. `MapView.vue`'s
+world-change watcher resets and reloads `blackMarketFound`/
+`blackMarketAttempts` alongside the existing supplier-status reset.
+
+### Tests
+
+`tests/traffic-tick.test.js`: new cases for route-awareness (same
+origin/tick, different destinations → independent results), destination
+population/starport DMs increasing traffic on average, and the per-parsec
+distance penalty reducing it on average (parsecs 1 vs. 6). 21/21 passing
+(up from 17).
+
+`tests/market-tick.test.js`: new cases confirming black-market composition
+surfaces illegal-band goods (die 61-65) across many ticks on a
+no-trade-codes world (isolating the black-market roll from the guaranteed
+baseline, which can otherwise legitimately include illegal goods whose own
+availability happens to match the world's codes), that the normal market
+never does on the same world, that Exotics (66) never surfaces even when
+seeking, and that the black-market composition seed is deterministic and
+independent from the normal one. 47/47 passing (up from 43).
+
+### Verified
+
+`npx vitest run` — 524/524 passing. `npx vite build` compiles cleanly.
+Manual pass not yet done in a running `wrangler dev` session — same
+established precedent as Phase 3's Find-a-Supplier routes (worker-route
+behavior needs live D1, not covered by this repo's Vitest suite).
+
+### Known gaps, not addressed this session
+
+Migrations `017`/`018` are committed but not yet applied to remote D1 as
+of this entry. The user's own flagged hypothesis — that CT7/T5 likely have
+similar unmodeled destination-dependent traffic/availability mechanics —
+has not been researched or scoped; next up once this phase is deployed.
+The richer legal/licensed-medical/military/black-market-channel drug
+economy model remains deferred, per the user's explicit choice.
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

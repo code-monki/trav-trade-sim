@@ -243,14 +243,22 @@ function isGoodAvailableAt(good, codes) {
 
 function rollD66(rng) { return `${d6(rng)}${d6(rng)}` }
 
+// Black market extras don't roll the full D66 range and hope to land on
+// 61-66 — they specifically deal in the illegal band, so the roll is 1D
+// with a '6' forced as the leading digit (always 61-66, never anything a
+// legal supplier would offer).
+function rollBlackMarketDie(rng) { return `6${d6(rng)}` }
+
 /**
  * Determine goods composition per "Determine Goods Available": all Common
  * Goods, Trade Goods matching the world's trade codes, plus a number of
  * additional randomly-rolled goods equal to the world's Population code
  * (not a DM — the actual digit/letter value), rerolling 61-65 unless
- * seeking a black market supplier. A good rolled more than once (whether
- * guaranteed + random, or random more than once) gets one extra quantity
- * roll stacked on top per hit, not a duplicate row.
+ * seeking a black market supplier, in which case those extra rolls are
+ * drawn straight from the illegal band instead (see rollBlackMarketDie).
+ * A good rolled more than once (whether guaranteed + random, or random
+ * more than once) gets one extra quantity roll stacked on top per hit,
+ * not a duplicate row.
  *
  * @returns {Map<string, number>} die -> number of quantity rolls to sum
  */
@@ -262,15 +270,15 @@ function mgt2022Composition(compositionRng, codes, popDigit, seekingBlackMarket 
 
   const popCount = parseInt(popDigit, 16) || 0
   for (let i = 0; i < popCount; i++) {
-    let die = rollD66(compositionRng)
+    let die = seekingBlackMarket ? rollBlackMarketDie(compositionRng) : rollD66(compositionRng)
     while (isRerollRequired(die, seekingBlackMarket)) die = rollD66(compositionRng)
-    if (!resolveGood(die)) continue // shouldn't happen — the table covers 11-65
+    if (!resolveGood(die)) continue // Exotics (66) isn't in the table — skip
     hits.set(die, (hits.get(die) ?? 0) + 1)
   }
   return hits
 }
 
-function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEvents = [] }) {
+function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEvents = [], seekingBlackMarket = false }) {
   const codes = mgt2022ParseTradeCodes(world.Remarks || '')
   // Amber/Red Zone sale DMs are encoded as 'Am'/'Rz' pseudo-codes in
   // MGT2022_TRADE_GOODS (Zone isn't a Remarks-tagged trade code, but the
@@ -288,9 +296,14 @@ function generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEv
   // Composition (which goods a supplier has at all) uses its own seeded RNG
   // stream, separate from each good's price/qty rolls below — otherwise
   // adding/removing a good from the random-extras roll would shift the
-  // seed position of every good's price roll after it.
-  const compositionRng = makeRng(`${campaignId}:${world.Hex}:composition:${tick}:v1`)
-  const hits = mgt2022Composition(compositionRng, codes, popDigit)
+  // seed position of every good's price roll after it. Black-market
+  // composition gets its own distinct stream too (a different, unrelated
+  // roll from the normal market's — not sharing "world luck" with it).
+  const compositionSeed = seekingBlackMarket
+    ? `${campaignId}:${world.Hex}:composition:blackmarket:${tick}:v1`
+    : `${campaignId}:${world.Hex}:composition:${tick}:v1`
+  const compositionRng = makeRng(compositionSeed)
+  const hits = mgt2022Composition(compositionRng, codes, popDigit, seekingBlackMarket)
 
   const rows = []
   for (const good of MGT2022_TRADE_GOODS) {
@@ -442,12 +455,13 @@ export function ct7PlayerSalePrice({ campaignId, world, tick, goodDie, activeEve
  * @param {number}   opts.tick          — current tick
  * @param {object[]} opts.activeEvents  — [{trade_good_die, buy_modifier_pct, sell_modifier_pct}] active at this tick/world
  * @param {string}   [opts.tradeRules]  — 'CT7' | 'T5' | 'MgT2022' (default 'CT7')
+ * @param {boolean}  [opts.seekingBlackMarket] — MgT2022 only; composes the illegal-band parallel listing instead of the normal one
  * @returns {object[]} rows for market_snapshots bulk insert
  */
-export function generateWorldSnapshot({ world, sectorName, campaignId, tick, activeEvents = [], tradeRules = 'CT7' }) {
+export function generateWorldSnapshot({ world, sectorName, campaignId, tick, activeEvents = [], tradeRules = 'CT7', seekingBlackMarket = false }) {
   switch (tradeRules) {
     case 'T5':      return generateT5Snapshot({ world, sectorName, campaignId, tick, activeEvents })
-    case 'MgT2022': return generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEvents })
+    case 'MgT2022': return generateMgT2022Snapshot({ world, sectorName, campaignId, tick, activeEvents, seekingBlackMarket })
     default:        return generateCT7Snapshot({ world, sectorName, campaignId, tick, activeEvents })
   }
 }

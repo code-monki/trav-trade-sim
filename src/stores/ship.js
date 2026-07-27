@@ -29,14 +29,22 @@ export const useShipStore = defineStore('ship', () => {
   // counts against the hold until delivery clears the obligation.
   const mailContainerTonsUsed = computed(() =>
     mailContracts.value.reduce((s, m) => s + (m.mail_containers ?? 0) * MGT2022_MAIL_CONTAINER_TONS, 0))
+  // Booked-but-not-yet-delivered freight lots reserve their tonnage too —
+  // previously not tracked at all, so a ship could book more freight than
+  // it had room for once real cargo/passengers/mail were also accounted for.
+  const freightTonsUsed = computed(() =>
+    freight.value.reduce((s, f) => s + (f.freight_tons ?? 0), 0))
   const cargoAvailable = computed(() =>
-    cargoCapacity.value - cargoUsed.value - basicPassageTonsUsed.value - mailContainerTonsUsed.value)
+    cargoCapacity.value - cargoUsed.value - basicPassageTonsUsed.value - mailContainerTonsUsed.value - freightTonsUsed.value)
 
   const stateroomsTotal     = computed(() => ship.value?.stateroom_capacity ?? 0)
   const crewStateroomsUsed  = computed(() => ship.value?.crew_staterooms ?? 0)
   const stateroomsUsed      = computed(() => {
+    // Only High/Middle actually occupy a stateroom — Low uses a low berth
+    // (tracked separately below) and Basic (MgT2022) uses cargo tonnage
+    // (basicPassageTonsUsed above), neither of which should count here.
     const passengerStaterooms = passengers.value
-      .filter(p => p.passage_type !== 'low')
+      .filter(p => p.passage_type === 'high' || p.passage_type === 'middle')
       .reduce((s, p) => s + p.count, 0)
     return crewStateroomsUsed.value + passengerStaterooms
   })
@@ -56,6 +64,9 @@ export const useShipStore = defineStore('ship', () => {
   const crewNavalScoutRankMax   = computed(() => ship.value?.crew_naval_scout_rank_max ?? 0)
   const crewSocialStandingMax   = computed(() => ship.value?.crew_social_standing_max ?? null)
   const shipArmed               = computed(() => ship.value?.armed ?? false)
+  // Black Market's own check wants Streetwise alone, not pooled with
+  // Broker/Carouse the way crewPassengerCheckMax above is.
+  const crewStreetwiseMax        = computed(() => ship.value?.crew_streetwise_max ?? 0)
 
   function clearError() { error.value = null }
 
@@ -557,11 +568,11 @@ export const useShipStore = defineStore('ship', () => {
   return {
     ship, cargo, passengers, mailContracts, freight, loading, error,
     hasShip, canTrade,
-    cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed, mailContainerTonsUsed,
+    cargoUsed, cargoCapacity, cargoAvailable, basicPassageTonsUsed, mailContainerTonsUsed, freightTonsUsed,
     stateroomsTotal, crewStateroomsUsed, stateroomsUsed, stateroomsAvailable,
     lowBerthsTotal, lowBerthsUsed, lowBerthsAvailable,
     crewStewardMax, crewPassengerCheckMax, crewFreightCheckMax,
-    crewNavalScoutRankMax, crewSocialStandingMax, shipArmed,
+    crewNavalScoutRankMax, crewSocialStandingMax, shipArmed, crewStreetwiseMax,
     clearError, loadShip, createShip, updateLocation,
     buyCargo, sellCargo,
     bookPassengers, refundPassenger,

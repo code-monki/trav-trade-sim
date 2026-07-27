@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.9.0
+**Version:** 0.10.0
 
 ---
 
@@ -143,6 +143,14 @@ Covers the MgT2022 pricing/freight/mail/traffic/composition pipeline (`tests/tra
 | UT-617 | `mgt2022PlayerGoodPrice` | `brokerSkill: 4` vs `brokerSkill: 0`, same good | Purchase price lower or equal, sale price higher or equal (higher roll ⇒ cheaper purchasePct, pricier salePct) |
 | UT-618 | `ct7PlayerSalePrice` | `brokerSkill: 0`, same world/good/tick as a `generateWorldSnapshot` CT7 row | Reproduces that row's `sale_price` exactly |
 | UT-619 | `ct7PlayerSalePrice` | `brokerSkill: 10` vs `brokerSkill: 4` | Identical — confirms `brokerDM`'s existing skill-4 cap flows through the live recompute |
+| UT-625 | `generateTrafficSnapshot` | same origin/ship/tick, two different destinations | Independent, generally different results — confirms the seed is route-aware, not just origin-aware |
+| UT-626 | `generateTrafficSnapshot` | high-population vs low-population destination, same origin, 30 ticks | Higher summed passenger+freight traffic with the high-population destination |
+| UT-627 | `generateTrafficSnapshot` | Class A vs Class X destination starport, 30 ticks | Higher summed traffic with the better-starport destination |
+| UT-628 | `generateTrafficSnapshot` | `parsecs: 1` vs `parsecs: 6`, same origin/destination, 30 ticks | Higher summed traffic at 1 parsec — confirms the DM-1-per-parsec-past-first penalty |
+| UT-629 | `generateWorldSnapshot` (`seekingBlackMarket: true` vs `false`) | world with no matching trade codes, 40 ticks | Black-market composition surfaces die 61-65 rows across trials; normal composition never does on the same world |
+| UT-630 | `generateWorldSnapshot` (`seekingBlackMarket: true`) | 40 ticks | Never surfaces Exotics (die 66), even when seeking |
+| UT-631 | `generateWorldSnapshot` (`seekingBlackMarket: true`) | any world | Still includes all 6 Common Goods, same as the normal listing |
+| UT-632 | `generateWorldSnapshot` (`seekingBlackMarket: true` vs `false`) | same world/tick | Black-market composition is deterministic on replay, and differs from the normal composition (independent seed) |
 
 ### 3.4 `src/utils/hexDistance.js`
 
@@ -511,11 +519,11 @@ Every subsection below fully catalogues its component's actual test file (`tests
 1. Create a campaign with Trade Rules = MgT2022; verify the option appears in the New Campaign dropdown alongside CT7/T5
 2. Open Campaign Management → Ships → Templates; verify a "Type A Free Trader" template is lazily seeded (parity with CT7), and that the New Ship/Template forms expose an Armed checkbox
 3. Select a world with the Market tab open as a player who hasn't yet found a supplier there this game-month; verify a "Find a Supplier" prompt is shown instead of the market table. Click "Find a Supplier"; on success, verify the market table now shows MgT2022's own goods names (e.g. "Common Electronics"), not CT7/T5's Book 2 names, and that the goods shown are a subset (Common Goods + trade-code matches + a few random extras) rather than always all 35. On failure, verify the prompt persists and a repeat attempt applies a DM-1 penalty
-4. Open Port → Passengers; verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity); verify Low passage fare scales by parsec distance (not flat)
-5. Open Port → Freight (visible only for MgT2022 campaigns); pick a lot size and verify its tonnage is a fixed, rolled value (Major ≈1-6×10t, Minor ≈1-6×5t, Incidental 1-6t) — not editable; book it; verify the charge is collected upfront (per-parsec rate, same regardless of lot size), and the lot appears in Ship → Aboard → Freight in Transit
+4. Open Port → Passengers; verify the Destination World field is now the first field and passage type/count/fare are hidden until a destination is picked; once picked, verify a fourth "Basic Passage" tier appears, and booking it reduces cargo space (not stateroom/berth capacity); verify Low passage fare scales by parsec distance (not flat)
+5. Open Port → Freight (visible only for MgT2022 campaigns); pick a destination first (lot size/tonnage/charge stay hidden until then), then pick a lot size and verify its tonnage is a fixed, rolled value (Major ≈1-6×10t, Minor ≈1-6×5t, Incidental 1-6t) — not editable; book it; verify the charge is collected upfront (per-parsec rate, same regardless of lot size), and the lot appears in Ship → Aboard → Freight in Transit
 6. Advance the tick past the freight's due tick, then navigate the ship to its destination; verify a late-delivery penalty is deducted from credits at delivery and the obligation clears
-7. Open Port → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) rather than always available
-8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible in their respective forms and change deterministically on tick advance
+7. Open Port → Mail; verify mail acceptance is gated on the tick's rolled container count (take-all-or-none) — the container count only appears once a destination is picked
+8. Confirm all of the above availability counts (passengers per tier, freight lots per size, mail containers) are visible only after a destination is chosen, change with the chosen destination and distance (not just the origin world), and deplete as bookings are made this tick (book the last available seat/lot/container, then verify a second attempt at the same tier is rejected)
 9. Create a T5 campaign and spot-check its market prices before/after this feature's dispatch-fix change — confirm T5 prices now genuinely differ from an equivalent CT7 campaign's (the pre-existing bug where T5 silently used CT7 pricing is fixed)
 10. Open the Character dialog as a player in an MgT2022 campaign; verify the six characteristics (STR/DEX/END/INT/EDU/SOC) are editable and persist; verify the referee can also edit them, plus background/rank, from the Players tab
 11. As two different players with different Broker skill levels, attempt "Find a Supplier" at the same world; verify each player's own attempts/success are tracked independently (one succeeding doesn't grant the other access)
@@ -548,6 +556,17 @@ Every subsection below fully catalogues its component's actual test file (`tests
 5. On the chart canvas, drag horizontally — verify the chart pans; drag vertically — verify the sheet moves instead (no fighting between the two gestures)
 6. Tap the Compare toggle (or long-press a market row); verify rows become full-width tap targets with checkmarks and a toolbar shows the plotted count, with no permanent Plot checkbox column visible
 7. Reload at 1440×900 (desktop) and verify all of the above is absent: full app title, inline chart split with a resize handle, permanent Plot checkbox column, and milieu/session controls back in the header
+
+### MTS-18: Destination-aware Traffic Availability + Black Market (MgT2022)
+1. Open Port → Passengers with no destination picked; verify no availability count is shown anywhere (not even an "unlimited"/ambient number) and the rest of the form is hidden
+2. Pick a destination; verify a brief "rolling…" state appears, then a specific per-tier availability count appears. Pick a *different* destination (or change parsecs) and verify the count changes — confirms the roll is per-route, not per-origin-world alone
+3. Pick a nearby destination (1 parsec) and a far one (5-6 parsecs) from the same origin at the same tick; verify the near destination generally shows equal-or-greater availability (each parsec past the first applies DM-1)
+4. Repeat steps 1-3 for Port → Freight and Port → Mail; verify the same destination-first gating and route-sensitivity
+5. Book the last available seat/lot/container for a given tier at a given route; verify a second booking attempt for that same tier/route/tick is rejected, and the displayed count reflects the depletion
+6. On the Market tab, before any Black Market check has succeeded this game-month, verify a "Seek Black Market" button is shown; click it — on failure, verify the attempt count increments and a repeat attempt applies a DM-1 penalty; on success, verify a "Black Market" toggle appears instead
+7. Toggle to the Black Market view; verify the goods shown differ from the normal listing and can include illegal-category goods (e.g. Illegal Weapons, Illegal Drugs) that don't appear in the normal listing for the same world/tick; verify Exotics never appears in either view
+8. As a second player on the same ship, open the Market tab at the same world; verify the Black Market toggle is already available to them too (ship-wide, not per-player) without needing to repeat the check
+9. Advance to a new game-month; verify the Black Market toggle disappears again until re-attempted
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

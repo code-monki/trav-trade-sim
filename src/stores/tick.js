@@ -102,6 +102,35 @@ export const useTickStore = defineStore('tick', () => {
     return out
   })
 
+  // Per-player pricing overlay for the black-market row set — same
+  // per-player Broker recompute as displaySnapshots above, just sourced
+  // from blackMarketSnapshots instead of worldSnapshots. MgT2022-only,
+  // since black market itself is MgT2022-only (see the Black Market
+  // section below).
+  const displayBlackMarketSnapshots = computed(() => {
+    if (!snapshotWorld.value || auth.campaign?.trade_rules !== 'MgT2022') {
+      return blackMarketSnapshots.value
+    }
+
+    const world      = snapshotWorld.value
+    const campaignId = auth.campaign.id
+    const eventsForWorld = activeEventsForWorld(
+      activeEvents.value, world.Hex, currentTick.value, snapshotSector.value,
+    )
+
+    const out = {}
+    for (const [die, row] of Object.entries(blackMarketSnapshots.value)) {
+      const priced = mgt2022PlayerGoodPrice({
+        campaignId, world, tick: currentTick.value, goodDie: die,
+        activeEvents: eventsForWorld, brokerSkill: brokerSkill.value,
+      })
+      out[die] = priced
+        ? { ...row, purchase_price: priced.purchasePrice, sale_price: priced.salePrice }
+        : row
+    }
+    return out
+  })
+
   // ── Broker skill (CT7/MgT2022 per-player pricing) ───────────────────────────
 
   async function loadBrokerSkill() {
@@ -325,7 +354,6 @@ export const useTickStore = defineStore('tick', () => {
         snapshotWorldKey.value = cacheKey
         snapshotWorld.value    = world
         snapshotSector.value   = sectorName
-        await ensureTrafficSnapshot(world, sectorName)
         return rows
       }
 
@@ -343,7 +371,6 @@ export const useTickStore = defineStore('tick', () => {
       snapshotWorldKey.value = cacheKey
       snapshotWorld.value    = world
       snapshotSector.value   = sectorName
-      await ensureTrafficSnapshot(world, sectorName)
       return data ?? []
     } catch (e) {
       error.value = e.message
@@ -356,20 +383,23 @@ export const useTickStore = defineStore('tick', () => {
   // ── Traffic availability (MgT2022 only) ───────────────────────────────────
 
   // Deterministically generates this tick's passenger/freight/mail traffic
-  // snapshot for a ship at a world and persists it (idempotent — INSERT OR
-  // IGNORE, and regeneration from the same seed always produces the same
-  // row, so a race between two clients is harmless). No-op for CT7/T5
-  // campaigns or when the player has no ship (traffic DMs depend on crew
-  // skills, so there's nothing to compute without one).
-  async function ensureTrafficSnapshot(world, sectorName) {
+  // snapshot for a ship, for a specific origin→destination route, and
+  // persists it (idempotent — INSERT OR IGNORE, and regeneration from the
+  // same seed always produces the same row, so a race between two clients
+  // is harmless). No-op for CT7/T5 campaigns or when the player has no ship
+  // (traffic DMs depend on crew skills, so there's nothing to compute
+  // without one). Per RAW, there's no ambient "how many passengers,
+  // independent of destination" number — this is only ever called once a
+  // booking form's destination is known, never on world visit alone.
+  async function ensureTrafficSnapshot(world, sectorName, destWorld, destSectorName, parsecs) {
     const campaignId = auth.campaign?.id
-    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022' || !ship.hasShip) {
+    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022' || !ship.hasShip || !destWorld?.Hex) {
       trafficAvailability.value = null
       return null
     }
 
     const row = generateTrafficSnapshot({
-      world, sectorName, campaignId, tick: currentTick.value,
+      world, sectorName, destWorld, destSectorName, parsecs, campaignId, tick: currentTick.value,
       shipId: ship.ship.id,
       crewStewardMax:        ship.crewStewardMax,
       crewPassengerCheckMax: ship.crewPassengerCheckMax,
@@ -381,6 +411,87 @@ export const useTickStore = defineStore('tick', () => {
     await api.post(`/api/campaigns/${campaignId}/traffic`, row)
     trafficAvailability.value = row
     return row
+  }
+
+  // ── Black Market (MgT2022) ──────────────────────────────────────────────────
+  // Ship-wide (not per-player, unlike Find a Supplier) — whichever crew
+  // member has the highest Streetwise skill is used automatically, server-
+  // side. Success unlocks the black-market composition for the whole
+  // ship's crew for the rest of the game-month.
+
+  const blackMarketFound    = ref(false)
+  const blackMarketAttempts = ref(0)
+
+  async function loadBlackMarketStatus(worldHex, sectorName) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || !ship.hasShip) return
+    const { data } = await api.get(`/api/campaigns/${campaignId}/black-market`, {
+      ship_id: ship.ship.id, world_hex: worldHex, sector: sectorName,
+      month_key: Math.floor(currentTick.value / TICKS_PER_MONTH),
+    })
+    blackMarketFound.value    = !!data?.succeeded
+    blackMarketAttempts.value = data?.attempts ?? 0
+  }
+
+  // @param {number} opts.starportDM — from starportBrokerDM(starportFromUWP(world.UWP))
+  async function attemptBlackMarket(worldHex, sectorName, { starportDM = 0 } = {}) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || !ship.hasShip) return { success: false }
+
+    const { data, error: apiErr } = await api.post(`/api/campaigns/${campaignId}/black-market`, {
+      ship_id:     ship.ship.id,
+      world_hex:   worldHex,
+      sector:      sectorName,
+      month_key:   Math.floor(currentTick.value / TICKS_PER_MONTH),
+      starport_dm: starportDM,
+    })
+    if (apiErr) { error.value = apiErr; return { success: false } }
+
+    blackMarketFound.value    = !!data.success
+    blackMarketAttempts.value = data.attempts ?? blackMarketAttempts.value + 1
+    return data
+  }
+
+  // Black-market goods composition — a second, parallel snapshot for the
+  // SAME world/tick as the normal market (goods pricing isn't ship-
+  // dependent, only whether a given ship has found access to it). Cached
+  // separately from worldSnapshots so switching the Market tab's toggle
+  // doesn't need to re-fetch.
+  const blackMarketSnapshots = ref({})
+
+  async function ensureBlackMarketSnapshot(world, sectorName) {
+    const campaignId = auth.campaign?.id
+    if (!campaignId || auth.campaign?.trade_rules !== 'MgT2022' || !blackMarketFound.value) {
+      blackMarketSnapshots.value = {}
+      return []
+    }
+
+    const { data: countData } = await api.get(`/api/campaigns/${campaignId}/snapshots`, {
+      count: true, world_hex: world.Hex, sector: sectorName, tick: currentTick.value, is_black_market: true,
+    })
+
+    if (countData?.count > 0) {
+      const { data } = await api.get(`/api/campaigns/${campaignId}/snapshots`, {
+        world_hex: world.Hex, sector: sectorName, tick: currentTick.value, is_black_market: true,
+      })
+      const cache = {}
+      for (const row of data ?? []) cache[row.trade_good_die] = row
+      blackMarketSnapshots.value = cache
+      return data ?? []
+    }
+
+    const eventsForWorld = activeEventsForWorld(activeEvents.value, world.Hex, currentTick.value, sectorName)
+    const rows = generateWorldSnapshot({
+      world, sectorName, campaignId,
+      tick: currentTick.value, activeEvents: eventsForWorld,
+      tradeRules: auth.campaign?.trade_rules, seekingBlackMarket: true,
+    }).map(row => ({ ...row, is_black_market: true }))
+
+    await api.post(`/api/campaigns/${campaignId}/snapshots`, { rows })
+    const cache = {}
+    for (const row of rows) cache[row.trade_good_die] = row
+    blackMarketSnapshots.value = cache
+    return rows
   }
 
   // ── Price history ──────────────────────────────────────────────────────────
@@ -487,6 +598,7 @@ export const useTickStore = defineStore('tick', () => {
     trafficAvailability,
     supplierFound, supplierAttempts,
     displaySnapshots, brokerSkill,
+    blackMarketFound, blackMarketAttempts, blackMarketSnapshots, displayBlackMarketSnapshots,
     imperialDate,
     loadCalendar,
     advanceTick,
@@ -503,5 +615,8 @@ export const useTickStore = defineStore('tick', () => {
     loadSupplierStatus,
     attemptFindSupplier,
     loadBrokerSkill,
+    loadBlackMarketStatus,
+    attemptBlackMarket,
+    ensureBlackMarketSnapshot,
   }
 })

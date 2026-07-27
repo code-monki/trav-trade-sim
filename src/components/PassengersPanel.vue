@@ -36,7 +36,84 @@
       <section class="booking-section">
         <h3>Book Passengers</h3>
 
-        <form class="booking-form" @submit.prevent="submitBooking">
+        <!-- MgT2022: destination first — no traffic count exists independent
+             of where the ship is going, so the rest of the form is gated
+             behind having picked one. -->
+        <form v-if="tradeRules === 'MgT2022'" class="booking-form" @submit.prevent="submitBooking">
+          <div class="form-row">
+            <label>Destination World</label>
+            <WorldPicker
+              v-model="destWorld"
+              :sector-name="props.sectorName" />
+          </div>
+
+          <p v-if="!destinationChosen" class="placeholder-note">
+            Pick a destination to see passenger traffic for this route.
+          </p>
+          <p v-else-if="trafficLoading" class="placeholder-note">
+            Rolling passenger traffic for this route…
+          </p>
+          <template v-else>
+            <div class="form-row">
+              <label id="passage-type-label">Passage Type</label>
+              <div class="type-btns" role="group" aria-labelledby="passage-type-label">
+                <button
+                  v-for="t in passageTypes"
+                  :key="t"
+                  type="button"
+                  :class="['type-btn', { active: form.passageType === t }]"
+                  :aria-pressed="form.passageType === t"
+                  @click="form.passageType = t">
+                  {{ PASSAGE_TYPE_LABELS[t] }}
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row two-col">
+              <div>
+                <label for="passenger-count-input">Passengers</label>
+                <div class="stepper">
+                  <button type="button" aria-label="Decrease passenger count"
+                          @click="decCount" :disabled="form.count <= 1">−</button>
+                  <input id="passenger-count-input" v-model.number="form.count" type="number" min="1"
+                         :max="maxCount" class="count-input" />
+                  <button type="button" aria-label="Increase passenger count"
+                          @click="incCount" :disabled="form.count >= maxCount">+</button>
+                </div>
+              </div>
+              <div>
+                <label for="passenger-parsecs-input">Parsecs</label>
+                <input id="passenger-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
+                       class="parsec-input" />
+              </div>
+            </div>
+
+            <p class="traffic-note">
+              {{ trafficLabel }}: {{ trafficAvailableForType }} available this tick
+            </p>
+
+            <!-- Fare preview -->
+            <div class="fare-preview" v-if="form.count > 0">
+              <span class="fare-label">Fare</span>
+              <span class="fare-amount">
+                Cr{{ fareInfo.farePerHead.toLocaleString() }} × {{ form.count }}
+                = <strong>Cr{{ fareInfo.fareTotal.toLocaleString() }}</strong>
+              </span>
+            </div>
+
+            <p v-if="formError" class="form-error">{{ formError }}</p>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"
+                      :disabled="!canBook || ship.loading">
+                {{ ship.loading ? 'Booking…' : 'Book Passage' }}
+              </button>
+            </div>
+          </template>
+        </form>
+
+        <!-- CT7/T5: today's order, unchanged — no traffic-availability concept to gate on. -->
+        <form v-else class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
             <label id="passage-type-label">Passage Type</label>
             <div class="type-btns" role="group" aria-labelledby="passage-type-label">
@@ -64,16 +141,12 @@
                         @click="incCount" :disabled="form.count >= maxCount">+</button>
               </div>
             </div>
-            <div v-if="tradeRules === 'T5' || tradeRules === 'MgT2022'">
+            <div v-if="tradeRules === 'T5'">
               <label for="passenger-parsecs-input">Parsecs</label>
               <input id="passenger-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
                      class="parsec-input" />
             </div>
           </div>
-
-          <p v-if="tradeRules === 'MgT2022'" class="traffic-note">
-            {{ trafficLabel }}: {{ trafficAvailableForType }} available this tick
-          </p>
 
           <div class="form-row">
             <label>Destination World</label>
@@ -113,6 +186,7 @@ import { ref, computed, watch } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
+import { useMapStore }   from '../stores/map.js'
 import {
   PASSAGE_TYPES,
   PASSAGE_TYPES_MGT2022,
@@ -131,6 +205,7 @@ const props = defineProps({
 const ship = useShipStore()
 const auth = useAuthStore()
 const tick = useTickStore()
+const map  = useMapStore()
 
 const tradeRules = computed(() => auth.campaign?.trade_rules ?? 'CT7')
 
@@ -141,14 +216,37 @@ const form = ref({
 })
 
 const destWorld = ref({ hex: '', name: '', sector: '' })
+const destinationChosen = computed(() => destWorld.value.hex.trim().length > 0)
+const trafficLoading     = ref(false)
 
-// Auto-compute parsecs from hex distance when a world is picked (used for T5 fares)
+// Auto-compute parsecs from hex distance when a world is picked (same-sector only)
 watch(() => destWorld.value.hex, (hex) => {
   if (hex && props.world?.Hex) {
     const d = hexDistance(props.world.Hex, hex)
     if (d > 0) form.value.parsecs = d
   }
 })
+
+// MgT2022 only — there's no ambient "how many passengers are waiting"
+// number independent of a destination (RAW applies population/starport DMs
+// from *both* worlds plus a distance penalty), so traffic is rolled fresh
+// whenever the destination or distance changes.
+watch(
+  () => [tradeRules.value, destWorld.value.hex, destWorld.value.sector, form.value.parsecs],
+  async ([rules, hex, sector, parsecs]) => {
+    if (rules !== 'MgT2022' || !hex || !sector) { tick.trafficAvailability = null; return }
+    trafficLoading.value = true
+    try {
+      const worlds  = await map.fetchWorldsForSector(sector)
+      const destObj = worlds.find(w => w.Hex === hex) ?? null
+      if (!destObj) { tick.trafficAvailability = null; return }
+      await tick.ensureTrafficSnapshot(props.world, props.sectorName, destObj, sector, parsecs)
+    } finally {
+      trafficLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 const formError  = ref('')
 const successMsg = ref('')
@@ -343,6 +441,7 @@ function decCount() { if (form.value.count > 1) form.value.count-- }
 .fare-amount strong { color: var(--accent); }
 
 .traffic-note { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
+.placeholder-note { font-size: 0.82rem; color: var(--text-dim); font-style: italic; margin: 0; }
 
 .form-actions { display: flex; justify-content: flex-end; }
 

@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.9.0
+**Version:** 0.10.0
 
 ---
 
@@ -483,41 +483,68 @@ CT7's Broker **fee** (`brokerFee(skill, finalPrice)` — 5% × skill × transact
 Distinct from §7/§7a/§7b above — this isn't goods pricing, it's the "how
 many passengers/cargo-lots/mail-containers exist to be booked this tick"
 scarcity mechanic (`src/lib/traffic-tick.js`, `traffic_snapshots`). Per the
-rulebook's own "SEEKING PASSENGERS"/"FREIGHT"/"MAIL" sections, this now
+rulebook's own "SEEKING PASSENGERS"/"FREIGHT"/"MAIL" sections, this
 depends on the **ship's own current crew** (Steward, Broker, Carouse,
-Streetwise, Naval/Scout rank, SOC), not just the world — so it's generated
-per **(ship, world, tick)**, not just (world, tick): two ships docked at
-the same world can get different numbers.
+Streetwise, Naval/Scout rank, SOC), not just the world, *and* on the
+chosen **destination** — population/starport DMs apply from both the
+origin and destination world, plus a distance penalty ("each parsec of
+destination past the first: DM-1"). So the roll is generated per **(ship,
+origin world, destination world, tick)**, not just (ship, world, tick):
+two ships docked at the same world, or the same ship considering two
+different destinations, can get different numbers.
 
-`generateTrafficSnapshot(world, sectorName, campaignId, tick, shipId, crew*)`
+Because the true count is inherently per-*route*, there is no meaningful
+"how many passengers are waiting, independent of where they're going"
+number — `ensureTrafficSnapshot` is therefore never called ambiently on
+world visit. `PassengersPanel.vue`/`FreightPanel.vue`/`MailPanel.vue`
+(MgT2022 only; CT7/T5 keep their pre-existing field order and behavior,
+since they have no traffic-availability concept to gate on) show the
+destination picker first and gate the rest of the form behind having
+picked one, resolving the destination's full world object via
+`map.fetchWorldsForSector()` and re-rolling whenever the destination or
+parsec distance changes.
+
+`generateTrafficSnapshot(world, sectorName, destWorld, destSectorName, parsecs, campaignId, tick, shipId, crew*)`
 uses **three independent seeded RNG streams** — one each for Passengers,
 Freight, and Mail (`...traffic:passenger:...`, `...traffic:freight:...`,
-`...traffic:mail:...`). This isn't incidental: each tier's dice-*count* is
-data-dependent (a DM of +2 might sum 3 dice, +4 might sum 5), so a single
-shared stream would let a change that should only affect one category
-(e.g. Steward, which per RAW only ever touches Passenger traffic) shift
-where the *next* category's draws start from — the same
-composition-vs-pricing contamination problem §7a's `compositionRng`
-already solves, discovered again here via a failing test before shipping.
+`...traffic:mail:...`), keyed by both the origin and destination hex so
+two different destinations from the same origin/tick produce independent
+rolls. This isn't incidental: each tier's dice-*count* is data-dependent (a
+DM of +2 might sum 3 dice, +4 might sum 5), so a single shared stream
+would let a change that should only affect one category (e.g. Steward,
+which per RAW only ever touches Passenger traffic) shift where the *next*
+category's draws start from — the same composition-vs-pricing
+contamination problem §7a's `compositionRng` already solves, discovered
+again here via a failing test before shipping.
 
 ```
+distanceDM = -max(0, parsecs - 1)   # 1 parsec is the baseline; never positive
+
 # Passengers — own stream
-passengerBaseDM = passengerPopulationDM(popDigit) + starportDM(starport) + passengerZoneTrafficDM(zone)
+passengerBaseDM = passengerPopulationDM(popDigit) + passengerPopulationDM(destPopDigit)
+                + starportDM(starport) + starportDM(destStarport)
+                + passengerZoneTrafficDM(zone)   # origin only
+                + distanceDM
 passengerCheckEffect = (2d6(passengerRng) + crewPassengerCheckMax) - 8   # best of Broker/Carouse/Streetwise among crew; can be negative
 for tier in {high, middle, basic, low}:
   tierDM = passengerBaseDM + crewStewardMax + passengerCheckEffect + MGT2022_PASSENGER_TIER_DM[tier]
   count  = passengerTrafficDiceCount(2d6(passengerRng) + tierDM) dice, rolled and summed from passengerRng
 
 # Freight — own stream, genuinely different Population/Zone DM table and
-# dice-count table from Passengers' (confirmed divergent at rolls 6, 9, 10, 12, 13, 15)
-freightBaseDM = freightPopulationDM(popDigit) + starportDM(starport) + techLevelTrafficDM(tl) + freightZoneTrafficDM(zone)
+# dice-count table from Passengers' (confirmed divergent at rolls 6, 9, 10, 12, 13, 15).
+# TL/Zone DMs stay origin-only — the book lists them outside the "both
+# source and destination" bullet, unlike population/starport.
+freightBaseDM = freightPopulationDM(popDigit) + freightPopulationDM(destPopDigit)
+              + starportDM(starport) + starportDM(destStarport)
+              + techLevelTrafficDM(tl) + freightZoneTrafficDM(zone)
+              + distanceDM
 freightCheckEffect = (2d6(freightRng) + crewFreightCheckMax) - 8   # best of Broker/Streetwise among crew
 for tier in {major, minor, incidental}:
   tierDM = freightBaseDM + freightCheckEffect + MGT2022_FREIGHT_TIER_DM[tier]
   count  = freightTrafficDiceCount(2d6(freightRng) + tierDM) dice, rolled and summed from freightRng
 
 # Mail — own stream; "Freight Traffic DM" means the un-tiered freight DM
-# VALUE computed above, reused — not a shared RNG stream.
+# VALUE computed above (now itself route-aware), reused — not a shared RNG stream.
 mailDM = bandedMapping(freightBaseDM + freightCheckEffect)
        + (shipArmed ? +2 : 0) + mailTechLevelDM(tl)
        + crewNavalScoutRankMax + characteristicDM(crewSocialStandingMax)
@@ -527,14 +554,19 @@ mailContainers = mailAvailable(2d6(mailRng) + mailDM) ? mailContainerCount(d6(ma
 The five crew-derived inputs (`crewStewardMax`, `crewPassengerCheckMax`,
 `crewFreightCheckMax`, `crewNavalScoutRankMax`, `crewSocialStandingMax`)
 and `shipArmed` are computed **server-side**, not by this pure function —
-`worker/src/routes/ships.js`'s ship-loading route runs five `MAX(...)`
+`worker/src/routes/ships.js`'s ship-loading route runs `MAX(...)`
 aggregate queries over `crew` joined to `player_skills`/`players`
 (mirroring its pre-existing `crew_staterooms` `COUNT(*)` query exactly),
 attached to the returned ship object; `ship.js` exposes thin computed
-passthroughs, and `tick.js`'s `ensureTrafficSnapshot` (which now imports
+passthroughs, and `tick.js`'s `ensureTrafficSnapshot` (which imports
 `useShipStore` directly — mutual Pinia store imports are safe as long as
 `useXStore()` is only called lazily inside each store's own `defineStore`
 body, as both already do) reads them at generation time.
+
+**Known limitation, not introduced or fixed by this phase**: `hexDistance()`
+is sector-relative coordinate math with no cross-sector offset awareness,
+so cross-sector manual-entry destinations get an inaccurate parsec count —
+T5 fares already had this exact gap.
 
 **Freight lot tonnage is rolled, not chosen**: `FreightPanel.vue`'s
 `lotTons` computed rolls `MGT2022_FREIGHT_LOT_SIZE_DICE[lotSize]` (Major
@@ -542,10 +574,57 @@ body, as both already do) reads them at generation time.
 `...freight-lot:${lotSize}:${tick}:v1`, fixed and non-editable per lot
 size/tick — "a freight lot cannot be broken up."
 
-`POST /:id/book-passengers` gained its first server-side validation:
-stateroom (High+Middle), low-berth (Low), cargo tons (Basic, via a small
-`MGT2022_BASIC_PASSAGE_TONS` constant duplicated locally in the worker —
-this package never imports the frontend bundle, same as the late-delivery-
-penalty logic just above it in the same file), and the `traffic_snapshots`
-cap for the requested tier — previously this route validated nothing at
-all, relying entirely on the client's own (already-existing) checks.
+`book-passengers`/`book-freight`/`accept-mail` all validate server-side:
+stateroom (High+Middle), low-berth (Low), cargo tons (Basic Passage,
+booked-but-undelivered Freight, and accepted Mail containers all count
+against `cargoAvailable`), and the `traffic_snapshots` cap for the
+requested tier/lot-size/container count — previously these routes
+validated nothing at all, relying entirely on the client's own checks. All
+three additionally run an atomic guarded decrement against the matching
+`traffic_snapshots` row (`UPDATE ... SET x = x - ? WHERE ... AND x >= ?`,
+checked via `meta.changes`, the same pattern as `buy-cargo`'s
+`qty_available` guard), keyed by destination as well as origin/ship, so
+availability actually depletes as bookings happen and two concurrent
+bookings racing for the last seat/lot/container can't both win.
+
+## 7d. Black Market (MgT2022 only)
+
+A new, additive mechanic — not a fix to something broken. Goods
+composition already supported a `seekingBlackMarket` flag
+(`mgt2022Composition`'s reroll-avoidance for die range 61-65) but nothing
+ever set it. Per the user's choice, black-market access resolves like
+Find a Supplier's one-click check, but **ship-wide** rather than
+per-player: whichever crew member has the ship's single highest
+Streetwise skill (`crew_streetwise_max`, looked up server-side — the
+route does not trust a client-supplied skill level, since there's no one
+acting player to trust) is used automatically, and success unlocks the
+black-market view for the *whole ship's crew* for the rest of the
+game-month, tracked in `black_market_search_attempts` (mirrors
+`supplier_search_attempts`, keyed by `ship_id` instead of `player_id`).
+
+**Composition mechanic.** Black-market extras don't roll the full D66
+range and hope to land in the illegal band — each of a world's
+population-code extra draws instead rolls 1D and prepends a forced `'6'`
+leading digit (`rollBlackMarketDie`), always landing in 61-66. Landing on
+66 (Exotics) is simply skipped, the same as the normal path's existing
+"die not in the priced-goods table" guard. This replaces (for
+black-market composition only) the normal path's `rollD66` + reroll-
+avoidance; `isRerollRequired(die, seekingBlackMarket)` still exists but is
+now moot for the black-market path (its own dice can only ever be 61-66).
+`generateWorldSnapshot`'s dispatcher forwards `seekingBlackMarket` through
+to `generateMgT2022Snapshot`, which gives the black-market roll its own
+`:composition:blackmarket:` seed segment, distinct from the normal
+listing's, so the two don't collide for the same world/tick.
+
+Goods pricing itself stays world/tick-scoped, not ship-scoped: a second,
+parallel row set per (world, tick) in `market_snapshots`
+(`is_black_market = 1`), generated lazily via `tick.ensureBlackMarketSnapshot()`
+the same way normal snapshots are — mirrors how Find a Supplier gates
+visibility into already-shared data, just swapping "per-player" for
+"per-ship." `tick.js`'s `displayBlackMarketSnapshots` computed mirrors
+§7b's per-player `displaySnapshots` overlay, sourced from the black-market
+row set instead of the normal one. `MarketTable.vue` shows a "Seek Black
+Market" one-click button (with an attempts-so-far hint, mirroring
+`FindSupplierPanel.vue`) until success, then a toggle switching the
+table's row source between `displaySnapshots` and
+`displayBlackMarketSnapshots`.

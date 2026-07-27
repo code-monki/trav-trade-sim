@@ -4,7 +4,7 @@
 // Every migration filename's numeric prefix must be added here in the same
 // commit as the migration file itself (see d1/011_schema_ledger.sql).
 export const EXPECTED_MIGRATIONS = [
-  '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016',
+  '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016', '017', '018',
 ]
 
 // Pure — no D1 dependency, so it's directly unit-testable without a database.

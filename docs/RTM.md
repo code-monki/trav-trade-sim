@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.9.0
+**Version:** 0.10.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -253,6 +253,15 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 | FR-2008 | Traffic data scoped to MgT2022 only | DD §1.1 `traffic_snapshots` | `tick.js:ensureTrafficSnapshot` (`trade_rules === 'MgT2022'` guard) | — | — | — | MTS-14 |
 | FR-2009 | Crew-derived DMs: Steward (ambient), Broker/Carouse/Streetwise or Broker/Streetwise Effect (automatic check, best of crew) | HLD §7c | `traffic-tick.js:generateTrafficSnapshot`, `worker/src/routes/ships.js` ship-load crew aggregate queries, `ship.js:crewStewardMax`/`crewPassengerCheckMax`/`crewFreightCheckMax` | UT-622–623 | — | — | MTS-14 |
 | FR-2010 | Mail DM: banded Freight DM + armed + world TL + Naval/Scout rank + SOC | HLD §7c | `traffic-tick.js:generateTrafficSnapshot` (mail section), `traveller-data-mgt2022.js:MGT2022_MAIL_FREIGHT_DM_BANDS`/`mailTechLevelDM` | UT-624 | — | — | MTS-14 |
+| FR-2011 | Traffic rolls apply population/starport DMs from both origin and destination, plus a distance-past-first-parsec penalty; roll keyed per (ship, origin, destination, tick), not per-origin alone; booking forms gate on a destination being chosen first | HLD §7c | `traffic-tick.js:generateTrafficSnapshot` (`destWorld`/`parsecs` params), `tick.js:ensureTrafficSnapshot`, `PassengersPanel.vue`/`FreightPanel.vue`/`MailPanel.vue` (destination-first gating), `d1/017_traffic_snapshots_per_route.sql` | UT-625–628 | — | — | MTS-18 |
+
+## 2.21 Black Market (MgT2022 only)
+
+| FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
+|-------|-----------------------|------------|----------------|------|-----------|-----|--------|
+| FR-2101 | Ship-wide one-click Black Market check (Streetwise, best of crew, server-looked-up) | HLD §7d, DD §1.1 `black_market_search_attempts` | `worker/src/routes/market.js` (`GET`/`POST /black-market`), `tick.js:loadBlackMarketStatus`/`attemptBlackMarket`, `MarketTable.vue` (Seek Black Market button) | — | — | — | MTS-18 |
+| FR-2102 | Black-market composition forces extra rolls into the illegal die range (61-66, excluding Exotics); toggle between normal/black-market listings | HLD §7d | `market-tick.js:mgt2022Composition`/`rollBlackMarketDie`, `generateWorldSnapshot` (`seekingBlackMarket`), `MarketTable.vue` (toggle) | UT-629–632 | — | — | MTS-18 |
+| FR-2103 | Black-market pricing uses the same per-player Broker overlay as the normal listing | HLD §7d, §7b | `tick.js:displayBlackMarketSnapshots` | — | — | — | MTS-18 |
 
 ---
 

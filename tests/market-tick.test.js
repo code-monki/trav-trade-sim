@@ -254,6 +254,52 @@ describe('generateWorldSnapshot dispatch', () => {
   })
 })
 
+describe('generateWorldSnapshot dispatch — black market (seekingBlackMarket)', () => {
+  // No trade codes at all, so none of the illegal-band goods' own
+  // availability arrays (e.g. Illegal Biochemicals: Ag/Wa) can match —
+  // any die 61-65 row seen here can only have come from the black-market
+  // extra-roll mechanic, not the guaranteed common/trade-code baseline.
+  const noCodesWorld = { Hex: '0404', UWP: 'A788899-C', Remarks: '' } // pop digit '8' -> 8 random extras/tick
+
+  it('surfaces illegal-band goods (die 61-65) across many ticks, unlike the normal market', () => {
+    let blackMarketHits = 0
+    let normalHits      = 0
+    for (let t = 0; t < 40; t++) {
+      const bmRows     = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: t, tradeRules: 'MgT2022', seekingBlackMarket: true })
+      const normalRows = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: t, tradeRules: 'MgT2022', seekingBlackMarket: false })
+      if (bmRows.some(r => { const n = parseInt(r.trade_good_die, 10); return n >= 61 && n <= 65 })) blackMarketHits++
+      if (normalRows.some(r => { const n = parseInt(r.trade_good_die, 10); return n >= 61 && n <= 65 })) normalHits++
+    }
+    expect(blackMarketHits).toBeGreaterThan(0)
+    expect(normalHits).toBe(0)
+  })
+
+  it('never surfaces Exotics (die 66) even when seeking the black market', () => {
+    for (let t = 0; t < 40; t++) {
+      const rows = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: t, tradeRules: 'MgT2022', seekingBlackMarket: true })
+      expect(rows.every(r => r.trade_good_die !== '66' && r.trade_good_name !== 'Exotics')).toBe(true)
+    }
+  })
+
+  it('still includes the 6 Common Goods baseline, same as the normal market', () => {
+    const rows = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: 1, tradeRules: 'MgT2022', seekingBlackMarket: true })
+    const commonNames = ['Common Electronics', 'Common Industrial Goods', 'Common Manufactured Goods',
+                          'Common Raw Materials', 'Common Consumables', 'Common Ore']
+    for (const name of commonNames) {
+      expect(rows.some(r => r.trade_good_name === name)).toBe(true)
+    }
+  })
+
+  it('is deterministic and independent from the normal composition seed', () => {
+    const a1 = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: 9, tradeRules: 'MgT2022', seekingBlackMarket: true })
+    const a2 = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: 9, tradeRules: 'MgT2022', seekingBlackMarket: true })
+    expect(a1).toEqual(a2)
+
+    const normal = generateWorldSnapshot({ world: noCodesWorld, sectorName: 'Test', campaignId: 'c1', tick: 9, tradeRules: 'MgT2022', seekingBlackMarket: false })
+    expect(a1).not.toEqual(normal)
+  })
+})
+
 // ── Per-player live pricing (Phase 4) ───────────────────────────────────────────
 
 describe('mgt2022PlayerGoodPrice', () => {

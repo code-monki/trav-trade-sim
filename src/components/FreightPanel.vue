@@ -24,68 +24,76 @@
 
         <form class="booking-form" @submit.prevent="submitBooking">
           <div class="form-row">
-            <label id="lot-size-label">Lot Size</label>
-            <div class="type-btns" role="group" aria-labelledby="lot-size-label">
-              <button
-                v-for="l in LOT_SIZES"
-                :key="l"
-                type="button"
-                :class="['type-btn', { active: form.lotSize === l }]"
-                :aria-pressed="form.lotSize === l"
-                @click="form.lotSize = l">
-                {{ LOT_SIZE_LABELS[l] }}
-              </button>
-            </div>
-          </div>
-
-          <div class="form-row two-col">
-            <div>
-              <label>Lot Tonnage</label>
-              <div class="lot-tonnage">{{ lotTons }}t</div>
-            </div>
-            <div>
-              <label for="freight-parsecs-input">Parsecs</label>
-              <input id="freight-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
-                     class="parsec-input" />
-            </div>
-          </div>
-          <p class="hint">
-            A {{ LOT_SIZE_LABELS[form.lotSize] }} lot is {{ MGT2022_FREIGHT_LOT_SIZE_DICE[form.lotSize] }} tons,
-            rolled once per lot size/tick — lots can't be split or resized.
-          </p>
-
-          <div class="form-row">
             <label>Destination World</label>
             <WorldPicker
               v-model="destWorld"
               :sector-name="props.sectorName" />
           </div>
 
-          <p class="traffic-note">
-            {{ lotsAvailable }} {{ LOT_SIZE_LABELS[form.lotSize] }} lot(s) available this tick
+          <p v-if="!destinationChosen" class="placeholder-note">
+            Pick a destination to see freight traffic for this route.
           </p>
-
-          <!-- Charge preview -->
-          <div class="fare-preview" v-if="lotTons > 0">
-            <span class="fare-label">Charge</span>
-            <span class="fare-amount">
-              {{ lotTons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
-              = <strong>Cr{{ charge.toLocaleString() }}</strong>
-            </span>
-          </div>
-
-          <p class="hint">
-            Due by tick {{ dueTick }} — late delivery incurs a penalty (1D+4)×10% deducted from the charge.
+          <p v-else-if="trafficLoading" class="placeholder-note">
+            Rolling freight traffic for this route…
           </p>
+          <template v-else>
+            <div class="form-row">
+              <label id="lot-size-label">Lot Size</label>
+              <div class="type-btns" role="group" aria-labelledby="lot-size-label">
+                <button
+                  v-for="l in LOT_SIZES"
+                  :key="l"
+                  type="button"
+                  :class="['type-btn', { active: form.lotSize === l }]"
+                  :aria-pressed="form.lotSize === l"
+                  @click="form.lotSize = l">
+                  {{ LOT_SIZE_LABELS[l] }}
+                </button>
+              </div>
+            </div>
 
-          <p v-if="formError" class="form-error">{{ formError }}</p>
+            <div class="form-row two-col">
+              <div>
+                <label>Lot Tonnage</label>
+                <div class="lot-tonnage">{{ lotTons }}t</div>
+              </div>
+              <div>
+                <label for="freight-parsecs-input">Parsecs</label>
+                <input id="freight-parsecs-input" v-model.number="form.parsecs" type="number" min="1" max="6"
+                       class="parsec-input" />
+              </div>
+            </div>
+            <p class="hint">
+              A {{ LOT_SIZE_LABELS[form.lotSize] }} lot is {{ MGT2022_FREIGHT_LOT_SIZE_DICE[form.lotSize] }} tons,
+              rolled once per lot size/tick — lots can't be split or resized.
+            </p>
 
-          <div class="form-actions">
-            <button type="submit" class="btn-primary"
-                    :disabled="!canBook || ship.loading">
-              {{ ship.loading ? 'Booking…' : 'Book Freight' }}
-            </button>
-          </div>
+            <p class="traffic-note">
+              {{ lotsAvailable }} {{ LOT_SIZE_LABELS[form.lotSize] }} lot(s) available this tick
+            </p>
+
+            <!-- Charge preview -->
+            <div class="fare-preview" v-if="lotTons > 0">
+              <span class="fare-label">Charge</span>
+              <span class="fare-amount">
+                {{ lotTons }}t × Cr{{ ratePerTon.toLocaleString() }}/t
+                = <strong>Cr{{ charge.toLocaleString() }}</strong>
+              </span>
+            </div>
+
+            <p class="hint">
+              Due by tick {{ dueTick }} — late delivery incurs a penalty (1D+4)×10% deducted from the charge.
+            </p>
+
+            <p v-if="formError" class="form-error">{{ formError }}</p>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"
+                      :disabled="!canBook || ship.loading">
+                {{ ship.loading ? 'Booking…' : 'Book Freight' }}
+              </button>
+            </div>
+          </template>
         </form>
       </section>
 
@@ -100,6 +108,7 @@ import { ref, computed, watch } from 'vue'
 import { useShipStore }  from '../stores/ship.js'
 import { useAuthStore }  from '../stores/auth.js'
 import { useTickStore }  from '../stores/tick.js'
+import { useMapStore }   from '../stores/map.js'
 import { freightRate, freightCharge } from '../lib/trade-engine-mgt2022.js'
 import { rollQty } from '../lib/trade-engine-ct7.js'
 import { makeRng } from '../lib/market-tick.js'
@@ -115,12 +124,15 @@ const props = defineProps({
 const ship = useShipStore()
 const auth = useAuthStore()
 const tick = useTickStore()
+const map  = useMapStore()
 
 const LOT_SIZES = ['major', 'minor', 'incidental']
 const LOT_SIZE_LABELS = { major: 'Major', minor: 'Minor', incidental: 'Incidental' }
 
 const form = ref({ lotSize: 'major', parsecs: 1 })
 const destWorld = ref({ hex: '', name: '', sector: '' })
+const destinationChosen = computed(() => destWorld.value.hex.trim().length > 0)
+const trafficLoading     = ref(false)
 
 watch(() => destWorld.value.hex, (hex) => {
   if (hex && props.world?.Hex) {
@@ -128,6 +140,27 @@ watch(() => destWorld.value.hex, (hex) => {
     if (d > 0) form.value.parsecs = d
   }
 })
+
+// No ambient "how many freight lots are waiting" number independent of a
+// destination — RAW applies population/starport DMs from *both* worlds
+// plus a distance penalty, so traffic is rolled fresh whenever the
+// destination or distance changes.
+watch(
+  () => [destWorld.value.hex, destWorld.value.sector, form.value.parsecs],
+  async ([hex, sector, parsecs]) => {
+    if (!hex || !sector) { tick.trafficAvailability = null; return }
+    trafficLoading.value = true
+    try {
+      const worlds  = await map.fetchWorldsForSector(sector)
+      const destObj = worlds.find(w => w.Hex === hex) ?? null
+      if (!destObj) { tick.trafficAvailability = null; return }
+      await tick.ensureTrafficSnapshot(props.world, props.sectorName, destObj, sector, parsecs)
+    } finally {
+      trafficLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 const formError  = ref('')
 const successMsg = ref('')
@@ -291,6 +324,7 @@ async function submitBooking() {
 
 .traffic-note { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
 .hint { font-size: 0.72rem; color: var(--text-dim); font-style: italic; margin: 0; }
+.placeholder-note { font-size: 0.82rem; color: var(--text-dim); font-style: italic; margin: 0; }
 
 .form-actions { display: flex; justify-content: flex-end; }
 

@@ -1,13 +1,13 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.9.0
+**Version:** 0.10.0
 
 ---
 
 ## 1. Database Schema
 
-The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/015_supplier_search_attempts.sql` (15 migrations total, `001` being the baseline itself), applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
+The backend is Cloudflare D1 (SQLite), not PostgreSQL/Supabase. UUID primary keys are `TEXT`, generated in Worker code via `crypto.randomUUID()`; timestamps are `TEXT` ISO 8601 strings (`datetime('now')`); booleans are `INTEGER` (0/1). There are no stored functions and no RLS — all business logic and authorization live in the Worker (`worker/src/routes/*.js`, `worker/src/middleware/auth.js`). The consolidated baseline is `d1/schema.sql`; incremental changes are applied via numbered migrations `d1/002_*.sql` through `d1/018_black_market.sql` (18 migrations total, `001` being the baseline itself), applied by hand via `wrangler d1 execute` (no CI/automated migration runner exists).
 
 **Schema-drift detection:** as of migration `011`, a `schema_migrations` ledger table (`id`, `applied_at`) records every migration a given D1 database has actually received — `d1/schema.sql` seeds it fully caught-up for fresh installs, and every migration file from `011` onward ends with its own `INSERT` recording itself. `worker/src/lib/schema-version.js` holds the Worker's own `EXPECTED_MIGRATIONS` list (must be updated in the same commit as any new migration file) and is checked by `GET /api/health`, which returns `503` with `schema_ok: false` if the live database's ledger doesn't match — the frontend (`src/lib/health-check.js`, called once at startup from `main.js`) shows a blocking "database schema is out of date" screen instead of letting the app continue into confusing mid-action failures.
 
@@ -295,6 +295,7 @@ Indexes: `idx_crew_player (campaign_id, player_id, left_tick)`, `idx_crew_ship (
 Index: `idx_player_skills_player (campaign_id, player_id)`
 
 #### `market_snapshots`
+*(`is_black_market` added by `d1/018_black_market.sql`, via the safer create-new-table/copy-rows/rename pattern — this table holds real price history read by charts, unlike `traffic_snapshots` below, so a destructive drop was off the table.)*
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -309,8 +310,9 @@ Index: `idx_player_skills_player (campaign_id, player_id)`
 | `sale_price` | INTEGER | NOT NULL | Cr/ton |
 | `qty_available` | INTEGER | NOT NULL | Tons |
 | `source_codes` | TEXT | NOT NULL, default `''` | Space-separated trade codes applied |
+| `is_black_market` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | MgT2022-only. A second, parallel row set per (world, tick) generated via `mgt2022Composition(..., seekingBlackMarket: true)` — same world/tick grain as the normal listing, not a new dimension; gated on `black_market_search_attempts` (below), same shape as Find a Supplier gating visibility into the normal listing |
 | `created_at` | TEXT | NOT NULL | |
-| UNIQUE | `(campaign_id, world_hex, sector, trade_good_die, tick)` | | |
+| UNIQUE | `(campaign_id, world_hex, sector, trade_good_die, tick, is_black_market)` | | |
 
 Index: `idx_snapshots_world (campaign_id, world_hex, sector, tick DESC)`
 
@@ -449,22 +451,23 @@ Indexes: `idx_trade_records_market`, `idx_trade_records_player`, `idx_trade_reco
 Indexes: `idx_obligations_ship (campaign_id, ship_id, kind, status)`, `idx_obligations_dest (dest_world_hex, dest_sector) WHERE status = 'pending'`
 
 #### `traffic_snapshots`
-*(`d1/010_mgt2022_trade_rules.sql`, `ship_id` added by `d1/016_traffic_snapshots_per_ship.sql`)* — MgT2022-only passenger/freight/mail traffic-availability rolls, one row per (campaign, **ship**, world, tick), generated deterministically alongside the market snapshot (see `src/lib/traffic-tick.js`). Per-ship (not just per-world) since migration `016` — the roll depends on the ship's own crew (Steward/Broker/Carouse/Streetwise/Naval-Scout-rank/SOC), so two ships at the same world/tick can get different numbers; see HLD §7c. CT7/T5 campaigns never populate this table. Migration `016` dropped and recreated this table (pure deterministic cache data, safe to discard — see its own header comment) rather than `ALTER`ing the `UNIQUE` constraint, which SQLite can't do in place.
+*(`d1/010_mgt2022_trade_rules.sql`, `ship_id` added by `d1/016_traffic_snapshots_per_ship.sql`, `dest_world_hex`/`dest_sector` added by `d1/017_traffic_snapshots_per_route.sql`)* — MgT2022-only passenger/freight/mail traffic-availability rolls, one row per (campaign, **ship**, **origin world**, **destination world**, tick), generated deterministically once a booking form's destination is known (see `src/lib/traffic-tick.js`) — no longer generated ambiently on world visit, since RAW applies population/starport DMs from *both* worlds plus a distance penalty, so there is no meaningful "how many passengers are waiting" number independent of where they're going. Per-ship since migration `016` (the roll depends on the ship's own crew — Steward/Broker/Carouse/Streetwise/Naval-Scout-rank/SOC — so two ships at the same world/tick can get different numbers) and per-*route* since migration `017`; see HLD §7c. CT7/T5 campaigns never populate this table. Both migrations dropped and recreated this table (pure deterministic cache data, safe to discard — see each migration's own header comment) rather than `ALTER`ing the `UNIQUE` constraint, which SQLite can't do in place.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | INTEGER | PK, AUTOINCREMENT | |
 | `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
 | `ship_id` | TEXT | FK → ships(id) ON DELETE CASCADE | Added by migration `016` |
-| `world_hex` / `sector` | TEXT | NOT NULL | |
+| `world_hex` / `sector` | TEXT | NOT NULL | Origin world |
+| `dest_world_hex` / `dest_sector` | TEXT | NOT NULL | Added by migration `017`. Destination world — population/starport DMs from this world and a `-(parsecs-1)` distance penalty are added on top of the origin's own DMs |
 | `tick` | INTEGER | NOT NULL | |
 | `high_passages` / `middle_passages` / `basic_passages` / `low_passages` | INTEGER | NOT NULL, default 0 | Rolled availability count per passage tier this tick, via `passengerTrafficDiceCount` |
 | `major_freight_lots` / `minor_freight_lots` / `incidental_freight_lots` | INTEGER | NOT NULL, default 0 | Rolled availability count per freight lot size this tick, via `freightTrafficDiceCount` |
 | `mail_containers` | INTEGER | NOT NULL, default 0 | Rolled container count (0 if the 2D mail-availability roll didn't meet 12+) |
 | `created_at` | TEXT | NOT NULL | |
-| UNIQUE | `(campaign_id, ship_id, world_hex, sector, tick)` | | |
+| UNIQUE | `(campaign_id, ship_id, world_hex, sector, dest_world_hex, dest_sector, tick)` | | |
 
-Index: `idx_traffic_snapshots_lookup (campaign_id, ship_id, world_hex, sector, tick)`
+Index: `idx_traffic_snapshots_lookup (campaign_id, ship_id, world_hex, sector, dest_world_hex, dest_sector, tick)`
 
 #### `supplier_search_attempts`
 *(`d1/015_supplier_search_attempts.sql`)* — MgT2022-only. "Find a Supplier" is a character-based, one-click check (Broker/Streetwise/Admin skill + starport DM, Average 8+ target) gating whether a given player can see a world's market at all this game-month — not an ambient world property, since different players may hold the relevant skill at different levels. Plain (non-seeded) dice: a one-shot player action, not a value that needs to be reproducible on replay.
@@ -484,6 +487,25 @@ Index: `idx_traffic_snapshots_lookup (campaign_id, ship_id, world_hex, sector, t
 Index: `idx_supplier_search_player (campaign_id, player_id, world_hex, sector, month_key)`
 
 `GET`/`POST /api/campaigns/:id/find-supplier` (`worker/src/routes/market.js`) read/upsert this table; `src/stores/tick.js`'s `loadSupplierStatus`/`attemptFindSupplier` call them.
+
+#### `black_market_search_attempts`
+*(`d1/018_black_market.sql`)* — MgT2022-only. Mirrors `supplier_search_attempts` exactly (same Average 8+ check shape, same DM-1-per-prior-attempt penalty) except **ship-wide** rather than per-player: keyed by `ship_id`, not `player_id`, and using whichever crew member has the ship's single highest Streetwise skill (`crew_streetwise_max`, looked up server-side — the route does not trust a client-supplied skill level, unlike `find-supplier`, since there's no single acting player to trust). A separate table rather than a `kind` column on `supplier_search_attempts`, since the two have genuinely different keys, not just a different value of the same shape. Success unlocks the black-market row set (`market_snapshots.is_black_market = 1`) for the whole ship's crew for the rest of the game-month.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PK | |
+| `campaign_id` | TEXT | FK → campaigns(id) ON DELETE CASCADE | |
+| `ship_id` | TEXT | FK → ships(id) ON DELETE CASCADE | |
+| `world_hex` / `sector` | TEXT | NOT NULL | |
+| `month_key` | INTEGER | NOT NULL | `floor(tick / TICKS_PER_MONTH)` |
+| `attempts` | INTEGER | NOT NULL, default 0 | Total attempts this ship has made at this world this month |
+| `succeeded` | INTEGER | NOT NULL, default 0, CHECK IN (0,1) | Once 1, `MarketTable.vue`'s Black Market toggle becomes available for the rest of the month |
+| `updated_at` | TEXT | NOT NULL, default `datetime('now')` | |
+| UNIQUE | `(ship_id, world_hex, sector, month_key)` | | |
+
+Index: `idx_black_market_ship (campaign_id, ship_id, world_hex, sector, month_key)`
+
+`GET`/`POST /api/campaigns/:id/black-market` (`worker/src/routes/market.js`) read/upsert this table; `src/stores/tick.js`'s `loadBlackMarketStatus`/`attemptBlackMarket` call them.
 
 Worker routes alias these columns back to the pre-refactor field names in SQL (`amount AS fare_total`, `origin_world_hex AS embark_world_hex`, `passenger_count AS count`, etc. — see `PASSENGER_SELECT`/`MAIL_SELECT` in `worker/src/routes/ships.js` and `referee.js`), so the frontend store (`useShipStore`'s `passengers`/`mailContracts` state, `bookPassengers`/`acceptMailContract` actions — §3) needed zero changes when the tables were unified.
 
@@ -507,8 +529,8 @@ D1 has no stored procedures — business logic that a Postgres-era design would 
 | `auth.js` | `/api/auth` | Create/join campaign, login, PIN reset, recovery code regeneration, delete campaign |
 | `campaigns.js` | `/api/campaigns` | Campaign label edit |
 | `calendar.js` | `/api/campaigns/:id/calendar`, `/advance-tick`, `/rollup-repair` | Tick advancement (`requireReferee`), monthly/annual rollup, gap-backfill repair (`requireAuth`) |
-| `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*`, `/find-supplier` | Market snapshot lazy generation/backfill, price history, market events; MgT2022 Find-a-Supplier check (`GET`/`POST /find-supplier`) |
-| `ships.js` | `/api/ships` | Player-facing ship view (returns `armed` plus five Traffic Availability crew-DM aggregates, HLD §7c), buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/mail — `book-passengers` validates stateroom/low-berth/cargo/traffic caps server-side), pay-debt |
+| `market.js` | `/api/campaigns/:id/events`, `/snapshots`, `/market/*`, `/traffic`, `/find-supplier`, `/black-market` | Market snapshot lazy generation/backfill (snapshots routes accept `is_black_market`), price history, market events; MgT2022 Find-a-Supplier check (`GET`/`POST /find-supplier`) and Black Market check (`GET`/`POST /black-market`); traffic routes (`GET`/`POST /traffic`) keyed by ship + origin + destination |
+| `ships.js` | `/api/ships` | Player-facing ship view (returns `armed` plus six Traffic Availability crew-DM aggregates incl. `crew_streetwise_max`, HLD §7c/§7d), buy/sell cargo (buy guards the stock decrement in a single atomic `UPDATE ... WHERE qty_available >= ?`, rejecting on `meta.changes === 0` rather than a separate check-then-act `SELECT`; sell accepts an optional `broker_fee_total`, CT7's Broker commission, netted out of the credited amount and recorded as its own `'fee'` transaction), fuel, obligations (passengers/freight/mail — all three validate cargo/stateroom/low-berth/traffic caps server-side and atomically decrement the matching `traffic_snapshots` row, keyed by destination as well as origin since Phase 6), pay-debt |
 | `referee.js` | `/api/referee` | Ships (incl. `armed`), crew, players (incl. MgT2022 characteristics/background/rank via `PATCH /players/:id`), skills, ship templates (incl. `armed`), ship debts, ship ownership (all `requireReferee`) |
 | `organizations.js` | `/api/organizations` | Organization CRUD, officers, members, equity, dues collection, disbursement, fleet report (all `requireAuth`; mutations additionally gated by `isOfficerOrReferee`) |
 | `reports.js` | `/api/reports` | Ledger, trades, income breakdown, debts, ownership (branches to `organization_ownership` instead of `ship_ownership` when a ship is org-owned); player self-service skills and MgT2022 characteristics (`GET`/`PATCH /characteristics`) |
@@ -543,6 +565,13 @@ tickDay(tick)   = (tick % 48) * 7 + 1
 | `buy-good` | snapshot row | |
 | `view-chart` | — | Mobile only: Compare toolbar's "View chart" pressed |
 | `clear-chart` | — | Mobile only: Compare toolbar's "Clear" pressed |
+
+For MgT2022 campaigns, the controls row also carries the Black Market
+one-click check ("Seek Black Market", using `crew_streetwise_max`
+automatically) and — once `tick.blackMarketFound` — a toggle that switches
+the table's row source between `tick.displaySnapshots` and
+`tick.displayBlackMarketSnapshots` (HLD §7d). No new props/emits; this is
+internal state (`viewingBlackMarket`), not caller-configurable.
 
 ### `PriceChart`
 
@@ -615,7 +644,7 @@ Anchors reachable-worlds computation to the ship's actual `current_world`/`curre
 | `world` | Object | `null` | Current world (embark metadata) |
 | `sectorName` | String | `''` | |
 
-No emits. Booking form: passage type selector (High/Middle/Low, plus Basic for MgT2022), count stepper, parsecs input (shown for T5 and MgT2022), destination fields, real-time fare preview. Validates stateroom/berth/cargo-tonnage availability and (for MgT2022) the tick's rolled traffic-availability count before submitting; calls `ship.bookPassengers`.
+No emits. Booking form: passage type selector (High/Middle/Low, plus Basic for MgT2022), count stepper, parsecs input (shown for T5 and MgT2022), destination fields, real-time fare preview. Validates stateroom/berth/cargo-tonnage availability and (for MgT2022) the tick's rolled traffic-availability count before submitting; calls `ship.bookPassengers`. For MgT2022, the destination picker is the first field and everything else (passage type, count, traffic count, fare preview, submit) is gated behind having picked one — resolving the destination's full world object via `map.fetchWorldsForSector()` and rolling traffic via `tick.ensureTrafficSnapshot`, since RAW has no "how many passengers, independent of destination" number (HLD §7c). CT7/T5 keep the pre-Phase-6 field order unchanged.
 
 ### `ShipServices`
 
@@ -633,7 +662,7 @@ No emits. Fuel purchase only (availability badges, tonnage stepper capped at tan
 | `world` | Object | `null` | Origin world for the contract |
 | `sectorName` | String | `''` | |
 
-No emits. Destination fields, T5 parsecs input, payment preview; MgT2022 instead shows the tick's rolled container count (and the cargo tonnage it needs), gating acceptance on the count being > 0 *and* `ship.cargoAvailable` covering that tonnage — mail containers reserve cargo space the same way Basic Passage does. Embeds `WorldPicker.vue` for destination selection; calls `ship.acceptMailContract` with `mailContainers` so the worker can persist `obligations.mail_containers`.
+No emits. Destination fields (already the form's first field, unchanged by Phase 6), T5 parsecs input, payment preview; MgT2022 instead shows the tick's rolled container count (and the cargo tonnage it needs) once the destination resolves and traffic is rolled via `tick.ensureTrafficSnapshot`, gating acceptance on the count being > 0 *and* `ship.cargoAvailable` covering that tonnage — mail containers reserve cargo space the same way Basic Passage does. Embeds `WorldPicker.vue` for destination selection; calls `ship.acceptMailContract` with `mailContainers` so the worker can persist `obligations.mail_containers`.
 
 ### `FreightPanel` (MgT2022 only)
 
@@ -642,7 +671,7 @@ No emits. Destination fields, T5 parsecs input, payment preview; MgT2022 instead
 | `world` | Object | `null` | Origin world for the lot |
 | `sectorName` | String | `''` | |
 
-No emits. Lot-size selector (Major/Minor/Incidental) — tonnage is a seeded roll (`lotTons` computed, HLD §7c), not player-editable, since a lot can't be split or resized — parsecs input, destination fields, charge preview, due-tick note. Embeds `WorldPicker.vue`; calls `ship.bookFreight`.
+No emits. Destination picker is the first field, gating lot-size selector (Major/Minor/Incidental — tonnage is a seeded roll, `lotTons` computed, HLD §7c, not player-editable since a lot can't be split or resized), parsecs input, traffic-availability count, charge preview, and due-tick note behind having picked one, same reasoning as `PassengersPanel` (HLD §7c). Embeds `WorldPicker.vue`; calls `ship.bookFreight`.
 
 ### `AboardPanel`
 No props, no emits. Ship's "Aboard" sub-tab — composes `PassengerManifest` and `ContractsPanel` under one view (occupancy + in-transit passengers, and in-transit mail contracts).
@@ -787,6 +816,8 @@ Session persisted to `localStorage` key **`tts_session`**: `{ campaign, player, 
 | `stateroomsTotal`, `crewStateroomsUsed`, `stateroomsUsed`, `stateroomsAvailable` | |
 | `lowBerthsTotal`, `lowBerthsUsed`, `lowBerthsAvailable` | |
 | `crewStewardMax`, `crewPassengerCheckMax`, `crewFreightCheckMax`, `crewNavalScoutRankMax`, `crewSocialStandingMax`, `shipArmed` | MgT2022 Traffic Availability crew DMs (HLD §7c) — thin passthroughs onto the ship-load route's own `MAX(...)` aggregate query results, mirroring `crewStateroomsUsed`'s existing pattern |
+| `crewStreetwiseMax` | MgT2022 Black Market check DM (HLD §7d) — highest Streetwise skill among current crew, kept separate from `crewPassengerCheckMax`'s Broker/Carouse/Streetwise pool since Black Market specifically wants Streetwise alone |
+| `freightTonsUsed` | Booked-but-undelivered freight tonnage, folded into `cargoAvailable` alongside `basicPassageTonsUsed`/`mailContainerTonsUsed` |
 
 | Action | Description |
 |--------|-------------|

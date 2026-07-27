@@ -48,6 +48,10 @@ function freightNetAfterPenalty(charge, penaltyPct) {
 // else in this file).
 const MGT2022_BASIC_PASSAGE_TONS = 2
 
+// Mail containers (MgT2022) reserve cargo tonnage the same way — kept in
+// sync with src/lib/traveller-data-mgt2022.js's MGT2022_MAIL_CONTAINER_TONS.
+const MGT2022_MAIL_CONTAINER_TONS = 5
+
 // obligations rows aliased back to the passenger_manifests / mail_contracts /
 // freight shapes the frontend already expects (see
 // docs/financial-model-gap-analysis.md — "Commercial obligations" — for why
@@ -116,7 +120,7 @@ app.get('/current', requireAuth, async (c) => {
 
   const [
     { results: cargoRows }, { results: passengerRows }, { results: mailRows }, { results: freightRows },
-    crewStateRow, stewardRow, passengerCheckRow, freightCheckRow, navalScoutRow, socRow,
+    crewStateRow, stewardRow, passengerCheckRow, freightCheckRow, navalScoutRow, socRow, streetwiseRow,
   ] = await Promise.all([
     db.prepare(`SELECT * FROM cargo WHERE ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
     db.prepare(PASSENGER_SELECT + ` WHERE kind = 'passenger' AND status = 'pending' AND ship_id = ? AND campaign_id = ? ORDER BY created_at`).bind(ship.id, campaign_id).all(),
@@ -135,6 +139,10 @@ app.get('/current', requireAuth, async (c) => {
                 WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND LOWER(p.background) IN ('navy','scout')`).bind(ship.id, campaign_id).first(),
     db.prepare(`SELECT MAX(p.social_standing) as mx FROM crew c JOIN players p ON p.id = c.player_id
                 WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL`).bind(ship.id, campaign_id).first(),
+    // Black Market's own check wants Streetwise alone, not pooled with
+    // Broker/Carouse the way the normal passenger check is.
+    db.prepare(`SELECT MAX(ps.level) as mx FROM crew c JOIN player_skills ps ON ps.player_id = c.player_id AND ps.campaign_id = c.campaign_id
+                WHERE c.ship_id = ? AND c.campaign_id = ? AND c.left_tick IS NULL AND ps.skill = 'Streetwise'`).bind(ship.id, campaign_id).first(),
   ])
 
   ship.crew_staterooms             = crewStateRow?.cnt ?? 0
@@ -143,6 +151,7 @@ app.get('/current', requireAuth, async (c) => {
   ship.crew_freight_check_max      = freightCheckRow?.mx ?? 0
   ship.crew_naval_scout_rank_max   = navalScoutRow?.mx ?? 0
   ship.crew_social_standing_max    = socRow?.mx ?? null
+  ship.crew_streetwise_max         = streetwiseRow?.mx ?? 0
 
   return c.json({ data: { ship, cargo: cargoRows ?? [], passengers: passengerRows ?? [], mailContracts: mailRows ?? [], freight: freightRows ?? [] } })
 })
@@ -331,8 +340,8 @@ app.post('/:id/book-passengers', requireAuth, async (c) => {
     db.prepare(`SELECT passage_type, COALESCE(SUM(passenger_count), 0) as cnt FROM obligations
                 WHERE ship_id = ? AND campaign_id = ? AND kind = 'passenger' AND status = 'pending' GROUP BY passage_type`).bind(id, campaign_id).all(),
     db.prepare(`SELECT high_passages, middle_passages, basic_passages, low_passages FROM traffic_snapshots
-                WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND tick = ?`)
-      .bind(campaign_id, id, embark_world_hex, embark_sector, tick).first(),
+                WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ?`)
+      .bind(campaign_id, id, embark_world_hex, embark_sector, dest_world_hex, dest_sector, tick).first(),
   ])
 
   const pendingByType = {}
@@ -357,11 +366,22 @@ app.post('/:id/book-passengers', requireAuth, async (c) => {
   }
 
   // Traffic-availability cap (MgT2022 only — no snapshot row exists for
-  // CT7/T5, which stay unlimited-subject-to-capacity as before).
-  if (trafficRow) {
-    const trafficKey = { high: 'high_passages', middle: 'middle_passages', basic: 'basic_passages', low: 'low_passages' }[passage_type]
-    const trafficCap = trafficRow[trafficKey] ?? 0
-    if (count > trafficCap) return c.json({ error: `Only ${trafficCap} ${passage_type} passenger(s) available this tick` }, 400)
+  // CT7/T5, which stay unlimited-subject-to-capacity as before). Atomic
+  // guarded decrement, same pattern as buy-cargo's qty_available guard, so
+  // two concurrent bookings racing for the last seat can't both win.
+  const trafficKey = { high: 'high_passages', middle: 'middle_passages', basic: 'basic_passages', low: 'low_passages' }[passage_type]
+  if (trafficRow && trafficKey) {
+    const decrement = await db.prepare(
+      `UPDATE traffic_snapshots SET ${trafficKey} = ${trafficKey} - ?
+       WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ? AND ${trafficKey} >= ?`
+    ).bind(count, campaign_id, id, embark_world_hex, embark_sector, dest_world_hex, dest_sector, tick, count).run()
+
+    if (decrement.meta.changes === 0) {
+      const fresh = await db.prepare(
+        `SELECT ${trafficKey} FROM traffic_snapshots WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ?`
+      ).bind(campaign_id, id, embark_world_hex, embark_sector, dest_world_hex, dest_sector, tick).first()
+      return c.json({ error: `Only ${fresh?.[trafficKey] ?? 0} ${passage_type} passenger(s) available this tick` }, 400)
+    }
   }
 
   const manifestId = crypto.randomUUID()
@@ -453,14 +473,53 @@ app.post('/:id/accept-mail', requireAuth, async (c) => {
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
+  const db = c.env.DB
+
+  if (mail_containers != null) {
+    const ship = await db.prepare(`SELECT cargo_capacity FROM ships WHERE id = ?`).bind(id).first()
+    if (!ship) return c.json({ error: 'Ship not found' }, 404)
+
+    const [cargoRow, pendingBasicRow, pendingMailRow, pendingFreightRow] = await Promise.all([
+      db.prepare(`SELECT COALESCE(SUM(tons), 0) as tons FROM cargo WHERE ship_id = ? AND campaign_id = ?`).bind(id, campaign_id).first(),
+      db.prepare(`SELECT COALESCE(SUM(passenger_count), 0) as cnt FROM obligations
+                  WHERE ship_id = ? AND campaign_id = ? AND kind = 'passenger' AND status = 'pending' AND passage_type = 'basic'`).bind(id, campaign_id).first(),
+      db.prepare(`SELECT COALESCE(SUM(mail_containers), 0) as containers FROM obligations
+                  WHERE ship_id = ? AND campaign_id = ? AND kind = 'mail' AND status = 'pending'`).bind(id, campaign_id).first(),
+      db.prepare(`SELECT COALESCE(SUM(freight_tons), 0) as tons FROM obligations
+                  WHERE ship_id = ? AND campaign_id = ? AND kind = 'freight' AND status = 'pending'`).bind(id, campaign_id).first(),
+    ])
+
+    const cargoUsed = (cargoRow?.tons ?? 0)
+      + (pendingBasicRow?.cnt ?? 0) * MGT2022_BASIC_PASSAGE_TONS
+      + (pendingMailRow?.containers ?? 0) * MGT2022_MAIL_CONTAINER_TONS
+      + (pendingFreightRow?.tons ?? 0)
+    const neededTons = mail_containers * MGT2022_MAIL_CONTAINER_TONS
+    const cargoAvailable = ship.cargo_capacity - cargoUsed
+    if (neededTons > cargoAvailable) {
+      return c.json({ error: `Insufficient cargo space for ${mail_containers} container(s) (need ${neededTons}t, have ${cargoAvailable}t)` }, 400)
+    }
+
+    // Take-all-or-none: decrement by exactly the count the client is
+    // claiming, guarded so two ships/players racing for the same tick's
+    // mail can't both succeed (same atomic pattern as buy-cargo).
+    const decrement = await db.prepare(
+      `UPDATE traffic_snapshots SET mail_containers = mail_containers - ?
+       WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ? AND mail_containers >= ?`
+    ).bind(mail_containers, campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick, mail_containers).run()
+
+    if (decrement.meta.changes === 0) {
+      return c.json({ error: 'Mail containers no longer available this tick' }, 400)
+    }
+  }
+
   const contractId = crypto.randomUUID()
-  await c.env.DB.prepare(
+  await db.prepare(
     `INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, mail_containers)
      VALUES (?, ?, ?, ?, 'mail', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(contractId, campaign_id, id, player_id, payment, origin_world_hex, origin_sector, origin_world_name ?? '',
          tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs, mail_containers).run()
 
-  const contract = await c.env.DB.prepare(MAIL_SELECT + ` WHERE id = ?`).bind(contractId).first()
+  const contract = await db.prepare(MAIL_SELECT + ` WHERE id = ?`).bind(contractId).first()
   return c.json({ data: contract }, 201)
 })
 
@@ -502,20 +561,66 @@ app.post('/:id/book-freight', requireAuth, async (c) => {
 
   if (campaign_id !== session.campaign_id) return c.json({ error: 'Forbidden' }, 403)
 
+  const db   = c.env.DB
+  const ship = await db.prepare(`SELECT cargo_capacity FROM ships WHERE id = ?`).bind(id).first()
+  if (!ship) return c.json({ error: 'Ship not found' }, 404)
+
+  const [cargoRow, pendingBasicRow, pendingMailRow, pendingFreightRow] = await Promise.all([
+    db.prepare(`SELECT COALESCE(SUM(tons), 0) as tons FROM cargo WHERE ship_id = ? AND campaign_id = ?`).bind(id, campaign_id).first(),
+    db.prepare(`SELECT COALESCE(SUM(passenger_count), 0) as cnt FROM obligations
+                WHERE ship_id = ? AND campaign_id = ? AND kind = 'passenger' AND status = 'pending' AND passage_type = 'basic'`).bind(id, campaign_id).first(),
+    db.prepare(`SELECT COALESCE(SUM(mail_containers), 0) as containers FROM obligations
+                WHERE ship_id = ? AND campaign_id = ? AND kind = 'mail' AND status = 'pending'`).bind(id, campaign_id).first(),
+    db.prepare(`SELECT COALESCE(SUM(freight_tons), 0) as tons FROM obligations
+                WHERE ship_id = ? AND campaign_id = ? AND kind = 'freight' AND status = 'pending'`).bind(id, campaign_id).first(),
+  ])
+
+  const cargoUsed = (cargoRow?.tons ?? 0)
+    + (pendingBasicRow?.cnt ?? 0) * MGT2022_BASIC_PASSAGE_TONS
+    + (pendingMailRow?.containers ?? 0) * MGT2022_MAIL_CONTAINER_TONS
+    + (pendingFreightRow?.tons ?? 0)
+  const cargoAvailable = ship.cargo_capacity - cargoUsed
+  if (freight_tons > cargoAvailable) {
+    return c.json({ error: `Insufficient cargo space (need ${freight_tons}t, have ${cargoAvailable}t)` }, 400)
+  }
+
+  // Traffic-availability cap (MgT2022 only — no snapshot row exists for
+  // CT7/T5). Atomic guarded decrement, same pattern as buy-cargo's
+  // qty_available guard: the check and the decrement are one statement, so
+  // two concurrent bookings racing for the last lot can't both win.
+  const lotColumn = { major: 'major_freight_lots', minor: 'minor_freight_lots', incidental: 'incidental_freight_lots' }[freight_lot_size]
+  if (lotColumn) {
+    const decrement = await db.prepare(
+      `UPDATE traffic_snapshots SET ${lotColumn} = ${lotColumn} - 1
+       WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ? AND ${lotColumn} >= 1`
+    ).bind(campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick).run()
+
+    if (decrement.meta.changes === 0) {
+      const fresh = await db.prepare(
+        `SELECT ${lotColumn} FROM traffic_snapshots WHERE campaign_id = ? AND ship_id = ? AND world_hex = ? AND sector = ? AND dest_world_hex = ? AND dest_sector = ? AND tick = ?`
+      ).bind(campaign_id, id, origin_world_hex, origin_sector, dest_world_hex, dest_sector, tick).first()
+      // No snapshot row at all means CT7/T5 (or MgT2022 before any traffic
+      // roll has happened yet) — stay unlimited, matching prior behavior.
+      if (fresh) {
+        return c.json({ error: `Only ${fresh[lotColumn] ?? 0} ${freight_lot_size} freight lot(s) available this tick` }, 400)
+      }
+    }
+  }
+
   const obligationId = crypto.randomUUID()
-  await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick)
+  await db.batch([
+    db.prepare(`INSERT INTO obligations (id, campaign_id, ship_id, player_id, kind, amount, origin_world_hex, origin_sector, origin_world_name, accept_tick, dest_world_hex, dest_sector, dest_world_name, parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick)
                       VALUES (?, ?, ?, ?, 'freight', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(obligationId, campaign_id, id, player_id, charge, origin_world_hex, origin_sector, origin_world_name ?? '',
             tick, dest_world_hex, dest_sector, dest_world_name ?? '', parsecs, freight_tons, freight_lot_size, rate_per_ton, due_tick),
-    c.env.DB.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
+    db.prepare(`INSERT INTO transactions (id, campaign_id, player_id, ship_id, tick, type, total_cr, world_hex, sector, notes)
                       VALUES (?, ?, ?, ?, ?, 'freight_charge', ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), campaign_id, player_id, id, tick, charge, origin_world_hex, origin_sector,
             `${freight_tons}t ${freight_lot_size} freight → ${dest_world_name || dest_world_hex}`),
-    c.env.DB.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(charge, id),
+    db.prepare(`UPDATE ships SET credits = credits + ? WHERE id = ?`).bind(charge, id),
   ])
 
-  const obligation = await c.env.DB.prepare(FREIGHT_SELECT + ` WHERE id = ?`).bind(obligationId).first()
+  const obligation = await db.prepare(FREIGHT_SELECT + ` WHERE id = ?`).bind(obligationId).first()
   return c.json({ data: obligation }, 201)
 })
 
