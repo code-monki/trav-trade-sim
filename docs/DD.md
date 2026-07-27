@@ -1,7 +1,7 @@
 # Detailed Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.12.0
+**Version:** 0.13.0
 
 ---
 
@@ -573,6 +573,15 @@ the table's row source between `tick.displaySnapshots` and
 `tick.displayBlackMarketSnapshots` (HLD §7d). No new props/emits; this is
 internal state (`viewingBlackMarket`), not caller-configurable.
 
+The Sell (Cr/t) and Spread columns are hidden entirely for CT7 campaigns
+(`showSellColumns` computed, `auth.campaign?.trade_rules !== 'CT7'`, HLD
+§7) — CT7's real sell price depends on both the purchase world and the
+market world, so no meaningful number exists for a good not yet bought;
+showing the old self-referenced baseline implied an achievable price that
+mostly wasn't real. MgT2022 keeps both columns (its sell price has no
+such duality). Real CT7 sell prices appear only once a good is held, on
+`CargoHold`/`RouteAnalysis`.
+
 ### `PriceChart`
 
 | Prop | Type | Description |
@@ -635,7 +644,7 @@ No emits. For CT7, uses `ct7CargoLotSalePrice()` (`market-tick.js`, HLD §7) per
 |------|---------|
 | `select-world` | (none) — fires after ship location committed |
 
-Anchors reachable-worlds computation to the ship's actual `current_world`/`current_sector` (not whichever world happens to be browsed in the sidebar). Uses `src/lib/market-tick.js`'s `generateWorldSnapshot` client-side for projected-profit estimates.
+Anchors reachable-worlds computation to the ship's actual `current_world`/`current_sector` (not whichever world happens to be browsed in the sidebar). For MgT2022/T5, uses `src/lib/market-tick.js`'s `generateWorldSnapshot` client-side for projected-profit estimates, now explicitly passing `tradeRules: auth.campaign?.trade_rules` (previously omitted, which silently defaulted to CT7's pricing engine for every campaign — a real bug, not just an estimate-precision gap, since it matched cargo dies against the wrong ruleset's goods table entirely). For CT7, uses `ct7CargoLotSalePrice()` per held lot instead — resolves each lot's real purchase world the same way `CargoHold.vue` does (a local `sourceWorldCache`, `map.fetchWorldsForSector()`) rather than self-referencing the candidate destination as both source and market.
 
 ### `PassengersPanel`
 

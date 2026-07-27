@@ -71,14 +71,16 @@
                   class="sortable num" tabindex="0" :aria-sort="ariaSort('purchase_price')">
                 Buy (Cr/t) {{ sortIcon('purchase_price') }}
               </th>
-              <th @click="setSort('sale_price')" @keydown.enter.space.prevent="setSort('sale_price')"
-                  class="sortable num" tabindex="0" :aria-sort="ariaSort('sale_price')">
-                Sell (Cr/t) {{ sortIcon('sale_price') }}
-              </th>
-              <th @click="setSort('spread')" @keydown.enter.space.prevent="setSort('spread')"
-                  class="sortable num" tabindex="0" :aria-sort="ariaSort('spread')">
-                Spread {{ sortIcon('spread') }}
-              </th>
+              <template v-if="showSellColumns">
+                <th @click="setSort('sale_price')" @keydown.enter.space.prevent="setSort('sale_price')"
+                    class="sortable num" tabindex="0" :aria-sort="ariaSort('sale_price')">
+                  Sell (Cr/t) {{ sortIcon('sale_price') }}
+                </th>
+                <th @click="setSort('spread')" @keydown.enter.space.prevent="setSort('spread')"
+                    class="sortable num" tabindex="0" :aria-sort="ariaSort('spread')">
+                  Spread {{ sortIcon('spread') }}
+                </th>
+              </template>
               <th @click="setSort('qty_available')" @keydown.enter.space.prevent="setSort('qty_available')"
                   class="sortable num" tabindex="0" :aria-sort="ariaSort('qty_available')">
                 Qty (t) {{ sortIcon('qty_available') }}
@@ -124,14 +126,16 @@
                 <span class="sr-only">{{ purchaseInfo(row).label }}</span>
                 {{ fmt(row.purchase_price) }}
               </td>
-              <td class="num" :class="saleInfo(row).cls">
-                <span class="price-indicator" aria-hidden="true">{{ saleInfo(row).symbol }}</span>
-                <span class="sr-only">{{ saleInfo(row).label }}</span>
-                {{ fmt(row.sale_price) }}
-              </td>
-              <td class="num" :class="row.spread >= 0 ? 'pos' : 'neg'">
-                {{ row.spread >= 0 ? '+' : '' }}{{ fmt(row.spread) }}
-              </td>
+              <template v-if="showSellColumns">
+                <td class="num" :class="saleInfo(row).cls">
+                  <span class="price-indicator" aria-hidden="true">{{ saleInfo(row).symbol }}</span>
+                  <span class="sr-only">{{ saleInfo(row).label }}</span>
+                  {{ fmt(row.sale_price) }}
+                </td>
+                <td class="num" :class="row.spread >= 0 ? 'pos' : 'neg'">
+                  {{ row.spread >= 0 ? '+' : '' }}{{ fmt(row.spread) }}
+                </td>
+              </template>
               <td class="num">{{ row.qty_available.toLocaleString() }}</td>
               <td v-if="showBuyButton" class="buy-col" @click.stop>
                 <button class="buy-row-btn"
@@ -196,6 +200,22 @@ const selectedDie = ref(null)
 const compareMode = ref(false)
 
 const inCompare = computed(() => props.mobile && compareMode.value)
+
+// CT7's real sell price depends on BOTH the world a cargo lot was bought
+// at and the world it's sold at (Book 7's Cost of Goods/Market Price
+// mechanic) — there's no meaningful "sell here" number for a good you
+// haven't bought yet, since you don't know where you'll eventually sell
+// it. Showing one anyway (as this table used to, self-referencing the
+// current world as both source and market) implied an achievable price
+// that mostly isn't. Real per-lot sell prices belong on RouteAnalysis.vue
+// (Jump tab, HLD §7) and CargoHold.vue, which both know the lot's actual
+// purchase world. MgT2022 has no such duality — its sell price is a
+// genuine single-world property — so it keeps both columns.
+const showSellColumns = computed(() => auth.campaign?.trade_rules !== 'CT7')
+
+watch(showSellColumns, (shown) => {
+  if (!shown && (sortKey.value === 'sale_price' || sortKey.value === 'spread')) sortKey.value = 'trade_good_die'
+})
 
 function isCharted(row) { return props.chartedDies.includes(row.trade_good_die) }
 

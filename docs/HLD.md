@@ -1,7 +1,7 @@
 # High-Level Design
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.12.0
+**Version:** 0.13.0
 
 ---
 
@@ -409,6 +409,39 @@ generateWorldSnapshot(world, sectorName, campaignId, tick, activeEvents)
 All inputs are deterministic; same seed = same price on every client. (This pipeline is CT7's; T5 shares the same 36 `CT2_TRADE_GOODS` table but its own pricing formulas — see `trade-engine-t5.js` — and MgT2022 uses an entirely different table/pipeline, §7a below.)
 
 **Deliberate self-reference, and why it's a baseline only.** `marketBasePrice(tradeCodes, tradeCodes)` treats this world as both source and market — a reasonable stand-in for the *ambient* MarketTable listing, where no specific owned cargo lot is in play, so there's no real "source world" to ask about. Because source==market here, `tlAdjustment`'s delta is always 0 and applying it would be a no-op, so this baseline never calls it at all. This is **not** what a real owned cargo lot sells for, though: `marketBasePrice` and `tlAdjustment` are both genuinely two-world Book 7 functions (source codes/TL vs. market codes/TL), and a real lot has a real, known purchase world (`cargo.purchase_world`/`purchase_sector`). `ct7CargoLotSalePrice()` in `market-tick.js` is the function that does this correctly — it reuses this same seed's sale-roll dice (so "market luck" is shared across every lot of the same good sold at the same market/tick) but threads the *lot's actual* source codes/TL through `marketBasePrice`/`tlAdjustment` instead of self-referencing. `CargoHold.vue` calls it once each cargo lot's purchase world resolves (via `map.fetchWorldsForSector`, cached locally); until then `sellPriceFor` returns `null`, same as any other not-yet-appraised good. `ct7PlayerSalePrice()` (§7b) keeps the self-referenced baseline behavior — it's for the ambient listing, not a specific lot.
+
+**The ambient self-reference turned out to be misleading enough to remove
+from the Market tab entirely, for CT7.** A user reviewing a live CT7
+campaign correctly pointed out that a real CT7 sell price can't exist
+before a market world is known — so showing *any* number in a "Sell"
+column pre-purchase implies an achievable price that (outside the
+coincidence of buying and selling at the identical world) isn't real.
+`MarketTable.vue`'s `showSellColumns` computed (`auth.campaign?.trade_rules
+!== 'CT7'`) hides the Sell and Spread columns entirely for CT7 — Buy price
+and Qty remain (both are genuinely source-only). MgT2022 keeps both
+columns: its sell price has no source/market duality at all, so the
+ambient number there is already the real one. Real CT7 sell prices still
+appear on `CargoHold.vue` (once a lot is held) and `RouteAnalysis.vue`
+(projected against reachable worlds, next).
+
+**`RouteAnalysis.vue`'s profit projection had two bugs, one of them
+severe, found while fixing this.** It called `generateWorldSnapshot()`
+without a `tradeRules` argument at all — since that function defaults to
+`'CT7'`, every campaign's Jump-tab profit projection was silently using
+CT7's own `CT2_TRADE_GOODS` table and pricing formulas, regardless of the
+campaign's actual ruleset. For MgT2022 campaigns this meant cargo dies
+were matched against a *different, unrelated* goods table that happens to
+share the same 11-66 numeric range (e.g. die `'11'` is "Textiles" in CT7
+but "Common Electronics" in MgT2022) — a wrong-goods-table match, not just
+an imprecise number. Separately, for CT7 specifically, the projection used
+the same self-referenced baseline described above — a candidate
+destination's own codes used as both source and market — rather than each
+held cargo lot's real purchase world. Fixed both: `tradeRules:
+auth.campaign?.trade_rules` is now passed through for the shared-baseline
+path (MgT2022/T5), and a separate `ct7ProjectedProfit()` resolves each
+lot's real source world the same way `CargoHold.vue` does (a
+`sourceWorldCache` populated via `map.fetchWorldsForSector()`) and calls
+`ct7CargoLotSalePrice()` per lot for CT7.
 
 ## 7a. MgT2022 Price/Composition Engine
 

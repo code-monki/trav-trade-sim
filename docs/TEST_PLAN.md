@@ -1,7 +1,7 @@
 # Test Plan
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.12.0
+**Version:** 0.13.0
 
 ---
 
@@ -235,6 +235,11 @@ Every subsection below fully catalogues its component's actual test file (`tests
 | CT-125 | Click the Buy column header | Rows reorder by purchase price ascending (lowest first) |
 | CT-126 | Click the Buy column header twice | Reorders descending (highest first) |
 | CT-127 | Click a different sortable header after sorting by another | Resets to ascending on the new column |
+| CT-128 | Default render (no `trade_rules` configured) | Sell (Cr/t) and Spread columns shown |
+| CT-129 | `trade_rules: 'MgT2022'` | Sell (Cr/t) and Spread columns shown (single-world sell price, no source/market duality) |
+| CT-130 | `trade_rules: 'CT7'` | Sell (Cr/t) and Spread columns hidden entirely — no meaningful pre-purchase sell number exists for CT7 (FR-401b) |
+| CT-131 | `trade_rules: 'CT7'` | Buy (Cr/t) and Qty (t) columns still shown |
+| CT-132 | `trade_rules: 'CT7'` | Row cell count matches the reduced column set (no orphaned `<td>`s left over from the hidden columns) |
 
 **Known gap:** the `showBuyButton` prop and `buy-good` emit still exist in `MarketTable.vue` (used by `MapView.vue`'s Market sub-tab), but have no dedicated test coverage in the current suite — the CT-1xx block above is a complete catalogue of what's actually tested, and neither is in it.
 
@@ -362,6 +367,21 @@ Every subsection below fully catalogues its component's actual test file (`tests
 | CT-901 | A descendant of `router-view` throws during render | Fallback UI ("Something went wrong", a "Reload page" button) shown instead of a blank screen |
 | CT-902 | Nothing throws | `router-view` renders normally; no fallback UI |
 | CT-903 | `appError.fatalError.kind === 'schema-drift'` | Schema-drift-specific message ("database schema is out of date") shown instead of the generic fallback |
+
+### 4.10 `RouteAnalysis`
+
+Regression coverage for a real bug found while investigating a user report
+about the Market tab: the profit projection never passed `tradeRules` to
+`generateWorldSnapshot`, so it silently defaulted to CT7's pricing engine
+for every campaign — MgT2022 cargo dies were being matched against CT7's
+own (numerically overlapping but semantically unrelated) goods table.
+
+| TC-ID | Scenario | Expected |
+|-------|----------|----------|
+| CT-1001 | MgT2022 campaign, cargo held | Projected profit for a candidate world matches `generateWorldSnapshot(..., tradeRules: 'MgT2022')` exactly — confirms `trade_rules` is now passed through rather than defaulting to CT7 |
+| CT-1002 | CT7 campaign, cargo held, before the lot's purchase world has resolved | Projected profit shows Cr0 (no fallback to a wrong self-referenced number) |
+| CT-1003 | CT7 campaign, cargo held, after the lot's purchase world resolves | Projected profit matches `ct7CargoLotSalePrice()` using the lot's real purchase world against the candidate destination |
+| CT-1004 | CT7 campaign | Projected profit differs from what a self-referenced baseline (candidate destination used as both source and market) would have produced — proves the fix isn't a no-op |
 
 ---
 
@@ -605,6 +625,14 @@ Every subsection below fully catalogues its component's actual test file (`tests
 6. Advance the tick past when the freight would have been "due" under MgT2022's rules and deliver it; verify no late-delivery penalty is ever deducted for a CT7 freight lot
 7. Book the last available ton of a tier; verify a second booking attempt for more of that same tier/route/tick is rejected with the remaining tonnage reflected accurately (not off-by-lot the way a discrete-lot model would be)
 8. With a crew member holding Admin, Steward, Streetwise, or Liaison skill, verify their respective passenger tier (Middle/High/Low) or Minor cargo tends to show higher availability than an unskilled crew, across a few tick advances
+
+### MTS-21: CT7 Market Tab Sell/Spread Removal + Real Route Profit Projection
+1. Create a CT7 campaign; open the Market/Port tab at any world; verify there is no "Sell (Cr/t)" or "Spread" column — only Good, Die, Buy (Cr/t), and Qty (t)
+2. Create an MgT2022 campaign; open the Market tab; verify Sell (Cr/t) and Spread are still shown as before
+3. Back in the CT7 campaign: buy a cargo lot, then open the Jump tab; verify a "Projected Profit" column appears once cargo is held
+4. Travel somewhere, buy a second lot of the *same* good at a world with different trade codes/Tech Level than the first purchase; return to Jump tab and verify the *combined* projected profit reflects both lots' own purchase worlds correctly (not the same number doubled, and not the destination's own codes self-referenced for both)
+5. Compare the Jump tab's projected profit for a candidate world against that same good's real per-lot sell price shown on the Cargo tab once you actually arrive there — they should match (both now use `ct7CargoLotSalePrice`)
+6. Create a fresh MgT2022 or T5 campaign with cargo held; verify the Jump tab's projected profit still shows sensible, ruleset-correct numbers (regression check: this projection previously defaulted silently to CT7's own goods table/pricing engine for every ruleset)
 
 ### MTS-6: Campaign Deletion
 1. Create campaign (code: `TEST-DELETE-01`)

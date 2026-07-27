@@ -1435,6 +1435,78 @@ per the user's own scheduling.
 
 ---
 
+## 2026-07-27 — CT7 Market tab Sell/Spread removal + real route profit projection
+
+### Goal
+
+A user reviewing a live CT7 campaign noticed the Market tab still listed
+every trade good (correct — CT7 has no per-world composition gate, unlike
+MgT2022) but then raised a sharper point: CT7's real sell price can't be
+computed before a market world is known (Book 7's Cost of Goods is
+source-only; Market Price needs both source and market), so showing any
+number in a "Sell" column pre-purchase is misleading regardless of
+ruleset. Asked to verify and fix, with the suggestion that real sell
+prices belong on the Jump tab's route analysis instead.
+
+### What was actually happening
+
+`MarketTable.vue`'s "Sell (Cr/t)" column was already using a
+self-referenced baseline for CT7 (the current world as both source and
+market — a deliberate stand-in built during the earlier CT7 pricing pass,
+documented as "not what a real owned cargo lot sells for"), but the UI
+never said so — it looked like an ordinary price.
+
+Investigating "where should the real number live instead" surfaced a much
+bigger issue in `RouteAnalysis.vue` (the Jump tab): its profit projection
+called `generateWorldSnapshot()` without a `tradeRules` argument at all.
+Since that function defaults to `'CT7'`, **every campaign's Jump-tab
+profit projection was silently using CT7's own goods table and pricing
+formulas**, regardless of the campaign's actual ruleset. For MgT2022
+campaigns this wasn't just imprecise — cargo dies were being matched
+against a *different, unrelated* goods table that happens to share the
+same 11-66 numeric range (die `'11'` is "Textiles" in CT7 but "Common
+Electronics" in MgT2022), producing a garbage number, not a rough
+estimate. Separately, CT7's own projection (once correctly routed) still
+had the self-reference problem — using each candidate destination's own
+codes as both source and market, ignoring where the held cargo was
+actually bought.
+
+### Fixes
+
+- **`MarketTable.vue`**: new `showSellColumns` computed
+  (`auth.campaign?.trade_rules !== 'CT7'`) hides the Sell and Spread
+  columns entirely for CT7 — Buy price and Qty stay, both genuinely
+  source-only. MgT2022 keeps both columns (no source/market duality in
+  that ruleset's own mechanic, so the ambient number there is already
+  real).
+- **`RouteAnalysis.vue`**: split the profit calculation into
+  `sharedBaselineProjectedProfit()` (MgT2022/T5 — now correctly passes
+  `tradeRules: auth.campaign?.trade_rules` instead of silently defaulting)
+  and `ct7ProjectedProfit()` (CT7 — resolves each held lot's real
+  purchase world the same way `CargoHold.vue` does, a `sourceWorldCache`
+  populated via `map.fetchWorldsForSector()`, then calls
+  `ct7CargoLotSalePrice()` per lot against each candidate destination).
+
+No schema changes.
+
+### Verified
+
+`npx vitest run` — 574/574 passing (up from 565; 5 new component tests
+in `MarketTable.test.js` for column visibility by ruleset, 4 new in a
+fresh `tests/components/RouteAnalysis.test.js` proving parity with the
+real per-lot mechanic and — explicitly — that the fixed number differs
+from what the old self-referenced baseline would have produced, so the
+fix isn't a no-op). `npx vite build` compiles cleanly.
+
+### Known gaps, not addressed this session
+
+T5's Market/Route-Analysis behavior is unreviewed — still pending
+tomorrow's T5 pass, which may surface the same category of issue (T5's
+own sell-price mechanic hasn't been checked for a source/market duality
+the way CT7's was).
+
+---
+
 ## Documentation TODO
 
 A set of design and requirements documents needs to be produced before the project reaches a stable release. These do not need to be written immediately but should be addressed before public release.

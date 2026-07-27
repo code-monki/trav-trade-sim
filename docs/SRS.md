@@ -1,7 +1,7 @@
 # Software Requirements Specification
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.12.0  
+**Version:** 0.13.0  
 **Status:** Active development
 
 ---
@@ -65,7 +65,9 @@
 
 | ID | Requirement |
 |----|------------|
-| FR-401 | The market shall show current buy price, sell price, spread, and available quantity for the goods on offer at the selected world. For CT7/T5 this is all 36 `CT2_TRADE_GOODS`; for MgT2022 it is a narrower, per-world/tick-randomized composition (FR-411) |
+| FR-401 | The market shall show current buy price and available quantity for the goods on offer at the selected world. For CT7/T5 this is all 36 `CT2_TRADE_GOODS`; for MgT2022 it is a narrower, per-world/tick-randomized composition (FR-411). Sell price and spread are also shown for MgT2022 (FR-401a), but not for CT7 (FR-401b) |
+| FR-401a | For MgT2022, sell price is a genuine single-world property (no source/market duality — FR-606 is CT7-specific), so the Market tab shall show it and the buy/sell spread alongside every good, the same as buy price |
+| FR-401b | For CT7, the Market tab shall NOT show a Sell or Spread column: per FR-606, a real CT7 sell price depends on both the world a cargo lot was bought at and the world it's sold at, so no meaningful number exists for a good not yet purchased. Real per-lot sell prices are shown only once a good is actually held, on the Cargo tab (`CargoHold.vue`) and the Jump tab's profit projection (`RouteAnalysis.vue`, FR-702a) |
 | FR-402 | Prices shall be generated deterministically from `(campaignId, worldHex, goodDie, tick)` using a seeded PRNG, dispatched per-campaign to the CT7, T5, or MgT2022 pricing engine matching the campaign's `trade_rules` |
 | FR-403 | Market data shall be generated lazily on first visit to a world at a given tick and stored in Cloudflare D1 |
 | FR-404 | On the first-ever visit to a world, the system shall backfill price history for all prior ticks in the current year |
@@ -105,7 +107,8 @@
 | ID | Requirement |
 |----|------------|
 | FR-701 | From the Jump tab, the system shall show all worlds within the ship's jump range from the current world |
-| FR-702 | Each route row shall show the destination world, UWP, best projected trade good, projected profit, and hex distance |
+| FR-702 | Each route row shall show the destination world, UWP, projected profit on currently-held cargo, and hex distance |
+| FR-702a | The projected profit calculation shall use the campaign's actual `trade_rules` pricing engine (previously always defaulted to CT7's regardless of the campaign's real ruleset — a real bug, not just a data-accuracy gap, since it silently matched cargo against the wrong goods table for MgT2022 campaigns). For CT7 specifically, profit shall be computed per cargo lot using that lot's real purchase-world data against the candidate destination (FR-606's mechanic), not a self-referenced baseline |
 | FR-703 | Clicking Select on a route row shall commit the ship's location to the destination and switch to the Market tab |
 
 ### 2.8 Market Events

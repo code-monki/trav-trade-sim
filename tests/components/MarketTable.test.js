@@ -18,7 +18,7 @@ const SNAPS = {
   '13': snap('13', 'Liquor',   10000,  8000,  5),
 }
 
-function mountTable(snapshots = SNAPS, loading = false, props = {}, mountOpts = {}) {
+function mountTable(snapshots = SNAPS, loading = false, props = {}, mountOpts = {}, tradeRules = null) {
   const pinia = createTestingPinia({
     initialState: {
       tick: {
@@ -28,6 +28,7 @@ function mountTable(snapshots = SNAPS, loading = false, props = {}, mountOpts = 
         currentTick: 1,
         snapshotWorldKey: '',
       },
+      ...(tradeRules ? { auth: { campaign: { trade_rules: tradeRules } } } : {}),
     },
     stubActions: true,
     createSpy: vi.fn,
@@ -58,6 +59,48 @@ describe('MarketTable — loading / empty states', () => {
   it('does not show placeholders when snapshots are present', () => {
     const wrapper = mountTable()
     expect(wrapper.find('.market-placeholder').exists()).toBe(false)
+  })
+})
+
+// CT7's real sell price needs both the purchase world and the market
+// world (Book 7's Cost of Goods/Market Price mechanic) — there's no
+// meaningful "sell here" number for a good not yet bought, so the Sell
+// and Spread columns are hidden entirely for CT7 (real per-lot prices
+// live on CargoHold/RouteAnalysis instead, which know the actual lot).
+describe('MarketTable — Sell/Spread columns by ruleset', () => {
+  it('shows Sell and Spread columns by default (no trade_rules configured)', () => {
+    const wrapper = mountTable()
+    const headerText = wrapper.find('thead').text()
+    expect(headerText).toContain('Sell (Cr/t)')
+    expect(headerText).toContain('Spread')
+  })
+
+  it('shows Sell and Spread columns for MgT2022 (single-world sell price, no destination duality)', () => {
+    const wrapper = mountTable(SNAPS, false, {}, {}, 'MgT2022')
+    const headerText = wrapper.find('thead').text()
+    expect(headerText).toContain('Sell (Cr/t)')
+    expect(headerText).toContain('Spread')
+  })
+
+  it('hides Sell and Spread columns for CT7', () => {
+    const wrapper = mountTable(SNAPS, false, {}, {}, 'CT7')
+    const headerText = wrapper.find('thead').text()
+    expect(headerText).not.toContain('Sell (Cr/t)')
+    expect(headerText).not.toContain('Spread')
+  })
+
+  it('still shows Buy and Qty columns for CT7', () => {
+    const wrapper = mountTable(SNAPS, false, {}, {}, 'CT7')
+    const headerText = wrapper.find('thead').text()
+    expect(headerText).toContain('Buy (Cr/t)')
+    expect(headerText).toContain('Qty (t)')
+  })
+
+  it('does not render Sell/Spread table cells for CT7', () => {
+    const wrapper = mountTable(SNAPS, false, {}, {}, 'CT7')
+    // 4 non-buy-button columns for CT7: Plot, Good, Die, Buy, Qty — no Sell/Spread
+    const firstRowCells = wrapper.findAll('.market-row')[0].findAll('td')
+    expect(firstRowCells.length).toBe(5)
   })
 })
 

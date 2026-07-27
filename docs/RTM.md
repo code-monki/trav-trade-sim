@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
 **Project:** Traveller Trade Simulator  
-**Version:** 0.12.0
+**Version:** 0.13.0
 
 This matrix links each functional requirement to its design artefacts, implementation, and test coverage.
 
@@ -66,7 +66,9 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 
 | FR-ID | Requirement (summary) | Design Ref | Implementation | Unit | Component | E2E | Manual |
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
-| FR-401 | Show goods on offer with prices (36 fixed for CT7/T5; narrower randomized composition for MgT2022, FR-411) | DD §7 | `MarketTable.vue`, `tick.js:displaySnapshots` (per-player overlay, FR-412) | — | CT-103 | E2E-201 | MTS-1 |
+| FR-401 | Show goods on offer with buy price/qty (36 fixed for CT7/T5; narrower randomized composition for MgT2022, FR-411) | DD §7 | `MarketTable.vue`, `tick.js:displaySnapshots` (per-player overlay, FR-412) | — | CT-103 | E2E-201 | MTS-1 |
+| FR-401a | MgT2022: Sell/Spread columns shown (single-world property) | HLD §7 | `MarketTable.vue:showSellColumns` | — | CT-128–129 | — | MTS-21 |
+| FR-401b | CT7: Sell/Spread columns hidden (no meaningful pre-purchase number) | HLD §7 | `MarketTable.vue:showSellColumns` | — | CT-130–132 | — | MTS-21 |
 | FR-402 | Deterministic price generation | HLD §7 (CT7/T5), HLD §7a (MgT2022), DD §5 | `market-tick.js:generateWorldSnapshot`, `makeRng` | UT-108–111 | — | — | — |
 | FR-403 | Lazy snapshot generation | HLD §4.3 | `tick.js:ensureWorldSnapshot` | — | — | ST-102–103 | — |
 | FR-404 | Backfill gaps since last visit | HLD §4.3 | `tick.js:ensureWorldSnapshot` (gap-fill loop, not just first-ever visit) | — | — | — | MTS-3 |
@@ -108,6 +110,7 @@ Implementation citations reference the current Cloudflare D1/Workers codebase (`
 |-------|-----------------------|------------|----------------|------|-----------|-----|--------|
 | FR-701 | Show worlds within jump range | HLD §5.1 | `RouteAnalysis.vue`, `hexDistance.js` | UT-401–404 | — | — | MTS-4 |
 | FR-702 | Route row with profit projection | HLD §5.1 | `RouteAnalysis.vue` profit calculation | — | — | — | MTS-4 |
+| FR-702a | Profit projection uses the campaign's real `trade_rules`; CT7 uses real per-lot source-vs-market pricing | HLD §7, §7e | `RouteAnalysis.vue:sharedBaselineProjectedProfit`/`ct7ProjectedProfit`, `market-tick.js:ct7CargoLotSalePrice` | — | CT-1001–1004 | — | MTS-21 |
 | FR-703 | Select commits location + navigates | HLD §4.5 | `RouteAnalysis.vue:selectWorld`, `ship.js:updateLocation` | — | — | — | MTS-4 |
 
 ## 2.8 Market Events
