@@ -4,6 +4,8 @@ dist/
 worker/.dev.vars
 .env.local
 .env.*.local
+.env.production
+.env.test
 pdfs/
 *.log
 .DS_Store
